@@ -15,14 +15,12 @@ export default function FamilyDashboard() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // New Playlist Form State
   const [showAdd, setShowAdd] = useState(false);
   const [formName, setFormName] = useState("");
   const [formServer, setFormServer] = useState("");
   const [formUser, setFormUser] = useState("");
   const [formPass, setFormPass] = useState("");
 
-  // Pairing State
   const [pairingCode, setPairingCode] = useState("");
   const [selectedPlaylist, setSelectedPlaylist] = useState("");
 
@@ -37,7 +35,6 @@ export default function FamilyDashboard() {
       setLoading(false);
     });
 
-    // Real-time listener for TVs
     const q = query(collection(db, "family_devices"));
     const unsubDevices = onSnapshot(q, (snapshot) => {
       const devs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -49,7 +46,7 @@ export default function FamilyDashboard() {
   }, [router]);
 
   const fetchPlaylists = async (uid: string) => {
-    const snapshot = await getDocs(collection(db, \`users/\${uid}/playlists\`));
+    const snapshot = await getDocs(collection(db, `users/${uid}/playlists`));
     setPlaylists(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
@@ -58,7 +55,7 @@ export default function FamilyDashboard() {
     if (!user) return;
     const playlistId = Date.now().toString();
     const data = { name: formName, server: formServer, username: formUser, password: formPass, type: "xtream" };
-    await setDoc(doc(db, \`users/\${user.uid}/playlists\`, playlistId), data);
+    await setDoc(doc(db, `users/${user.uid}/playlists`, playlistId), data);
     setShowAdd(false);
     fetchPlaylists(user.uid);
   };
@@ -76,7 +73,7 @@ export default function FamilyDashboard() {
       server: pl.server,
       username: pl.username,
       password: pl.password,
-      hiddenGroups: [] // Default for now
+      hiddenGroups: []
     });
     
     setPairingCode("");
@@ -104,10 +101,7 @@ export default function FamilyDashboard() {
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Playlists & Pairing */}
           <div className="lg:col-span-1 space-y-8">
-            
-            {/* Playlists Module */}
             <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold">My Credentials</h2>
@@ -143,7 +137,6 @@ export default function FamilyDashboard() {
               </div>
             </div>
 
-            {/* TV Pairing Module */}
             <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl">
               <h2 className="text-lg font-semibold mb-2">Push to TV</h2>
               <p className="text-xs text-neutral-400 mb-4">Enter the code from your Android TV to securely push credentials.</p>
@@ -173,7 +166,6 @@ export default function FamilyDashboard() {
             </div>
           </div>
 
-          {/* Right Column: Family Dashboard Live Grid */}
           <div className="lg:col-span-2">
             <h2 className="text-xl font-bold mb-6 flex items-center">
               <Activity className="w-5 h-5 text-emerald-500 mr-2" />
