@@ -1,5 +1,8 @@
 package com.redsurf.tv.player
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -17,6 +20,13 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.redsurf.tv.network.IptvNetworkModule
 import com.redsurf.tv.player.tracks.TrackManager
+import com.redsurf.tv.player.tuning.AfrManager
+
+fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -30,13 +40,23 @@ fun ExoPlayerView(
         val dataSourceFactory = IptvNetworkModule.getDataSourceFactory()
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
         val trackManager = TrackManager(context)
-
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
-            .setTrackSelector(trackManager.trackSelector) // Injecting hardware track selection
+            .setTrackSelector(trackManager.trackSelector)
             .build().apply {
                 playWhenReady = true
             }
+    }
+    
+    val afrManager = remember {
+        val manager = AfrManager(context, exoPlayer)
+        val activity = context.findActivity()
+        manager.onModeFound = { modeId ->
+            activity?.window?.attributes = activity?.window?.attributes?.apply {
+                preferredDisplayModeId = modeId
+            }
+        }
+        manager
     }
 
     DisposableEffect(streamUrl) {
@@ -46,6 +66,7 @@ fun ExoPlayerView(
             exoPlayer.prepare()
         }
         onDispose {
+            afrManager.restoreOriginalMode()
             exoPlayer.release()
         }
     }

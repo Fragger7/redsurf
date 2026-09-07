@@ -17,6 +17,7 @@ import androidx.tv.material3.Text
 import com.redsurf.tv.ui.TiViMateLayout
 import com.redsurf.tv.ui.onboarding.OnboardingScreen
 import com.redsurf.tv.db.RedSurfDatabase
+import com.redsurf.tv.player.tuning.AfrManager
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -25,14 +26,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Inject Database
         val db = RedSurfDatabase.getDatabase(this)
-        viewModel.setDatabase(db)
-
+        viewModel.setDatabase(db, this)
+        
         setContent {
             MaterialTheme {
                 val state by viewModel.state.collectAsState()
-
+                
                 Box(
                     modifier = Modifier.fillMaxSize().background(Color(0xFF09090B)),
                     contentAlignment = Alignment.Center
@@ -53,10 +53,16 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         is AppState.Loaded -> {
-                            TiViMateLayout(groups = s.groups)
+                            TiViMateLayout(
+                                groups = s.groups,
+                                playlists = s.playlists,
+                                activePlaylistId = s.activePlaylistId,
+                                viewModel = viewModel,
+                                activity = this@MainActivity
+                            )
                         }
                         is AppState.Error -> {
-                            Text("Error: ${s.message}", color = Color.Red)
+                            Text("Error: \${s.message}", color = Color.Red)
                         }
                     }
                 }

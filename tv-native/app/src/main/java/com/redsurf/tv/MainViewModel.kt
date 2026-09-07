@@ -7,8 +7,11 @@ import com.google.firebase.ktx.Firebase
 import com.redsurf.tv.data.Channel
 import com.redsurf.tv.data.ChannelGroup
 import com.redsurf.tv.db.ChannelEntity
+import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.db.RedSurfDatabase
 import com.redsurf.tv.parser.M3uParser
+import com.redsurf.tv.search.GlobalSearchEngine
+import com.redsurf.tv.search.SearchResults
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,11 +20,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.net.URL
+import java.util.UUID
 
 sealed class AppState {
     object Loading : AppState()
     data class Onboarding(val pairingCode: String?) : AppState()
-    data class Loaded(val groups: List<ChannelGroup>) : AppState()
+    data class Loaded(val groups: List<ChannelGroup>, val playlists: List<PlaylistEntity>, val activePlaylistId: String?) : AppState()
     data class Error(val message: String) : AppState()
 }
 
@@ -31,79 +35,131 @@ class MainViewModel : ViewModel() {
     
     private val _state = MutableStateFlow<AppState>(AppState.Loading)
     val state: StateFlow<AppState> = _state
+    
+    private var currentPlaylistId: String? = null
+    private var searchEngine: GlobalSearchEngine? = null
 
-    fun setDatabase(db: RedSurfDatabase) {
+    private val _searchResults = MutableStateFlow<List<Channel>>(emptyList())
+    val searchResults: StateFlow<List<Channel>> = _searchResults
+
+    fun setDatabase(db: RedSurfDatabase, context: android.content.Context) {
         this.localDb = db
+        this.searchEngine = GlobalSearchEngine(context)
         checkLocalCache()
     }
 
     private fun checkLocalCache() {
         viewModelScope.launch {
-            val cachedChannels = localDb?.channelDao()?.getAllChannels()?.firstOrNull()
-            if (!cachedChannels.isNullOrEmpty()) {
-                val grouped = cachedChannels.map {
-                    Channel(it.streamId, it.name, it.streamId, it.streamIcon ?: "", it.groupName, it.epgChannelId ?: "")
-                }.groupBy { it.group }.map { ChannelGroup(it.key, it.value) }
-                
-                _state.value = AppState.Loaded(grouped)
+            val playlists = localDb?.playlistDao()?.getAllPlaylists()?.firstOrNull() ?: emptyList()
+            if (playlists.isNotEmpty()) {
+                val activeId = currentPlaylistId ?: playlists.first().id
+                loadChannelsFromCache(activeId, playlists)
             } else {
                 generatePairingCode()
             }
+        }
+    }
+    
+    fun switchPlaylist(playlistId: String) {
+        currentPlaylistId = playlistId
+        checkLocalCache()
+    }
+
+    fun performSearch(query: String) {
+        viewModelScope.launch {
+            val results = searchEngine?.search(query)?.liveChannels ?: emptyList()
+            _searchResults.value = results.map {
+                Channel(it.streamId, it.name, it.streamId, it.streamIcon ?: "", it.groupName, it.epgChannelId ?: "")
+            }
+        }
+    }
+
+    fun clearSearch() {
+        _searchResults.value = emptyList()
+    }
+
+    private suspend fun loadChannelsFromCache(playlistId: String, allPlaylists: List<PlaylistEntity>) {
+        val cachedChannels = localDb?.channelDao()?.getAllChannels()?.firstOrNull()?.filter { it.playlistId == playlistId }
+        
+        if (!cachedChannels.isNullOrEmpty()) {
+            val grouped = cachedChannels.map {
+                Channel(it.streamId, it.name, it.streamId, it.streamIcon ?: "", it.groupName, it.epgChannelId ?: "")
+            }.groupBy { it.group }.map { ChannelGroup(it.key, it.value) }
+            
+            _state.value = AppState.Loaded(grouped, allPlaylists, playlistId)
+        } else {
+            _state.value = AppState.Loaded(emptyList(), allPlaylists, playlistId)
         }
     }
 
     private fun generatePairingCode() {
         val code = (100000..999999).random().toString()
         _state.value = AppState.Onboarding(code)
-
         val sessionRef = firestoreDb.collection("pairingSessions").document(code)
         
         viewModelScope.launch {
             try {
                 sessionRef.set(mapOf("status" to "waiting", "createdAt" to System.currentTimeMillis())).await()
-
                 sessionRef.addSnapshotListener { snapshot, e ->
                     if (e != null) return@addSnapshotListener
                     if (snapshot != null && snapshot.exists()) {
                         if (snapshot.getString("status") == "paired") {
                             val url = snapshot.getString("url")
-                            if (!url.isNullOrEmpty()) loadPlaylist(url)
+                            if (!url.isNullOrEmpty()) loadPlaylist(url, "Mobile Paired Playlist")
                         }
                     }
                 }
             } catch (e: Exception) {
-                // Ignore silent firestore fails, they can still use native UI
             }
         }
     }
 
-    fun loadXtreamCodes(server: String, user: String, pass: String) {
+    fun loadXtreamCodes(server: String, user: String, pass: String, name: String = "Xtream Codes") {
         val cleanServer = if (server.endsWith("/")) server.dropLast(1) else server
-        val url = "\$cleanServer/get.php?username=\$user&password=\$pass&type=m3u_plus&output=ts"
-        loadPlaylist(url)
+        val url = "$cleanServer/get.php?username=$user&password=$pass&type=m3u_plus&output=ts"
+        loadPlaylist(url, name, server, user, "xtream")
     }
 
-    fun loadPlaylist(url: String) {
+    fun loadPlaylist(url: String, name: String = "M3U Playlist", serverUrl: String = url, username: String = "", type: String = "m3u") {
         _state.value = AppState.Loading
         viewModelScope.launch {
             try {
+                val playlistId = UUID.randomUUID().toString()
+                
+                val newPlaylist = PlaylistEntity(
+                    id = playlistId,
+                    name = name,
+                    serverUrl = serverUrl,
+                    username = username,
+                    type = type
+                )
+                
+                localDb?.playlistDao()?.insertPlaylist(newPlaylist)
+
                 val channels = withContext(Dispatchers.IO) {
                     val inputStream = URL(url).openStream()
                     M3uParser.parse(inputStream)
                 }
 
-                // Cache in Room Database for instant next boot
                 val entities = channels.map {
-                    ChannelEntity(streamId = it.streamUrl, playlistId = "default", groupId = "default", num = 0, name = it.name, streamType = "live", streamIcon = it.logoUrl, epgChannelId = it.epgId, groupName = it.group)
+                    ChannelEntity(
+                        streamId = it.streamUrl, 
+                        playlistId = playlistId, 
+                        groupId = "default", 
+                        num = 0, 
+                        name = it.name, 
+                        streamType = "live", 
+                        streamIcon = it.logoUrl, 
+                        epgChannelId = it.epgId, 
+                        groupName = it.group
+                    )
                 }
-                localDb?.channelDao()?.deleteChannelsByPlaylist("default")
+                
                 localDb?.channelDao()?.insertChannels(entities)
+                
+                currentPlaylistId = playlistId
+                checkLocalCache()
 
-                val grouped = channels.groupBy { it.group }
-                    .map { ChannelGroup(it.key, it.value) }
-                    .sortedBy { it.name }
-
-                _state.value = AppState.Loaded(grouped)
             } catch (e: Exception) {
                 _state.value = AppState.Error(e.message ?: "Failed to load playlist")
             }
