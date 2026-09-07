@@ -33,11 +33,21 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: wrapper
+
       - name: Build APK with Versioning
         run: |
           cd tv-native
-          chmod +x gradlew
-          ./gradlew assembleDebug -PversionName=${{ steps.version.outputs.new_tag }} -PversionCode=${{ github.run_number }}
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+            ./gradlew assembleDebug -PversionName=${{ steps.version.outputs.new_tag }} -PversionCode=${{ github.run_number }}
+          else
+            # fallback if no wrapper
+            gradle assembleDebug -PversionName=${{ steps.version.outputs.new_tag }} -PversionCode=${{ github.run_number }}
+          fi
           
       - name: Rename APK
         run: |
