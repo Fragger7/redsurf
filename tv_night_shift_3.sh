@@ -1,3 +1,11 @@
+#!/bin/bash
+set -e
+
+# Update build.gradle.kts to add DNS over HTTPS
+sed -i '/implementation("com.squareup.okhttp3:okhttp:4.12.0")/a \    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")' tv-native/app/build.gradle.kts
+
+# Rewrite Network Module to support DoH
+cat << 'KOTLIN' > tv-native/app/src/main/java/com/redsurf/tv/network/IptvNetworkModule.kt
 package com.redsurf.tv.network
 
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -74,3 +82,4 @@ object IptvNetworkModule {
             .setUserAgent(currentUserAgent)
     }
 }
+KOTLIN

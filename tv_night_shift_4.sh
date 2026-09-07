@@ -1,3 +1,61 @@
+#!/bin/bash
+set -e
+
+BASE_DIR="tv-native/app/src/main/java/com/redsurf/tv"
+
+# 1. Update EpgEntities.kt to include Playlist and Group tables
+cat << 'KOTLIN' > "$BASE_DIR/db/EpgEntities.kt"
+package com.redsurf.tv.db
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "playlists")
+data class PlaylistEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val serverUrl: String,
+    val username: String,
+    val type: String // "xtream" or "m3u"
+)
+
+@Entity(tableName = "channel_groups")
+data class ChannelGroupEntity(
+    @PrimaryKey val id: String,
+    val playlistId: String,
+    val groupName: String,
+    val isHidden: Boolean = false,
+    val groupType: String // "live", "vod", "series"
+)
+
+@Entity(tableName = "channels")
+data class ChannelEntity(
+    @PrimaryKey val streamId: String,
+    val playlistId: String,
+    val groupId: String, // Maps to channel_groups.id
+    val num: Int,
+    val name: String,
+    val streamType: String,
+    val streamIcon: String?,
+    val epgChannelId: String?,
+    val groupName: String,
+    val isHidden: Boolean = false,
+    val isFavorite: Boolean = false
+)
+
+@Entity(tableName = "epg_programs")
+data class EpgProgramEntity(
+    @PrimaryKey val id: String, // channelId-startTime
+    val channelEpgId: String,
+    val title: String,
+    val description: String,
+    val startTime: Long,
+    val endTime: Long
+)
+KOTLIN
+
+# 2. Update DAOs and DB
+cat << 'KOTLIN' > "$BASE_DIR/db/RedSurfDatabase.kt"
 package com.redsurf.tv.db
 
 import android.content.Context
@@ -81,3 +139,40 @@ abstract class RedSurfDatabase : RoomDatabase() {
         }
     }
 }
+KOTLIN
+
+# 3. Create Global Search Matrix (Kotlin)
+mkdir -p "$BASE_DIR/search"
+cat << 'KOTLIN' > "$BASE_DIR/search/GlobalSearchEngine.kt"
+package com.redsurf.tv.search
+
+import android.content.Context
+import com.redsurf.tv.db.ChannelEntity
+import com.redsurf.tv.db.RedSurfDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * PRODUCTION GLOBAL SEARCH:
+ * Unified matrix search querying Live Channels across all playlists.
+ * In a full parity scenario, this would also query VODs and Series tables.
+ */
+class GlobalSearchEngine(context: Context) {
+    private val db = RedSurfDatabase.getDatabase(context)
+
+    suspend fun search(query: String): SearchResults = withContext(Dispatchers.IO) {
+        if (query.length < 2) return@withContext SearchResults(emptyList())
+
+        val channels = db.channelDao().searchChannels(query)
+        // VOD and Series queries would go here
+        
+        SearchResults(
+            liveChannels = channels
+        )
+    }
+}
+
+data class SearchResults(
+    val liveChannels: List<ChannelEntity>
+)
+KOTLIN

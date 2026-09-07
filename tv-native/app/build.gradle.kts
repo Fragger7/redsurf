@@ -38,6 +38,7 @@ dependencies {
     
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.2.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
 
     val room_version = "2.6.1"
@@ -47,6 +48,7 @@ dependencies {
     
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
 
     implementation(platform("com.google.firebase:firebase-bom:32.7.1"))
     implementation("com.google.firebase:firebase-firestore-ktx")

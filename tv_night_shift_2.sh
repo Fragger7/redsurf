@@ -313,4 +313,3 @@ We have built the architectural skeleton for a world-class IPTV player. To achie
 BACKLOG
 
 chmod +x tv_night_shift_2.sh
-./tv_night_shift_2.sh
