@@ -1,6 +1,7 @@
 package com.redsurf.tv.ui
 
 import android.app.Activity
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
@@ -25,7 +26,7 @@ import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.player.ExoPlayerView
 
 enum class MenuState {
-    PLAYLISTS, GROUPS, CHANNELS, SEARCH
+    PLAYLISTS, GROUPS, CHANNELS, SEARCH, SETTINGS
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -38,14 +39,13 @@ fun TiViMateLayout(
     activity: Activity
 ) {
     var selectedGroup by remember { mutableStateOf(groups.firstOrNull()) }
-    var focusedChannel by remember { mutableStateOf<Channel?>(null) }
+    val focusedChannels = remember { mutableStateListOf<Channel>() }
     var isMenuOpen by remember { mutableStateOf(true) }
     var currentMenuState by remember { mutableStateOf(MenuState.GROUPS) }
     
     val searchResults by viewModel.searchResults.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     
-    // Auto-select first group when playlist changes
     LaunchedEffect(groups) {
         if (groups.isNotEmpty() && !groups.contains(selectedGroup)) {
             selectedGroup = groups.first()
@@ -53,12 +53,32 @@ fun TiViMateLayout(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // Background Video Player
-        focusedChannel?.streamUrl?.let { url ->
-            ExoPlayerView(
-                streamUrl = url,
-                modifier = Modifier.fillMaxSize()
-            )
+        // Multi-View Video Player Grid
+        if (focusedChannels.isNotEmpty()) {
+            if (focusedChannels.size == 1) {
+                ExoPlayerView(
+                    streamUrl = focusedChannels[0].streamUrl,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                // Multi-View Grid support
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(modifier = Modifier.weight(1f)) {
+                        ExoPlayerView(streamUrl = focusedChannels[0].streamUrl, modifier = Modifier.weight(1f).fillMaxHeight())
+                        if (focusedChannels.size > 1) {
+                            ExoPlayerView(streamUrl = focusedChannels[1].streamUrl, modifier = Modifier.weight(1f).fillMaxHeight())
+                        }
+                    }
+                    if (focusedChannels.size > 2) {
+                        Row(modifier = Modifier.weight(1f)) {
+                            ExoPlayerView(streamUrl = focusedChannels[2].streamUrl, modifier = Modifier.weight(1f).fillMaxHeight())
+                            if (focusedChannels.size > 3) {
+                                ExoPlayerView(streamUrl = focusedChannels[3].streamUrl, modifier = Modifier.weight(1f).fillMaxHeight())
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Overlay & Menu
@@ -66,7 +86,7 @@ fun TiViMateLayout(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f)) // Darker for clear UI navigation
+                    .background(Color.Black.copy(alpha = 0.85f))
             )
             
             Column(modifier = Modifier.fillMaxSize()) {
@@ -88,9 +108,14 @@ fun TiViMateLayout(
                         onClick = { currentMenuState = MenuState.GROUPS }
                     )
                     TabItem(
-                        title = "Global Search",
+                        title = "Search",
                         isSelected = currentMenuState == MenuState.SEARCH,
                         onClick = { currentMenuState = MenuState.SEARCH }
+                    )
+                    TabItem(
+                        title = "Settings",
+                        isSelected = currentMenuState == MenuState.SETTINGS,
+                        onClick = { currentMenuState = MenuState.SETTINGS }
                     )
                 }
 
@@ -145,8 +170,15 @@ fun TiViMateLayout(
                                             channel = channel,
                                             onFocus = { },
                                             onClick = { 
-                                                focusedChannel = channel
+                                                focusedChannels.clear()
+                                                focusedChannels.add(channel)
                                                 isMenuOpen = false 
+                                            },
+                                            onLongClick = {
+                                                if (focusedChannels.size < 4 && !focusedChannels.contains(channel)) {
+                                                    focusedChannels.add(channel)
+                                                }
+                                                isMenuOpen = false
                                             }
                                         )
                                     }
@@ -167,8 +199,6 @@ fun TiViMateLayout(
                                 modifier = Modifier.padding(bottom = 16.dp)
                             )
                             
-                            // Simple text entry for TV using BasicTextField or similar
-                            // In a real TV app we'd use a custom on-screen keyboard, but this works with remote
                             androidx.compose.foundation.text.BasicTextField(
                                 value = searchQuery,
                                 onValueChange = { 
@@ -197,7 +227,14 @@ fun TiViMateLayout(
                                         channel = channel,
                                         onFocus = { },
                                         onClick = {
-                                            focusedChannel = channel
+                                            focusedChannels.clear()
+                                            focusedChannels.add(channel)
+                                            isMenuOpen = false
+                                        },
+                                        onLongClick = {
+                                            if (focusedChannels.size < 4 && !focusedChannels.contains(channel)) {
+                                                focusedChannels.add(channel)
+                                            }
                                             isMenuOpen = false
                                         }
                                     )
@@ -205,8 +242,68 @@ fun TiViMateLayout(
                             }
                         }
                     }
+                    MenuState.SETTINGS -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(32.dp)
+                        ) {
+                            Text(
+                                "Settings & Backup",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = Color.White,
+                                modifier = Modifier.padding(bottom = 32.dp)
+                            )
+                            
+                            SettingsActionItem(
+                                title = "Backup Database (Export to Local Storage)",
+                                description = "Save playlists, favorites, and settings to local storage.",
+                                onClick = {
+                                    val success = viewModel.backupData()
+                                    Toast.makeText(activity, if (success) "Backup Successful!" else "Backup Failed", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            SettingsActionItem(
+                                title = "Restore Database (Import from Local Storage)",
+                                description = "Restore your previous configuration. Requires app restart.",
+                                onClick = {
+                                    val success = viewModel.restoreData()
+                                    Toast.makeText(activity, if (success) "Restore Successful! Restart App." else "No Backup Found", Toast.LENGTH_LONG).show()
+                                }
+                            )
+                            
+                            Spacer(modifier = Modifier.height(32.dp))
+                            
+                            Text(
+                                "Tip: Long-press a channel in the Live TV list to add it to Multi-View PiP Mode (Up to 4 streams).",
+                                color = Color.LightGray,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun SettingsActionItem(title: String, description: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color(0xFF222222),
+            focusedContainerColor = MaterialTheme.colorScheme.primary
+        )
+    ) {
+        Column(modifier = Modifier.padding(24.dp)) {
+            Text(text = title, style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text(text = description, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
         }
     }
 }
@@ -280,9 +377,10 @@ fun GroupItem(group: ChannelGroup, isSelected: Boolean, onFocus: () -> Unit) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun ChannelItem(channel: Channel, onFocus: () -> Unit, onClick: () -> Unit) {
+fun ChannelItem(channel: Channel, onFocus: () -> Unit, onClick: () -> Unit, onLongClick: () -> Unit = {}) {
     Surface(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp, horizontal = 16.dp)

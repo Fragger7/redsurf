@@ -1,9 +1,11 @@
 package com.redsurf.tv
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import com.redsurf.tv.backup.BackupManager
 import com.redsurf.tv.data.Channel
 import com.redsurf.tv.data.ChannelGroup
 import com.redsurf.tv.db.ChannelEntity
@@ -38,14 +40,33 @@ class MainViewModel : ViewModel() {
     
     private var currentPlaylistId: String? = null
     private var searchEngine: GlobalSearchEngine? = null
+    private var backupManager: BackupManager? = null
 
     private val _searchResults = MutableStateFlow<List<Channel>>(emptyList())
     val searchResults: StateFlow<List<Channel>> = _searchResults
 
-    fun setDatabase(db: RedSurfDatabase, context: android.content.Context) {
+    fun setDatabase(db: RedSurfDatabase, context: Context) {
         this.localDb = db
         this.searchEngine = GlobalSearchEngine(context)
+        this.backupManager = BackupManager(context)
         checkLocalCache()
+    }
+
+    fun backupData(): Boolean {
+        return backupManager?.backupDatabase() ?: false
+    }
+
+    fun restoreData(): Boolean {
+        return backupManager?.restoreDatabase() ?: false
+    }
+
+    fun getCatchupUrl(channel: Channel, startTimestamp: Long, durationMins: Int): String {
+        return com.redsurf.tv.engine.CatchupEngine.generateCatchupUrl(
+            PlaylistEntity("temp", "temp", "http://server", "user", "xtream"),
+            channel.streamUrl,
+            startTimestamp,
+            durationMins
+        )
     }
 
     private fun checkLocalCache() {
@@ -116,7 +137,7 @@ class MainViewModel : ViewModel() {
 
     fun loadXtreamCodes(server: String, user: String, pass: String, name: String = "Xtream Codes") {
         val cleanServer = if (server.endsWith("/")) server.dropLast(1) else server
-        val url = "$cleanServer/get.php?username=$user&password=$pass&type=m3u_plus&output=ts"
+        val url = "\$cleanServer/get.php?username=\$user&password=\$pass&type=m3u_plus&output=ts"
         loadPlaylist(url, name, server, user, "xtream")
     }
 
