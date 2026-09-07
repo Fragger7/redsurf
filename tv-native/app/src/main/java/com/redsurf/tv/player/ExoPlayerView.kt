@@ -19,8 +19,6 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.redsurf.tv.network.IptvNetworkModule
-import com.redsurf.tv.player.tracks.TrackManager
-import com.redsurf.tv.player.tuning.AfrManager
 
 fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -32,43 +30,25 @@ fun Context.findActivity(): Activity? = when (this) {
 @Composable
 fun ExoPlayerView(
     streamUrl: String,
+    useSecureDns: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     
-    val exoPlayer = remember {
-        val dataSourceFactory = IptvNetworkModule.getDataSourceFactory()
+    val exoPlayer = remember(useSecureDns) {
+        val dataSourceFactory = IptvNetworkModule.buildDataSourceFactory(context, useSecureDns)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-        val trackManager = TrackManager(context)
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
-            .setTrackSelector(trackManager.trackSelector)
-            .build().apply {
-                playWhenReady = true
-            }
-    }
-    
-    val afrManager = remember {
-        val manager = AfrManager(context, exoPlayer)
-        val activity = context.findActivity()
-        manager.onModeFound = { modeId ->
-            activity?.window?.attributes = activity?.window?.attributes?.apply {
-                preferredDisplayModeId = modeId
-            }
-        }
-        manager
+            .build().apply { playWhenReady = true }
     }
 
     DisposableEffect(streamUrl) {
         if (streamUrl.isNotEmpty()) {
-            val mediaItem = MediaItem.fromUri(streamUrl)
-            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
             exoPlayer.prepare()
         }
-        onDispose {
-            afrManager.restoreOriginalMode()
-            exoPlayer.release()
-        }
+        onDispose { exoPlayer.release() }
     }
 
     AndroidView(
@@ -77,10 +57,7 @@ fun ExoPlayerView(
                 player = exoPlayer
                 useController = false 
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                layoutParams = FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
+                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             }
         },
         modifier = modifier

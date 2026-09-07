@@ -13,7 +13,7 @@ import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.db.RedSurfDatabase
 import com.redsurf.tv.parser.M3uParser
 import com.redsurf.tv.search.GlobalSearchEngine
-import com.redsurf.tv.search.SearchResults
+import com.redsurf.tv.settings.SettingsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,33 +41,23 @@ class MainViewModel : ViewModel() {
     private var currentPlaylistId: String? = null
     private var searchEngine: GlobalSearchEngine? = null
     private var backupManager: BackupManager? = null
+    lateinit var settingsManager: SettingsManager
 
     private val _searchResults = MutableStateFlow<List<Channel>>(emptyList())
     val searchResults: StateFlow<List<Channel>> = _searchResults
+    
+    private var activePairingCode: String? = null
 
     fun setDatabase(db: RedSurfDatabase, context: Context) {
         this.localDb = db
         this.searchEngine = GlobalSearchEngine(context)
         this.backupManager = BackupManager(context)
+        this.settingsManager = SettingsManager(context)
         checkLocalCache()
     }
 
-    fun backupData(): Boolean {
-        return backupManager?.backupDatabase() ?: false
-    }
-
-    fun restoreData(): Boolean {
-        return backupManager?.restoreDatabase() ?: false
-    }
-
-    fun getCatchupUrl(channel: Channel, startTimestamp: Long, durationMins: Int): String {
-        return com.redsurf.tv.engine.CatchupEngine.generateCatchupUrl(
-            PlaylistEntity("temp", "temp", "http://server", "user", "xtream"),
-            channel.streamUrl,
-            startTimestamp,
-            durationMins
-        )
-    }
+    fun backupData(): Boolean = backupManager?.backupDatabase() ?: false
+    fun restoreData(): Boolean = backupManager?.restoreDatabase() ?: false
 
     private fun checkLocalCache() {
         viewModelScope.launch {
@@ -95,9 +85,7 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun clearSearch() {
-        _searchResults.value = emptyList()
-    }
+    fun clearSearch() { _searchResults.value = emptyList() }
 
     private suspend fun loadChannelsFromCache(playlistId: String, allPlaylists: List<PlaylistEntity>) {
         val cachedChannels = localDb?.channelDao()?.getAllChannels()?.firstOrNull()?.filter { it.playlistId == playlistId }
@@ -115,6 +103,7 @@ class MainViewModel : ViewModel() {
 
     private fun generatePairingCode() {
         val code = (100000..999999).random().toString()
+        activePairingCode = code
         _state.value = AppState.Onboarding(code)
         val sessionRef = firestoreDb.collection("pairingSessions").document(code)
         
@@ -162,7 +151,20 @@ class MainViewModel : ViewModel() {
                     M3uParser.parse(inputStream)
                 }
 
-                val entities = channels.map {
+                // --- SMART SYNC LOGIC ---
+                // Fetch hidden groups from Firebase if we are paired
+                var hiddenGroups = emptyList<String>()
+                activePairingCode?.let { code ->
+                    try {
+                        val snap = firestoreDb.collection("pairingSessions").document(code).get().await()
+                        hiddenGroups = snap.get("hiddenGroups") as? List<String> ?: emptyList()
+                    } catch (e: Exception) {}
+                }
+
+                // Filter out hidden groups before inserting into DB (Saves bandwidth & memory)
+                val filteredChannels = channels.filter { it.group !in hiddenGroups }
+
+                val entities = filteredChannels.map {
                     ChannelEntity(
                         streamId = it.streamUrl, 
                         playlistId = playlistId, 
