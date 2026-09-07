@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+}

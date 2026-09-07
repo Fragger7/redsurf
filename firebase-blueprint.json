@@ -1,0 +1,28 @@
+{
+  "entities": {
+    "Playlist": {
+      "title": "Playlist",
+      "description": "A user's saved M3U playlist.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The remote URL of the M3U playlist."
+        },
+        "addedAt": {
+          "type": "number",
+          "description": "Timestamp when added."
+        }
+      },
+      "required": ["url", "addedAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}/playlists/{playlistId}": {
+      "schema": {
+        "$ref": "#/entities/Playlist"
+      },
+      "description": "The user's saved playlists."
+    }
+  }
+}
