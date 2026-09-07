@@ -131,7 +131,7 @@ export function TVInterface() {
   };
 
   // Derive active items
-  const activeGroup = groups[selectedGroupIdx] || { id: 'all', name: 'All' };
+  const activeGroup = useMemo(() => groups[selectedGroupIdx] || { id: 'all', name: 'All' }, [groups, selectedGroupIdx]);
   const channelsInGroup = useMemo(() => {
     if (!groups.length || !channels.length) return [];
     return activeGroup.id === 'all' 
@@ -159,6 +159,7 @@ export function TVInterface() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     resetInactivityTimer();
     return () => {
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);

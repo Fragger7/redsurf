@@ -24,6 +24,11 @@ export default function FamilyDashboard() {
   const [pairingCode, setPairingCode] = useState("");
   const [selectedPlaylist, setSelectedPlaylist] = useState("");
 
+  const fetchPlaylists = async (uid: string) => {
+    const snapshot = await getDocs(collection(db, `users/${uid}/playlists`));
+    setPlaylists(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  };
+
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (u) => {
       if (u) {
@@ -44,11 +49,6 @@ export default function FamilyDashboard() {
 
     return () => { unsubAuth(); unsubDevices(); };
   }, [router]);
-
-  const fetchPlaylists = async (uid: string) => {
-    const snapshot = await getDocs(collection(db, `users/${uid}/playlists`));
-    setPlaylists(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-  };
 
   const handleAddPlaylist = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,7 +179,8 @@ export default function FamilyDashboard() {
                 </div>
               )}
               {devices.map((device, i) => {
-                const isOnline = (Date.now() - device.lastActive) < 1000 * 60 * 5;
+                // eslint-disable-next-line react-hooks/purity
+                const isOnline = (new Date().getTime() - device.lastActive) < 1000 * 60 * 5;
                 return (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={device.id} className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 shadow-lg">
                     <div className="flex justify-between items-start mb-4">
