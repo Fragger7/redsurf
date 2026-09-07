@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
+import androidx.tv.foundation.lazy.list.TvLazyRow
 import androidx.tv.foundation.lazy.list.items
 import androidx.tv.material3.*
 import com.redsurf.tv.MainViewModel
@@ -45,6 +46,7 @@ fun TiViMateLayout(
     
     // Settings States
     var useDoH by remember { mutableStateOf(viewModel.settingsManager.useSecureDns) }
+    var dnsProvider by remember { mutableStateOf(viewModel.settingsManager.dnsProvider) }
     var tmdbKey by remember { mutableStateOf(viewModel.settingsManager.tmdbApiKey) }
 
     LaunchedEffect(groups) {
@@ -58,6 +60,7 @@ fun TiViMateLayout(
             ExoPlayerView(
                 streamUrl = focusedChannels[0].streamUrl,
                 useSecureDns = useDoH,
+                dnsProvider = dnsProvider,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -96,23 +99,47 @@ fun TiViMateLayout(
                         }
                     }
                     MenuState.SEARCH -> {
-                        // Omitted for brevity in this snippet, same as before
+                        // Empty for brevity
                     }
                     MenuState.SETTINGS -> {
                         Column(modifier = Modifier.fillMaxSize().padding(32.dp)) {
                             Text("Advanced Settings", style = MaterialTheme.typography.headlineMedium, color = Color.White, modifier = Modifier.padding(bottom = 32.dp))
                             
                             // DoH Toggle
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 24.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = if (useDoH) 8.dp else 24.dp)) {
                                 Checkbox(checked = useDoH, onCheckedChange = { 
                                     useDoH = it
                                     viewModel.settingsManager.useSecureDns = it
-                                    Toast.makeText(activity, "DoH: \${if(it) "Enabled" else "Disabled"}. Restart streams.", Toast.LENGTH_SHORT).show()
                                 })
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column {
-                                    Text("Use Secure DNS (DoH)", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                                    Text("Bypass ISP throttling/blocking by routing DNS over HTTPS (Cloudflare 1.1.1.1)", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                                    Text("Override Native DNS (DoH)", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                                    Text("Bypass ISP throttling/blocking by securely routing traffic", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+
+                            // DNS Provider Selector (Only visible when DoH is ON)
+                            if (useDoH) {
+                                val providers = listOf("Cloudflare", "Google", "Quad9", "AdGuard")
+                                Row(modifier = Modifier.padding(start = 48.dp, bottom = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Provider:", color = Color.Gray, modifier = Modifier.padding(end = 16.dp))
+                                    TvLazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(providers) { provider ->
+                                            val isSelected = dnsProvider == provider
+                                            Surface(
+                                                onClick = {
+                                                    dnsProvider = provider
+                                                    viewModel.settingsManager.dnsProvider = provider
+                                                },
+                                                colors = ClickableSurfaceDefaults.colors(
+                                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFF2A2A2A)
+                                                ),
+                                                shape = ClickableSurfaceDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                                            ) {
+                                                Text(provider, color = if (isSelected) Color.White else Color.LightGray, modifier = Modifier.padding(16.dp, 8.dp))
+                                            }
+                                        }
+                                    }
                                 }
                             }
 

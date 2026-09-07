@@ -3,6 +3,7 @@ package com.redsurf.tv
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.redsurf.tv.backup.BackupManager
@@ -47,6 +48,7 @@ class MainViewModel : ViewModel() {
     val searchResults: StateFlow<List<Channel>> = _searchResults
     
     private var activePairingCode: String? = null
+    private var pairingListener: ListenerRegistration? = null
 
     fun setDatabase(db: RedSurfDatabase, context: Context) {
         this.localDb = db
@@ -110,12 +112,20 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 sessionRef.set(mapOf("status" to "waiting", "createdAt" to System.currentTimeMillis())).await()
-                sessionRef.addSnapshotListener { snapshot, e ->
+                pairingListener = sessionRef.addSnapshotListener { snapshot, e ->
                     if (e != null) return@addSnapshotListener
                     if (snapshot != null && snapshot.exists()) {
                         if (snapshot.getString("status") == "paired") {
                             val url = snapshot.getString("url")
-                            if (!url.isNullOrEmpty()) loadPlaylist(url, "Mobile Paired Playlist")
+                            if (!url.isNullOrEmpty()) {
+                                // IMPORTANT: Free Tier Architecture
+                                // Disconnect realtime listener immediately once paired. 
+                                // This prevents draining the 50k reads/day Firebase limit.
+                                pairingListener?.remove()
+                                pairingListener = null
+                                
+                                loadPlaylist(url, "Mobile Paired Playlist")
+                            }
                         }
                     }
                 }
@@ -151,17 +161,17 @@ class MainViewModel : ViewModel() {
                     M3uParser.parse(inputStream)
                 }
 
-                // --- SMART SYNC LOGIC ---
-                // Fetch hidden groups from Firebase if we are paired
                 var hiddenGroups = emptyList<String>()
                 activePairingCode?.let { code ->
                     try {
                         val snap = firestoreDb.collection("pairingSessions").document(code).get().await()
                         hiddenGroups = snap.get("hiddenGroups") as? List<String> ?: emptyList()
+                        
+                        // Delete the document after successful extraction to keep DB size 0
+                        firestoreDb.collection("pairingSessions").document(code).delete().await()
                     } catch (e: Exception) {}
                 }
 
-                // Filter out hidden groups before inserting into DB (Saves bandwidth & memory)
                 val filteredChannels = channels.filter { it.group !in hiddenGroups }
 
                 val entities = filteredChannels.map {

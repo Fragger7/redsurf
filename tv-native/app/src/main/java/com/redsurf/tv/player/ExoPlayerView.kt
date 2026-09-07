@@ -19,6 +19,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.redsurf.tv.network.IptvNetworkModule
+import com.redsurf.tv.player.tuning.AfrManager
 
 fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -31,16 +32,30 @@ fun Context.findActivity(): Activity? = when (this) {
 fun ExoPlayerView(
     streamUrl: String,
     useSecureDns: Boolean = false,
+    dnsProvider: String = "Cloudflare",
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     
-    val exoPlayer = remember(useSecureDns) {
-        val dataSourceFactory = IptvNetworkModule.buildDataSourceFactory(context, useSecureDns)
+    val exoPlayer = remember(useSecureDns, dnsProvider) {
+        val dataSourceFactory = IptvNetworkModule.buildDataSourceFactory(context, useSecureDns, dnsProvider)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-        ExoPlayer.Builder(context)
+        val player = ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
-            .build().apply { playWhenReady = true }
+            .build()
+        player.playWhenReady = true
+        player
+    }
+
+    val afrManager = remember {
+        val manager = AfrManager(context, exoPlayer)
+        val activity = context.findActivity()
+        manager.onModeFound = { modeId ->
+            activity?.window?.attributes = activity?.window?.attributes?.apply {
+                preferredDisplayModeId = modeId
+            }
+        }
+        manager
     }
 
     DisposableEffect(streamUrl) {
@@ -48,7 +63,10 @@ fun ExoPlayerView(
             exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
             exoPlayer.prepare()
         }
-        onDispose { exoPlayer.release() }
+        onDispose {
+            afrManager.restoreOriginalMode()
+            exoPlayer.release() 
+        }
     }
 
     AndroidView(
