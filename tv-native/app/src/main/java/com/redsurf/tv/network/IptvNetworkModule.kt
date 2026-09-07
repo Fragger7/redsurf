@@ -34,7 +34,9 @@ object IptvNetworkModule {
         }.toHttpUrl()
 
         // Bootstrap DNS to resolve the DoH provider itself
-        val bootstrapDns = Dns { hostname ->
+        val bootstrapDns = object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> {
+                return when (hostname) {
             when (hostname) {
                 "cloudflare-dns.com" -> listOf(InetAddress.getByName("1.1.1.1"), InetAddress.getByName("1.0.0.1"))
                 "dns.google" -> listOf(InetAddress.getByName("8.8.8.8"), InetAddress.getByName("8.8.4.4"))

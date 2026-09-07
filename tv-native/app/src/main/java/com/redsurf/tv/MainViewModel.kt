@@ -42,7 +42,7 @@ class MainViewModel : ViewModel() {
             val cachedChannels = localDb?.channelDao()?.getAllChannels()?.firstOrNull()
             if (!cachedChannels.isNullOrEmpty()) {
                 val grouped = cachedChannels.map {
-                    Channel(it.id, it.name, it.streamUrl, it.logoUrl, it.groupName, it.epgId)
+                    Channel(it.streamId, it.name, it.streamId, it.streamIcon ?: "", it.groupName, it.epgChannelId ?: "")
                 }.groupBy { it.group }.map { ChannelGroup(it.key, it.value) }
                 
                 _state.value = AppState.Loaded(grouped)
@@ -94,9 +94,9 @@ class MainViewModel : ViewModel() {
 
                 // Cache in Room Database for instant next boot
                 val entities = channels.map {
-                    ChannelEntity(it.id, it.name, it.streamUrl, it.logoUrl, it.group, it.epgId)
+                    ChannelEntity(streamId = it.streamUrl, playlistId = "default", groupId = "default", num = 0, name = it.name, streamType = "live", streamIcon = it.logoUrl, epgChannelId = it.epgId, groupName = it.group)
                 }
-                localDb?.channelDao()?.clearAll()
+                localDb?.channelDao()?.deleteChannelsByPlaylist("default")
                 localDb?.channelDao()?.insertChannels(entities)
 
                 val grouped = channels.groupBy { it.group }
