@@ -1,0 +1,6 @@
+{
+  "name": "RedSurf",
+  "description": "A modern, cross-platform IPTV player with TiViMate feature parity, inspired by the redshift of the cosmos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,59 @@
+name: Android Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on version tags (e.g., v1.0.0)
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Modify Next.js for Static Export (Capacitor requirement)
+        run: |
+          sed -i "s/output: 'standalone'/output: 'export'/g" next.config.ts
+          # API routes won't work in static export, so we need to ensure the Capacitor HTTP plugin is used instead.
+
+      - name: Build Next.js App
+        run: npm run build
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Initialize Capacitor
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Build APK (Debug)
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
