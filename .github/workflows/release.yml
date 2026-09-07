@@ -1,0 +1,52 @@
+name: Semantic Release & APK
+
+on:
+  push:
+    branches: [ "master", "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release RedSurf
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Semantic Version
+        id: version
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          release_branches: "master,main"
+          create_annotated_tag: true
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Build APK with Versioning
+        run: |
+          cd tv-native
+          chmod +x gradlew
+          ./gradlew assembleDebug -PversionName=${{ steps.version.outputs.new_tag }} -PversionCode=${{ github.run_number }}
+          
+      - name: Rename APK
+        run: |
+          mv tv-native/app/build/outputs/apk/debug/app-debug.apk tv-native/app/build/outputs/apk/debug/RedSurf-${{ steps.version.outputs.new_tag }}.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.new_tag }}
+          name: RedSurf ${{ steps.version.outputs.new_tag }}
+          generate_release_notes: true
+          files: tv-native/app/build/outputs/apk/debug/RedSurf-${{ steps.version.outputs.new_tag }}.apk
