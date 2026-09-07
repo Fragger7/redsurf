@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "130154861588",
+    "project_id": "redsurf-fdd99",
+    "storage_bucket": "redsurf-fdd99.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:130154861588:android:placeholder123",
+        "android_client_info": {
+          "package_name": "com.redsurf.tv"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbPHKgIcGCgP_FwNS8svBSfygkmfaCBfk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
