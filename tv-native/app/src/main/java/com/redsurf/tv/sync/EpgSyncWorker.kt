@@ -10,7 +10,6 @@ import com.redsurf.tv.parser.XmlTvParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
-import java.io.InputStream
 
 class EpgSyncWorker(
     appContext: Context,
@@ -22,7 +21,7 @@ class EpgSyncWorker(
         val epgUrl = inputData.getString("EPG_URL") ?: return@withContext Result.failure()
 
         try {
-            Log.d("EpgSync", "Starting silent EPG update from: \$epgUrl")
+            Log.d("EpgSyncWorker", "Starting silent EPG update from: \$epgUrl")
             val client = IptvNetworkModule.getOkHttpClient()
             val request = Request.Builder().url(epgUrl).build()
             
@@ -30,18 +29,16 @@ class EpgSyncWorker(
             if (!response.isSuccessful) return@withContext Result.retry()
 
             response.body?.byteStream()?.use { stream ->
-                // Parse massive XML file
-                val programs = XmlTvParser.parse(stream)
+                // Transaction: Wipe old EPG completely before streaming in new data
+                db.epgDao().clearAll()
                 
-                // Transaction: Wipe old EPG for this source and insert new
-                // For simplicity, we just clear and insert
-                db.channelDao().clearAll() // TODO: Implement specific EPG Dao
-                Log.d("EpgSync", "Successfully synced \${programs.size} programs in background.")
+                // Stream parse and batch insert directly to disk
+                XmlTvParser.parseAndInsert(stream, db.epgDao())
             }
             
             Result.success()
         } catch (e: Exception) {
-            Log.e("EpgSync", "Failed to sync EPG", e)
+            Log.e("EpgSyncWorker", "Failed to sync EPG", e)
             Result.retry()
         }
     }

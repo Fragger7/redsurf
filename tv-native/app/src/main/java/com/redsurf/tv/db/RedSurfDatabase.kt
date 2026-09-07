@@ -4,16 +4,6 @@ import android.content.Context
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
-@Entity(tableName = "channels")
-data class ChannelEntity(
-    @PrimaryKey val id: String,
-    val name: String,
-    val streamUrl: String,
-    val logoUrl: String,
-    val groupName: String,
-    val epgId: String
-)
-
 @Dao
 interface ChannelDao {
     @Query("SELECT * FROM channels ORDER BY groupName, name")
@@ -26,9 +16,10 @@ interface ChannelDao {
     suspend fun clearAll()
 }
 
-@Database(entities = [ChannelEntity::class], version = 1, exportSchema = false)
+@Database(entities = [ChannelEntity::class, EpgProgramEntity::class], version = 2, exportSchema = false)
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
+    abstract fun epgDao(): EpgDao
 
     companion object {
         @Volatile
