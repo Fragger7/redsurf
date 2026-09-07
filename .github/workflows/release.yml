@@ -36,27 +36,17 @@ jobs:
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: wrapper
+          gradle-version: '8.7'
 
       - name: Run Regression Suite
         run: |
           cd tv-native
-          if [ -f "gradlew" ]; then
-            ./gradlew testDebugUnitTest
-          else
-            gradle testDebugUnitTest
-          fi
+          gradle testDebugUnitTest
 
       - name: Build APK with Versioning
         run: |
           cd tv-native
-          if [ -f "gradlew" ]; then
-            chmod +x gradlew
-            ./gradlew assembleDebug -PversionName=${{ steps.version.outputs.new_tag }} -PversionCode=${{ github.run_number }}
-          else
-            # fallback if no wrapper
-            gradle assembleDebug -PversionName=${{ steps.version.outputs.new_tag }} -PversionCode=${{ github.run_number }}
-          fi
+          gradle assembleDebug -PversionName=${{ steps.version.outputs.new_tag }} -PversionCode=${{ github.run_number }}
           
       - name: Rename APK
         run: |
