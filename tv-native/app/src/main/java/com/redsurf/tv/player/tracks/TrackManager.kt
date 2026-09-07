@@ -6,7 +6,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import androidx.media3.exoplayer.trackselection.TrackSelectionParameters
+import androidx.media3.common.TrackSelectionParameters
 
 /**
  * PRODUCTION TRACK MANAGER:
