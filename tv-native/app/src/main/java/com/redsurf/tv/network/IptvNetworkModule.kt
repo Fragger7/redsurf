@@ -15,7 +15,6 @@ import java.util.concurrent.TimeUnit
  * Adds DNS-over-HTTPS (DoH) support to bypass ISP level DNS blocking of IPTV panels.
  */
 object IptvNetworkModule {
-
     var currentUserAgent = "VLC/3.0.18 LibVLC/3.0.18"
     
     enum class DnsProvider {
@@ -37,10 +36,10 @@ object IptvNetworkModule {
         val bootstrapDns = object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
                 return when (hostname) {
-            when (hostname) {
-                "cloudflare-dns.com" -> listOf(InetAddress.getByName("1.1.1.1"), InetAddress.getByName("1.0.0.1"))
-                "dns.google" -> listOf(InetAddress.getByName("8.8.8.8"), InetAddress.getByName("8.8.4.4"))
-                else -> Dns.SYSTEM.lookup(hostname)
+                    "cloudflare-dns.com" -> listOf(InetAddress.getByName("1.1.1.1"), InetAddress.getByName("1.0.0.1"))
+                    "dns.google" -> listOf(InetAddress.getByName("8.8.8.8"), InetAddress.getByName("8.8.4.4"))
+                    else -> Dns.SYSTEM.lookup(hostname)
+                }
             }
         }
 
@@ -52,7 +51,6 @@ object IptvNetworkModule {
     fun getOkHttpClient(): OkHttpClient {
         val bootstrapClient = OkHttpClient.Builder().build()
         val dns = buildDoHDns(bootstrapClient, currentDnsProvider)
-
         return OkHttpClient.Builder()
             .dns(dns)
             .connectTimeout(15, TimeUnit.SECONDS)
