@@ -38,6 +38,15 @@ jobs:
         with:
           gradle-version: wrapper
 
+      - name: Run Regression Suite
+        run: |
+          cd tv-native
+          if [ -f "gradlew" ]; then
+            ./gradlew testDebugUnitTest
+          else
+            gradle testDebugUnitTest
+          fi
+
       - name: Build APK with Versioning
         run: |
           cd tv-native
