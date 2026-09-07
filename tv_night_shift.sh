@@ -5,7 +5,6 @@ BASE_DIR="tv-native/app/src/main/java/com/redsurf/tv"
 mkdir -p "$BASE_DIR/player/tracks"
 mkdir -p ".github/workflows"
 
-# 1. Hardware Audio & Subtitle Track Manager (Deep Media3 Integration)
 cat << 'KOTLIN' > "$BASE_DIR/player/tracks/TrackManager.kt"
 package com.redsurf.tv.player.tracks
 
@@ -66,7 +65,6 @@ class TrackManager(private val context: Context) {
 }
 KOTLIN
 
-# 2. Update ExoPlayerView to utilize the new TrackManager
 cat << 'KOTLIN' > "$BASE_DIR/player/ExoPlayerView.kt"
 package com.redsurf.tv.player
 
@@ -137,7 +135,6 @@ fun ExoPlayerView(
 }
 KOTLIN
 
-# 3. Create GitHub Actions CI/CD Pipeline to build the APK
 cat << 'EOF_YAML' > .github/workflows/android-build.yml
 name: Android TV CI
 
@@ -187,41 +184,3 @@ jobs:
           name: redsurf-tv-debug-apk
           path: tv-native/app/build/outputs/apk/debug/app-debug.apk
 EOF_YAML
-
-# 4. Update documentation
-cat << 'EOF_MD' > README.md
-# RedSurf - Android TV IPTV Player
-
-RedSurf is a premium Android TV application explicitly engineered to achieve TiViMate parity. 
-This repository contains the full Native Kotlin architecture and a CI/CD pipeline.
-
-## Automated Builds
-Every push to the `master` branch triggers a GitHub Action that automatically compiles the `.apk`.
-You can download the latest glowing build from the **Actions** tab on GitHub!
-
-## Core Engineering
-- **Media3 ExoPlayer**: Hardware-accelerated with deep track mapping (Audio/Subs).
-- **Network Spoofing**: Custom `OkHttp` interceptors bypassing 403 blocks.
-- **Room SQLite Batching**: Parses 200MB XMLTV guides directly to disk using `XmlPullParser` without OOMs.
-- **Time-Shifting**: Dynamic URL reconstruction for Catch-up TV.
-
-*Note: Code in this repo is 100% production-ready. No skeletons. No mocking.*
-EOF_MD
-
-chmod +x tv_night_shift.sh
-./tv_night_shift.sh
-
-# 5. Git Commit & Push using the GIT_PAT
-git add .
-git commit -m "feat(tv): Deep hardware Audio/Sub track mapping, GitHub Actions CI for auto APK builds, and full repo sync"
-
-# Configure Git with the PAT if available and push
-if [ ! -z "$GIT_PAT" ]; then
-    git remote set-url origin "https://x-access-token:${GIT_PAT}@github.com/Fragger7/redsurf.git"
-    git push -u origin master
-else
-    echo "WARNING: GIT_PAT is not set in the environment. Push will fail."
-    # Attempt push anyway to show error
-    git push -u origin master || true
-fi
-

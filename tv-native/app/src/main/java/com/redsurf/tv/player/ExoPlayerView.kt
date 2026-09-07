@@ -16,6 +16,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.redsurf.tv.network.IptvNetworkModule
+import com.redsurf.tv.player.tracks.TrackManager
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -26,12 +27,13 @@ fun ExoPlayerView(
     val context = LocalContext.current
     
     val exoPlayer = remember {
-        // Inject our custom Anti-Block Network Module here
         val dataSourceFactory = IptvNetworkModule.getDataSourceFactory()
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+        val trackManager = TrackManager(context)
 
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setTrackSelector(trackManager.trackSelector) // Injecting hardware track selection
             .build().apply {
                 playWhenReady = true
             }
