@@ -9,6 +9,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Settings, PlaySquare, ListVideo, Search, Clock, Plus, Tv, Waves } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+import { auth, db } from '@/lib/firebase';
+import { signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
+import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 
 type FocusArea = 'sidebar' | 'groups' | 'channels' | 'player' | 'settings';
 
@@ -28,6 +31,55 @@ export function TVInterface() {
   // Settings State
   const [m3uUrl, setM3uUrl] = useState('');
   const [isLoadingM3u, setIsLoadingM3u] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  // Auth & Initialization
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        setUser(u);
+        // Load saved playlists
+        try {
+          const snapshot = await getDocs(collection(db, `users/${u.uid}/playlists`));
+          if (!snapshot.empty) {
+            const savedPlaylist = snapshot.docs[0].data();
+            setM3uUrl(savedPlaylist.url);
+            loadPlaylist(savedPlaylist.url);
+          }
+        } catch (e) {
+          console.error("Error loading playlists:", e);
+        }
+      } else {
+        signInAnonymously(auth).catch(console.error);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const loadPlaylist = async (url: string) => {
+    setIsLoadingM3u(true);
+    try {
+      const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+      const text = await res.text();
+      const parsed = parseM3U(text);
+      
+      if (parsed.channels.length > 0) {
+        setGroups(parsed.groups);
+        setChannels(parsed.channels as any);
+        setSelectedGroupIdx(0);
+        setSelectedChannelIdx(0);
+        setPlayingChannelId(parsed.channels[0].id);
+        setFocusArea('groups');
+      } else {
+        alert("No channels found in the playlist.");
+      }
+    } catch (err) {
+      console.error("Failed to fetch playlist", err);
+      alert("Failed to load playlist. Check the URL and CORS policy.");
+    } finally {
+      setIsLoadingM3u(false);
+    }
+  };
 
   // Derive active items
   const activeGroup = groups[selectedGroupIdx] || { id: 'all', name: 'All' };
@@ -125,28 +177,19 @@ export function TVInterface() {
     e.preventDefault();
     if (!m3uUrl) return;
     
-    setIsLoadingM3u(true);
-    try {
-      const res = await fetch(`/api/proxy?url=${encodeURIComponent(m3uUrl)}`);
-      const text = await res.text();
-      const parsed = parseM3U(text);
-      
-      if (parsed.channels.length > 0) {
-        setGroups(parsed.groups);
-        setChannels(parsed.channels as any);
-        setSelectedGroupIdx(0);
-        setSelectedChannelIdx(0);
-        setPlayingChannelId(parsed.channels[0].id);
-        setFocusArea('groups');
-      } else {
-        alert("No channels found in the playlist.");
+    if (user) {
+      const playlistId = crypto.randomUUID();
+      try {
+        await setDoc(doc(db, `users/${user.uid}/playlists`, playlistId), {
+          url: m3uUrl,
+          addedAt: Date.now()
+        });
+      } catch (e) {
+        console.error("Failed to save playlist to cloud", e);
       }
-    } catch (err) {
-      console.error("Failed to fetch playlist", err);
-      alert("Failed to load playlist. Check the URL and CORS policy.");
-    } finally {
-      setIsLoadingM3u(false);
     }
+    
+    await loadPlaylist(m3uUrl);
   };
 
   return (

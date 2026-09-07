@@ -17,6 +17,7 @@
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "firebase": "^12.18.0",
     "hls.js": "^1.7.2",
     "idb": "^8.0.3",
     "lucide-react": "^0.553.0",

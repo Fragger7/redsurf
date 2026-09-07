@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // Blueprint Validation: Playlist
+    function isValidPlaylist(data) {
+      return data.keys().hasAll(['url', 'addedAt']) 
+        && data.keys().size() == 2
+        && data.url is string 
+        && data.url.size() <= 2048
+        && data.addedAt is number;
+    }
+
+    match /users/{userId}/playlists/{playlistId} {
+      allow read: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() 
+                    && isOwner(userId) 
+                    && isValidId(playlistId)
+                    && isValidPlaylist(incoming());
+      allow update: if isSignedIn() 
+                    && isOwner(userId)
+                    && isValidId(playlistId)
+                    && isValidPlaylist(incoming())
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['url', 'addedAt']);
+      allow delete: if isSignedIn() && isOwner(userId);
+    }
+  }
+}
