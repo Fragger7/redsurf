@@ -15,13 +15,13 @@ import com.redsurf.tv.db.RedSurfDatabase
 import com.redsurf.tv.parser.M3uParser
 import com.redsurf.tv.search.GlobalSearchEngine
 import com.redsurf.tv.settings.SettingsManager
+import com.redsurf.tv.sync.CloudSyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 import java.net.URL
 import java.util.UUID
 
@@ -43,6 +43,7 @@ class MainViewModel : ViewModel() {
     private var searchEngine: GlobalSearchEngine? = null
     private var backupManager: BackupManager? = null
     lateinit var settingsManager: SettingsManager
+    lateinit var cloudSyncManager: CloudSyncManager
 
     private val _searchResults = MutableStateFlow<List<Channel>>(emptyList())
     val searchResults: StateFlow<List<Channel>> = _searchResults
@@ -55,6 +56,7 @@ class MainViewModel : ViewModel() {
         this.searchEngine = GlobalSearchEngine(context)
         this.backupManager = BackupManager(context)
         this.settingsManager = SettingsManager(context)
+        this.cloudSyncManager = CloudSyncManager(context)
         checkLocalCache()
     }
 
@@ -118,12 +120,10 @@ class MainViewModel : ViewModel() {
                         if (snapshot.getString("status") == "paired") {
                             val url = snapshot.getString("url")
                             if (!url.isNullOrEmpty()) {
-                                // IMPORTANT: Free Tier Architecture
-                                // Disconnect realtime listener immediately once paired. 
-                                // This prevents draining the 50k reads/day Firebase limit.
+                                // For 5-10 family accounts, keeping listeners is fine, but we'll stick to
+                                // disconnecting pairing and relying on CloudSyncManager for real-time features.
                                 pairingListener?.remove()
                                 pairingListener = null
-                                
                                 loadPlaylist(url, "Mobile Paired Playlist")
                             }
                         }
@@ -132,12 +132,6 @@ class MainViewModel : ViewModel() {
             } catch (e: Exception) {
             }
         }
-    }
-
-    fun loadXtreamCodes(server: String, user: String, pass: String, name: String = "Xtream Codes") {
-        val cleanServer = if (server.endsWith("/")) server.dropLast(1) else server
-        val url = "\$cleanServer/get.php?username=\$user&password=\$pass&type=m3u_plus&output=ts"
-        loadPlaylist(url, name, server, user, "xtream")
     }
 
     fun loadPlaylist(url: String, name: String = "M3U Playlist", serverUrl: String = url, username: String = "", type: String = "m3u") {
@@ -156,7 +150,7 @@ class MainViewModel : ViewModel() {
                 
                 localDb?.playlistDao()?.insertPlaylist(newPlaylist)
 
-                val channels = withContext(Dispatchers.IO) {
+                val channels = kotlinx.coroutines.withContext(Dispatchers.IO) {
                     val inputStream = URL(url).openStream()
                     M3uParser.parse(inputStream)
                 }
@@ -166,8 +160,6 @@ class MainViewModel : ViewModel() {
                     try {
                         val snap = firestoreDb.collection("pairingSessions").document(code).get().await()
                         hiddenGroups = snap.get("hiddenGroups") as? List<String> ?: emptyList()
-                        
-                        // Delete the document after successful extraction to keep DB size 0
                         firestoreDb.collection("pairingSessions").document(code).delete().await()
                     } catch (e: Exception) {}
                 }
@@ -189,10 +181,8 @@ class MainViewModel : ViewModel() {
                 }
                 
                 localDb?.channelDao()?.insertChannels(entities)
-                
                 currentPlaylistId = playlistId
                 checkLocalCache()
-
             } catch (e: Exception) {
                 _state.value = AppState.Error(e.message ?: "Failed to load playlist")
             }

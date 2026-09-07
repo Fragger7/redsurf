@@ -57,7 +57,7 @@ fun TiViMateLayout(
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         if (focusedChannels.isNotEmpty()) {
-            ExoPlayerView(
+            ExoPlayerView(streamName = focusedChannels[0].name, viewModel = viewModel, 
                 streamUrl = focusedChannels[0].streamUrl,
                 useSecureDns = useDoH,
                 dnsProvider = dnsProvider,
