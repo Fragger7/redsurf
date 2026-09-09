@@ -64,7 +64,7 @@ class MainViewModel : ViewModel() {
                             com.redsurf.tv.data.Channel(
                                 id = it.streamId, 
                                 name = it.name, 
-                                streamUrl = it.directSource ?: "", 
+                                streamUrl = it.streamId, 
                                 logoUrl = it.streamIcon ?: "", 
                                 group = it.groupName, 
                                 epgId = it.epgChannelId ?: ""
@@ -229,7 +229,7 @@ class MainViewModel : ViewModel() {
                 com.redsurf.tv.data.Channel(
                     id = it.streamId,
                     name = it.name,
-                    streamUrl = it.directSource ?: "",
+                    streamUrl = it.streamId,
                     logoUrl = it.streamIcon ?: "",
                     group = it.groupName,
                     epgId = it.epgChannelId ?: ""
