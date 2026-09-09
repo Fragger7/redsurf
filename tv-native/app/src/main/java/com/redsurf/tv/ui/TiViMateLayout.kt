@@ -19,6 +19,11 @@ import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.TvLazyRow
 import androidx.tv.foundation.lazy.list.items
 import androidx.tv.material3.*
+import com.redsurf.tv.updater.UpdateManager
+import android.widget.Toast
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.data.Channel
 import com.redsurf.tv.data.ChannelGroup
@@ -26,7 +31,7 @@ import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.player.ExoPlayerView
 
 enum class MenuState {
-    PLAYLISTS, GROUPS, CHANNELS, SEARCH
+    PLAYLISTS, GROUPS, CHANNELS, SEARCH, SETTINGS
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -93,6 +98,11 @@ fun TiViMateLayout(
                         isSelected = currentMenuState == MenuState.SEARCH,
                         onClick = { currentMenuState = MenuState.SEARCH }
                     )
+                    TabItem(
+                        title = "Settings",
+                        isSelected = currentMenuState == MenuState.SETTINGS,
+                        onClick = { currentMenuState = MenuState.SETTINGS }
+                    )
                 }
 
                 when (currentMenuState) {
@@ -152,6 +162,42 @@ fun TiViMateLayout(
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    MenuState.SETTINGS -> {
+                        val coroutineScope = rememberCoroutineScope()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(32.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "Settings",
+                                style = MaterialTheme.typography.headlineLarge,
+                                color = Color.White,
+                                modifier = Modifier.padding(bottom = 24.dp)
+                            )
+                            Button(onClick = {
+                                Toast.makeText(activity, "Checking for updates...", Toast.LENGTH_SHORT).show()
+                                coroutineScope.launch {
+                                    val updateInfo = UpdateManager.checkForUpdates()
+                                    if (updateInfo != null && updateInfo.hasUpdate) {
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(activity, "Downloading Update: ${updateInfo.newVersion}", Toast.LENGTH_LONG).show()
+                                        }
+                                        UpdateManager.downloadAndInstall(activity, updateInfo.downloadUrl, updateInfo.newVersion)
+                                    } else {
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(activity, "You are already on the latest version.", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                            }) {
+                                Text("Check for Updates")
                             }
                         }
                     }
