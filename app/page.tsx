@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { Tv, Server, Shield, Search, Zap, LogIn, ArrowRight, LayoutDashboard } from "lucide-react";
+import { Tv, Server, Shield, Search, Zap, LogIn, ArrowRight, LayoutDashboard, Download } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
 import Link from "next/link";
