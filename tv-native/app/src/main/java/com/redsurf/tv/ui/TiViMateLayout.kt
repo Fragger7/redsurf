@@ -15,6 +15,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.TvLazyRow
 import androidx.tv.foundation.lazy.list.items
@@ -223,7 +224,7 @@ fun TiViMateLayout(
                                     if (it.length >= 2) viewModel.performSearch(it)
                                     else viewModel.clearSearch()
                                 },
-                                textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = androidx.compose.ui.unit.sp.TextUnit(24f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 24.sp),
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                                 keyboardActions = KeyboardActions(
                                     onSearch = { viewModel.performSearch(searchQuery) }

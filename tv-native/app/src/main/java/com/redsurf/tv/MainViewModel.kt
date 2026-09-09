@@ -217,4 +217,29 @@ class MainViewModel : ViewModel() {
             }
         }
     }
+
+    private val _searchResults = MutableStateFlow<List<com.redsurf.tv.data.Channel>>(emptyList())
+    val searchResults: StateFlow<List<com.redsurf.tv.data.Channel>> = _searchResults.asStateFlow()
+
+    fun performSearch(query: String) {
+        viewModelScope.launch {
+            val queryLower = query.lowercase()
+            val channels = localDb?.channelDao()?.getAllChannels()?.first() ?: emptyList()
+            _searchResults.value = channels.filter { it.name.lowercase().contains(queryLower) }.map {
+                com.redsurf.tv.data.Channel(
+                    id = it.streamId,
+                    name = it.name,
+                    streamUrl = it.directSource ?: "",
+                    logoUrl = it.streamIcon ?: "",
+                    group = it.groupName,
+                    epgId = it.epgChannelId ?: ""
+                )
+            }
+        }
+    }
+
+    fun clearSearch() {
+        _searchResults.value = emptyList()
+    }
+
 }
