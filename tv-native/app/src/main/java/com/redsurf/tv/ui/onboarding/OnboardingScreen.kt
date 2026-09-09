@@ -1,66 +1,74 @@
 package com.redsurf.tv.ui.onboarding
 
+import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.*
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun OnboardingScreen(
-    pairingCode: String?,
+    localIp: String,
+    port: Int,
     onXtreamSubmit: (String, String, String) -> Unit,
     onM3uSubmit: (String) -> Unit
 ) {
     var selectedMethod by remember { mutableStateOf<OnboardingMethod?>(null) }
 
+    BackHandler(enabled = selectedMethod != null) {
+        selectedMethod = null
+    }
+
+
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF09090B)),
+        modifier = Modifier.fillMaxSize().background(Color(0xFF09090B)),
         contentAlignment = Alignment.Center
     ) {
         if (selectedMethod == null) {
-            // Method Selection
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "Welcome to RedSurf",
-                    style = MaterialTheme.typography.displayMedium,
-                    color = Color.White,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    style = androidx.tv.material3.MaterialTheme.typography.displayMedium,
+                    color = Color.White
                 )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Choose how you want to add your playlist",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(bottom = 32.dp)
+                    "How would you like to add your IPTV credentials?",
+                    style = androidx.tv.material3.MaterialTheme.typography.bodyLarge,
+                    color = Color.Gray
                 )
+                Spacer(modifier = Modifier.height(48.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    OnboardingCard("Xtream Codes", "Login with Server, Username & Password") {
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    OnboardingCard("Mobile Phone", "Scan QR code to send credentials instantly") {
+                        selectedMethod = OnboardingMethod.Mobile
+                    }
+                    OnboardingCard("Xtream Codes", "Login with Server, Username, Password") {
                         selectedMethod = OnboardingMethod.Xtream
                     }
                     OnboardingCard("M3U Playlist", "Enter a direct M3U URL") {
                         selectedMethod = OnboardingMethod.M3U
                     }
-                    OnboardingCard("Mobile App", "Scan QR code to add via phone") {
-                        selectedMethod = OnboardingMethod.Mobile
-                    }
                 }
             }
         } else {
-            // Specific Input Forms
             when (selectedMethod) {
                 OnboardingMethod.Xtream -> XtreamInputForm(
                     onSubmit = onXtreamSubmit,
@@ -71,7 +79,8 @@ fun OnboardingScreen(
                     onBack = { selectedMethod = null }
                 )
                 OnboardingMethod.Mobile -> MobilePairingView(
-                    code = pairingCode,
+                    ip = localIp,
+                    port = port,
                     onBack = { selectedMethod = null }
                 )
                 null -> {}
@@ -95,7 +104,7 @@ fun OnboardingCard(title: String, subtitle: String, onClick: () -> Unit) {
             .onFocusChanged { isFocused = it.isFocused },
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color(0xFF18181B),
-            focusedContainerColor = Color(0xFFE11D48) // Rose 600
+            focusedContainerColor = Color(0xFFE11D48)
         )
     ) {
         Column(
@@ -178,14 +187,24 @@ fun M3uInputForm(onSubmit: (String) -> Unit, onBack: () -> Unit) {
 }
 
 @Composable
-fun MobilePairingView(code: String?, onBack: () -> Unit) {
+fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
+    val url = "http://$ip:$port"
+    
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Add via Mobile Phone", style = androidx.tv.material3.MaterialTheme.typography.displayMedium, color = Color.White)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Go to redsurf.app on your phone and enter this code:", color = Color.Gray)
+        Text("Ensure your phone is on the same WiFi as the TV.", color = Color.Gray)
+        Text("Open your phone's web browser and go to:", color = Color.Gray)
         Spacer(modifier = Modifier.height(32.dp))
-        Text(code ?: "...", style = androidx.tv.material3.MaterialTheme.typography.displayLarge, color = Color(0xFFE11D48))
-        Spacer(modifier = Modifier.height(32.dp))
+        
+        Surface(
+            colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color(0xFF18181B)),
+            shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        ) {
+            Text(url, style = androidx.tv.material3.MaterialTheme.typography.displayLarge, color = Color(0xFFE11D48), modifier = Modifier.padding(32.dp))
+        }
+
+        Spacer(modifier = Modifier.height(48.dp))
         androidx.tv.material3.Button(
             onClick = onBack,
             colors = androidx.tv.material3.ButtonDefaults.colors(containerColor = Color.DarkGray)
@@ -208,9 +227,8 @@ fun TvTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { androidx.compose.material3.Text(label) },
+        label = { androidx.compose.material3.Text(label, color = if (isFocused) Color.White else Color.Gray) },
         visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Uri),
         modifier = Modifier
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
@@ -218,9 +236,7 @@ fun TvTextField(
             focusedBorderColor = Color(0xFFE11D48),
             unfocusedBorderColor = Color.DarkGray,
             focusedTextColor = Color.White,
-            unfocusedTextColor = Color.LightGray,
-            focusedLabelColor = Color(0xFFE11D48),
-            unfocusedLabelColor = Color.Gray
+            unfocusedTextColor = Color.LightGray
         )
     )
 }

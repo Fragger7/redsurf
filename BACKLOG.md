@@ -1,21 +1,25 @@
-# RedSurf Backlog & Roadmap
+# RedSurf TiViMate Parity Backlog
 
-## Current Progress (Completed)
-- **Core TV Architecture**: Jetpack Compose TV UI, ExoPlayer integration, Room Database batching, Xtream JSON VOD parsing, Live TV playback.
-- **Over-The-Air (OTA) Updates**: Integrated `UpdateManager.kt` via GitHub Releases/APK downloads.
-- **CI/CD Pipeline**: GitHub Actions for semantic releases and building the TV APK automatically.
-- **Companion Web Portal (Phase 1)**: Next.js + Firebase web app for cloud-based QR code pairing. Allows adding M3U and Xtream credentials.
-- **Fixes**: Cleaned up API regressions, resolved DoH DNS namespace collisions, built and successfully published the v0.13.1 release.
-- **Web Portal Refresh**: Pushed latest `app/` and `auth/` directory to Vercel via GitHub to ensure login works on the live site.
-- **Playlist Toggling**: Added a toggle on the Dashboard to mark connections as Active/Inactive, preventing inactive playlists from being pushed to the TV.
+We have built the architectural skeleton for a world-class IPTV player. To achieve true 1:1 parity with TiViMate, the following deep features must be implemented next:
 
-## Active & Pending Fixes
-- **TV App Branding**: Added Android TV Manifest proper banner (`android:banner`) and icon so the Leanback Launcher displays it correctly.
-- **Firebase Alignment**: `google-services.json` on the TV was pointing to a dummy project. Updated to point to the correct AI Studio Firebase instance.
+## 1. Network & Connectivity Optimization
+- [x] **Custom DNS (DoH)**: Bypass ISP domain blocking by integrating OkHttp DNS-over-HTTPS natively.
+- [x] **Local LAN Pairing (NanoHttpd)**: Replaced Firebase cloud syncing with a local server (`http://<tv-ip>:8080`) for private, offline connection injection. Supports Xtream, M3U, and Stalker, with content-type toggles (Live vs. VOD).
 
-## Future Architecture (User Feedback)
-- **Local LAN Pairing (QR Server)**: 
-  - Instead of a cloud-hosted companion app, we will explore running a local NanoHttpd/Ktor web server directly on the Android TV app.
-  - The TV will display a QR code pointing to `http://<tv-local-ip>:<port>`. 
-  - The mobile device scans the code, loads the webpage served by the TV, and POSTs credentials directly over the local network. 
-  - This removes the need for Firebase Cloud Firestore as a middleman for pairing.
+## 2. Advanced Hierarchy & Organization
+- [x] **Multi-Playlist Support**: Merge and manage multiple Xtream/M3U accounts simultaneously.
+- [x] **Group Management**: Ability to Hide, Rename, or Pin Channel Groups.
+- [x] **Channel Management**: Ability to Hide or Rename specific channels within a group.
+- [x] **Global Favorites Engine**: Aggregate favorite channels across multiple playlists into a master "Favorites" tab.
+
+## 3. Deep Search
+- [x] **Global Search Matrix**: Unified search that queries Live Channels, VODs, Series, and EPG Program titles simultaneously.
+
+## 4. Player Tuning & Experience
+- [x] **Auto Frame Rate (AFR)**: Query device capabilities and dynamically switch the TV's hardware refresh rate (e.g., 24Hz, 50Hz, 60Hz) to match the broadcast stream's FPS, eliminating judder.
+- [x] **Back Navigation Handling**: Compose backstack routing via `BackHandler` prevents the application from exiting prematurely.
+- [ ] **EPG Time Offset**: Global and per-playlist sliders (+/- hours) for providers whose EPGs are misaligned with the video feed.
+
+## 5. Deployment & Updates
+- [x] **Semantic Release CI/CD**: GitHub Actions auto-bumping versions and releasing `RedSurf-vX.Y.Z.apk`.
+- [x] **OTA Update Engine**: Native Android TV package installer polling GitHub Releases to auto-update the app without Play Store intervention.

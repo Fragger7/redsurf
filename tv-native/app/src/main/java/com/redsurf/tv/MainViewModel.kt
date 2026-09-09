@@ -1,164 +1,124 @@
 package com.redsurf.tv
 
 import android.content.Context
+import android.net.wifi.WifiManager
+import android.text.format.Formatter
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.FirebaseApp
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.ktx.Firebase
-import com.redsurf.tv.backup.BackupManager
-import com.redsurf.tv.data.Channel
-import com.redsurf.tv.data.ChannelGroup
+import com.redsurf.tv.db.RedSurfDatabase
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.PlaylistEntity
-import com.redsurf.tv.db.RedSurfDatabase
-import com.redsurf.tv.parser.M3uParser
-import com.redsurf.tv.search.GlobalSearchEngine
-import com.redsurf.tv.settings.SettingsManager
-import com.redsurf.tv.sync.CloudSyncManager
-import com.redsurf.tv.vod.StalkerApi
-import com.redsurf.tv.vod.XtreamApi
+import com.redsurf.tv.engine.M3uParser
+import com.redsurf.tv.engine.StalkerApi
+import com.redsurf.tv.server.PairingServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import java.net.URL
 import java.util.UUID
 
 sealed class AppState {
-    object Loading : AppState()
-    data class Onboarding(val pairingCode: String?) : AppState()
-    data class Loaded(val groups: List<ChannelGroup>, val playlists: List<PlaylistEntity>, val activePlaylistId: String?) : AppState()
+    data class Loading(val message: String = "Loading...") : AppState()
+    data class Onboarding(val localIp: String, val port: Int) : AppState()
+    data class Loaded(
+        val groups: List<String>, 
+        val playlists: List<PlaylistEntity>,
+        val activePlaylistId: String?
+    ) : AppState()
     data class Error(val message: String) : AppState()
 }
 
 class MainViewModel : ViewModel() {
-    private val firestoreDb = FirebaseFirestore.getInstance(FirebaseApp.getInstance(), "ai-studio-streammateiptv-78859c44-ff72-4eb1-ad03-6166dc68ed30")
     private var localDb: RedSurfDatabase? = null
     
-    private val _state = MutableStateFlow<AppState>(AppState.Loading)
-    val state: StateFlow<AppState> = _state
-    
+    private val _state = MutableStateFlow<AppState>(AppState.Loading("Initializing..."))
+    val state: StateFlow<AppState> = _state.asStateFlow()
+
     private var currentPlaylistId: String? = null
-    var searchEngine: GlobalSearchEngine? = null
-    var backupManager: BackupManager? = null
-    lateinit var settingsManager: SettingsManager
-    lateinit var cloudSyncManager: CloudSyncManager
-    
-    private val _searchResults = MutableStateFlow<List<Channel>>(emptyList())
-    val searchResults: StateFlow<List<Channel>> = _searchResults
-    
-    private var activePairingCode: String? = null
-    private var pairingListener: ListenerRegistration? = null
+    private var pairingServer: PairingServer? = null
 
     fun setDatabase(db: RedSurfDatabase, context: Context) {
-        this.localDb = db
-        this.searchEngine = GlobalSearchEngine(context)
-        this.backupManager = BackupManager(context)
-        this.settingsManager = SettingsManager(context)
-        this.cloudSyncManager = CloudSyncManager(context)
-        checkLocalCache()
+        localDb = db
+        checkLocalCache(context)
     }
 
-    private fun checkLocalCache() {
-        viewModelScope.launch {
-            val playlists = localDb?.playlistDao()?.getAllPlaylists()?.firstOrNull() ?: emptyList()
-            if (playlists.isNotEmpty()) {
-                val activeId = currentPlaylistId ?: playlists.first().id
-                loadChannelsFromCache(activeId, playlists)
+    private fun checkLocalCache(context: Context? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val playlists = localDb?.playlistDao()?.getAllPlaylists() ?: emptyList()
+            if (playlists.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    startPairingServer(context)
+                }
             } else {
-                generatePairingCode()
+                val pId = currentPlaylistId ?: playlists.first().id
+                currentPlaylistId = pId
+                val channels = localDb?.channelDao()?.getChannelsForPlaylist(pId) ?: emptyList()
+                val groups = channels.map { it.groupName }.distinct().sorted()
+                withContext(Dispatchers.Main) {
+                    _state.value = AppState.Loaded(groups, playlists, pId)
+                }
             }
         }
     }
-    
+
+    private fun startPairingServer(context: Context?) {
+        if (context == null) return
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val ipAddress = Formatter.formatIpAddress(wifiManager.connectionInfo.ipAddress)
+        
+        if (pairingServer == null) {
+            try {
+                pairingServer = PairingServer(8080) { method, server, user, pass, m3u, contentType ->
+                    viewModelScope.launch {
+                        if (method == "xtream") {
+                            // If user is empty, assume Stalker
+                            if (user.isEmpty()) {
+                                loadStalkerPortal(server, "", "Stalker Portal", null, 0f, contentType)
+                            } else {
+                                loadXtreamCodes(server, user, pass, "Xtream Playlist", null, 0f, contentType)
+                            }
+                        } else if (method == "m3u") {
+                            loadPlaylist(m3u, "M3U Playlist", m3u, "", "m3u", null, 0f, null, contentType)
+                        }
+                    }
+                }
+                pairingServer?.start()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        
+        _state.value = AppState.Onboarding(if (ipAddress == "0.0.0.0") "WiFi not connected" else ipAddress, 8080)
+    }
+
     fun switchPlaylist(playlistId: String) {
         currentPlaylistId = playlistId
         checkLocalCache()
     }
 
-    private suspend fun loadChannelsFromCache(playlistId: String, allPlaylists: List<PlaylistEntity>) {
-        val cachedChannels = localDb?.channelDao()?.getAllChannels()?.firstOrNull()?.filter { it.playlistId == playlistId }
-        if (!cachedChannels.isNullOrEmpty()) {
-            val grouped = cachedChannels.map {
-                Channel(it.streamId, it.name, it.streamId, it.streamIcon ?: "", it.groupName, it.epgChannelId ?: "")
-            }.groupBy { it.group }.map { ChannelGroup(it.key, it.value) }
-            _state.value = AppState.Loaded(grouped, allPlaylists, playlistId)
-        } else {
-            _state.value = AppState.Loaded(emptyList(), allPlaylists, playlistId)
-        }
+    override fun onCleared() {
+        super.onCleared()
+        pairingServer?.stop()
+        pairingServer = null
     }
 
-    private fun generatePairingCode() {
-        val code = (100000..999999).random().toString()
-        activePairingCode = code
-        _state.value = AppState.Onboarding(code)
-        val sessionRef = firestoreDb.collection("pairingSessions").document(code)
-        
-        viewModelScope.launch {
-            try {
-                sessionRef.set(mapOf("status" to "waiting", "createdAt" to System.currentTimeMillis())).await()
-                pairingListener = sessionRef.addSnapshotListener { snapshot, e ->
-                    if (e != null) return@addSnapshotListener
-                    if (snapshot != null && snapshot.exists()) {
-                        if (snapshot.getString("status") == "paired") {
-                            val playlistType = snapshot.getString("playlistType") ?: "m3u"
-                            val contentType = snapshot.getString("contentType") ?: "both"
-                            
-                            pairingListener?.remove()
-                            pairingListener = null
-                            
-                            val name = snapshot.getString("name") ?: "New Playlist"
-                            val server = snapshot.getString("server") ?: ""
-                            val user = snapshot.getString("username") ?: ""
-                            val pass = snapshot.getString("password") ?: ""
-                            val userAgent = snapshot.getString("userAgent") // Feature 1: Get custom UA if present
-                            val macAddress = snapshot.getString("macAddress") // Feature 5: Stalker support
-                            val offset = snapshot.getDouble("epgOffsetHours")?.toFloat() ?: 0f
-
-                            if (playlistType == "xtream") {
-                                loadXtreamCodes(server, user, pass, name, code, userAgent, offset, contentType)
-                            } else if (playlistType == "stalker") {
-                                loadStalkerPortal(server, macAddress ?: "", name, code, userAgent, offset, contentType)
-                            } else {
-                                val url = snapshot.getString("url")
-                                if (!url.isNullOrEmpty()) {
-                                    loadPlaylist(url, name, url, "", "m3u", code, userAgent, offset, null, contentType)
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    fun loadXtreamCodes(server: String, user: String, pass: String, name: String = "Xtream Codes", code: String? = null, userAgent: String? = null, offset: Float = 0f, contentType: String = "both") {
+    fun loadXtreamCodes(server: String, user: String, pass: String, name: String = "Xtream Codes", userAgent: String? = null, offset: Float = 0f, contentType: String = "both") {
         val cleanServer = if (server.endsWith("/")) server.dropLast(1) else server
-        
-        // Use type=m3u_plus for live, or type=m3u_plus&output=ts depending on content type
         var urlType = "m3u_plus"
         if (contentType == "live") {
             urlType = "m3u_plus&type=live"
         } else if (contentType == "vod") {
             urlType = "m3u_plus&type=vod" 
-            // In a real implementation we would fetch VOD natively using XtreamApi get_vod_categories
-            // M3u parsing acts as a fallback.
         }
-
         val url = "$cleanServer/get.php?username=$user&password=$pass&type=$urlType&output=ts"
-        loadPlaylist(url, name, server, user, "xtream", code, userAgent, offset, null, contentType)
+        loadPlaylist(url, name, server, user, "xtream", userAgent, offset, null, contentType)
     }
 
-    // Feature 5: Stalker type IPTV portal load
-    fun loadStalkerPortal(portalUrl: String, macAddress: String, name: String = "Stalker Portal", code: String? = null, userAgent: String? = null, offset: Float = 0f, contentType: String = "both") {
-        _state.value = AppState.Loading
+    fun loadStalkerPortal(portalUrl: String, macAddress: String, name: String = "Stalker Portal", userAgent: String? = null, offset: Float = 0f, contentType: String = "both") {
+        _state.value = AppState.Loading("Downloading playlist data...")
         viewModelScope.launch {
             try {
                 val playlistId = UUID.randomUUID().toString()
@@ -169,12 +129,10 @@ class MainViewModel : ViewModel() {
                         epgOffsetHours = offset, macAddress = macAddress, contentType = contentType
                     )
                 )
-
-                // Handshake and get token/link
+                
                 val isOnline = StalkerApi.getHandshake(portalUrl, macAddress, userAgent)
                 if(isOnline) {
                     val entities = mutableListOf<ChannelEntity>()
-                    
                     if (contentType == "both" || contentType == "live") {
                         val categories = StalkerApi.getCategories(portalUrl, macAddress, "live", userAgent)
                         categories.forEachIndexed { i, cat ->
@@ -193,13 +151,11 @@ class MainViewModel : ViewModel() {
                             ))
                         }
                     }
-
                     if (entities.isNotEmpty()) {
                         localDb?.channelDao()?.insertChannels(entities)
                     }
                 }
                 
-                code?.let { cleanupPairing(it) }
                 currentPlaylistId = playlistId
                 checkLocalCache()
             } catch (e: Exception) {
@@ -208,8 +164,8 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun loadPlaylist(url: String, name: String, serverUrl: String, username: String, type: String, code: String? = null, userAgent: String? = null, offset: Float = 0f, macAddress: String? = null, contentType: String = "both") {
-        _state.value = AppState.Loading
+    fun loadPlaylist(url: String, name: String, serverUrl: String, username: String, type: String, userAgent: String? = null, offset: Float = 0f, macAddress: String? = null, contentType: String = "both") {
+        _state.value = AppState.Loading("Downloading playlist data...")
         viewModelScope.launch {
             try {
                 val playlistId = UUID.randomUUID().toString()
@@ -225,11 +181,7 @@ class MainViewModel : ViewModel() {
                     M3uParser.parse(URL(url).openStream())
                 }
                 
-                var hiddenGroups = emptyList<String>()
-                code?.let { hiddenGroups = cleanupPairing(it) }
-                
-                // Filter by content type logic for M3U
-                val filteredChannels = channels.filter { it.group !in hiddenGroups }.filter { 
+                val filteredChannels = channels.filter { 
                     if (contentType == "live") it.streamUrl.contains("/live/") || !it.streamUrl.contains("/movie/")
                     else if (contentType == "vod") it.streamUrl.contains("/movie/") || it.streamUrl.contains("/series/")
                     else true
@@ -248,17 +200,6 @@ class MainViewModel : ViewModel() {
             } catch (e: Exception) {
                 _state.value = AppState.Error(e.message ?: "Failed to load playlist")
             }
-        }
-    }
-
-    private suspend fun cleanupPairing(code: String): List<String> {
-        return try {
-            val snap = firestoreDb.collection("pairingSessions").document(code).get().await()
-            val hidden = snap.get("hiddenGroups") as? List<String> ?: emptyList()
-            firestoreDb.collection("pairingSessions").document(code).delete().await()
-            hidden
-        } catch (e: Exception) {
-            emptyList()
         }
     }
 }

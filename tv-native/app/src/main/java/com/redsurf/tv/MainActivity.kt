@@ -4,8 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -33,17 +38,30 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 val state by viewModel.state.collectAsState()
                 
+                BackHandler(enabled = true) {
+                    // Prevent exiting the app on back press if we are in loaded state
+                    // We can handle deep backstack here if we had one, otherwise do nothing or prompt
+                    if (state is AppState.Onboarding) {
+                        finish()
+                    }
+                }
+
                 Box(
                     modifier = Modifier.fillMaxSize().background(Color(0xFF09090B)),
                     contentAlignment = Alignment.Center
                 ) {
                     when (val s = state) {
                         is AppState.Loading -> {
-                            Text("Loading...", color = Color.White)
+                            androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                androidx.compose.material3.CircularProgressIndicator(color = Color(0xFFE11D48))
+                                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(16.dp))
+                                Text(s.message, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                            }
                         }
                         is AppState.Onboarding -> {
                             OnboardingScreen(
-                                pairingCode = s.pairingCode,
+                                localIp = s.localIp,
+                                port = s.port,
                                 onXtreamSubmit = { server, user, pass ->
                                     viewModel.loadXtreamCodes(server, user, pass)
                                 },
@@ -62,11 +80,16 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         is AppState.Error -> {
-                            Text("Error: \${s.message}", color = Color.Red)
+                            Text("Error: ${s.message}", color = Color.Red)
                         }
                     }
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        AfrManager.restoreRefreshRate(this)
     }
 }
