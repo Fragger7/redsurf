@@ -136,6 +136,10 @@ class MainViewModel : ViewModel() {
         _state.value = AppState.Loading("Downloading playlist data...")
         viewModelScope.launch {
             try {
+                
+        val cleanUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) "http://$url" else url
+        val cleanServerUrl = if (!serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) "http://$serverUrl" else serverUrl
+
                 val playlistId = UUID.randomUUID().toString()
                 localDb?.playlistDao()?.insertPlaylist(
                     PlaylistEntity(
@@ -186,14 +190,14 @@ class MainViewModel : ViewModel() {
                 val playlistId = UUID.randomUUID().toString()
                 localDb?.playlistDao()?.insertPlaylist(
                     PlaylistEntity(
-                        id = playlistId, name = name, serverUrl = serverUrl, username = username, 
+                        id = playlistId, name = name, serverUrl = cleanServerUrl, username = username, 
                         type = type, userAgent = userAgent, epgOffsetHours = offset, macAddress = macAddress,
                         contentType = contentType
                     )
                 )
                 
                 val channels = kotlinx.coroutines.withContext(Dispatchers.IO) {
-                    M3uParser.parse(URL(url).openStream())
+                    M3uParser.parse(URL(cleanUrl).openStream())
                 }
                 
                 val filteredChannels = channels.filter { 

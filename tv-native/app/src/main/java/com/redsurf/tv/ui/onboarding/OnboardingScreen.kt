@@ -43,6 +43,88 @@ fun OnboardingScreen(
     ) {
         if (selectedMethod == null) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // App Logo / Name
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 48.dp)) {
+                    Box(modifier = Modifier.size(64.dp).background(Color(0xFFE11D48), androidx.compose.foundation.shape.CircleShape))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("RedSurf", style = MaterialTheme.typography.displayLarge, color = Color.White)
+                }
+
+                Text("Welcome. Please select a setup method:", style = MaterialTheme.typography.headlineMedium, color = Color(0xFFA1A1AA), modifier = Modifier.padding(bottom = 32.dp))
+                
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    MethodCard("Local Setup (Phone/PC)", "Scan QR or visit IP to type credentials on your phone.") { selectedMethod = OnboardingMethod.QR }
+                    MethodCard("Xtream Codes", "Type your server, username, and password using TV remote.") { selectedMethod = OnboardingMethod.XTREAM }
+                    MethodCard("M3U Playlist", "Type an M3U URL using TV remote.") { selectedMethod = OnboardingMethod.M3U }
+                    MethodCard("Cloud Login", "Login to sync playlists from the web.") { selectedMethod = OnboardingMethod.CLOUD }
+                }
+            }
+        } else {
+            when (selectedMethod) {
+                OnboardingMethod.QR -> QrSetupContent(localIp, port)
+                OnboardingMethod.XTREAM -> XtreamSetupContent(onSubmit = onXtreamSubmit)
+                OnboardingMethod.M3U -> M3uSetupContent(onSubmit = onM3uSubmit)
+                OnboardingMethod.CLOUD -> CloudSetupContent()
+                null -> {}
+            }
+        }
+    }
+}
+
+@Composable
+fun CloudSetupContent() {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(400.dp)) {
+        Text("Cloud Login", style = MaterialTheme.typography.headlineLarge, color = Color.White, modifier = Modifier.padding(bottom = 16.dp))
+        Text("Web syncing is currently disabled in this version for local privacy. Please use the Local Setup (QR) option.", color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 24.dp))
+    }
+}
+
+
+package com.redsurf.tv.ui.onboarding
+
+import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.runtime.*
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+
+@Composable
+fun OnboardingScreen(
+    localIp: String,
+    port: Int,
+    onXtreamSubmit: (String, String, String) -> Unit,
+    onM3uSubmit: (String) -> Unit
+) {
+    var selectedMethod by remember { mutableStateOf<OnboardingMethod?>(null) }
+
+    BackHandler(enabled = selectedMethod != null) {
+        selectedMethod = null
+    }
+
+
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color(0xFF09090B)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (selectedMethod == null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "Welcome to RedSurf",
                     style = androidx.tv.material3.MaterialTheme.typography.displayMedium,
