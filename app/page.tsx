@@ -1,131 +1,165 @@
 "use client";
-
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Tv2, Download, ShieldCheck, Zap, ArrowRight, Activity } from "lucide-react";
 import { motion } from "motion/react";
+import { Tv, Server, Shield, Search, Zap, LogIn, ArrowRight, LayoutDashboard } from "lucide-react";
+import { auth } from "@/lib/firebase";
+import { useAuthState } from "react-firebase-hooks/auth";
 import Link from "next/link";
 
 export default function Home() {
-  const [code, setCode] = useState("");
   const router = useRouter();
-
-  const handlePair = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (code.trim().length >= 5) {
-      router.push(`/pair/${code.trim()}`);
-    }
-  };
+  const [user, loading] = useAuthState(auth);
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-50 selection:bg-red-500/30">
+    <main className="min-h-screen bg-neutral-950 text-white selection:bg-red-500/30">
       {/* Navigation */}
       <nav className="border-b border-neutral-900 bg-neutral-950/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
-              <Tv2 className="w-5 h-5 text-white" />
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center">
+              <Tv className="w-5 h-5 text-white" />
             </div>
             <span className="text-xl font-bold tracking-tight">RedSurf</span>
           </div>
-          <div className="flex items-center space-x-6 text-sm font-medium">
-            <Link href="/dashboard" className="text-neutral-400 hover:text-white flex items-center transition-colors">
-              <Activity className="w-4 h-4 mr-2" />
-              Family Dashboard
-            </Link>
-            <a href="/api/apk" className="px-4 py-2 bg-white text-black rounded-full hover:bg-neutral-200 transition-colors flex items-center">
-              <Download className="w-4 h-4 mr-2" />
-              Get APK
-            </a>
+          <div className="flex items-center space-x-4">
+            {!loading && user ? (
+              <Link href="/dashboard" className="px-5 py-2.5 bg-neutral-900 border border-neutral-800 text-neutral-300 rounded-full hover:bg-neutral-800 flex items-center transition-colors">
+                <LayoutDashboard className="w-4 h-4 mr-2" /> Dashboard
+              </Link>
+            ) : (
+              <Link href="/auth" className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center transition-colors font-medium shadow-lg shadow-red-900/20">
+                Sign In <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            )}
           </div>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-6 py-20">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          
-          {/* Left Column: Hero Copy & Pairing */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-sm font-medium mb-6 border border-red-500/20">
-              <Zap className="w-4 h-4" />
-              <span>The Next Generation of IPTV</span>
-            </div>
-            
-            <h1 className="text-5xl lg:text-7xl font-bold tracking-tight mb-6 leading-tight">
-              Your TV,<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500">
-                Perfected.
-              </span>
+      {/* Hero Section */}
+      <section className="relative pt-32 pb-20 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/20 via-neutral-950 to-neutral-950 -z-10" />
+        <div className="max-w-7xl mx-auto px-6 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tighter mb-6">
+              The Premium <br className="hidden md:block" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-rose-400">Android TV Experience</span>
             </h1>
-            
-            <p className="text-lg text-neutral-400 mb-10 max-w-xl">
-              A premium, native Android TV player built for speed. Featuring Multi-View PiP, DoH Anti-Throttling, and real-time cloud synchronization.
+            <p className="text-lg md:text-xl text-neutral-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+              RedSurf is engineered to deliver a world-class IPTV experience natively on Android TV. Manage multiple playlists, bypass ISP blocks, and push credentials directly from your phone.
             </p>
-
-            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-2xl max-w-md">
-              <h3 className="text-xl font-semibold mb-2">Connect Your TV</h3>
-              <p className="text-sm text-neutral-400 mb-6">Enter the 6-digit code shown on your Android TV screen to sync your playlists and manage channels.</p>
-              
-              <form onSubmit={handlePair} className="flex space-x-3">
-                <input
-                  type="text"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. 123456"
-                  className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-white placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all font-mono tracking-widest text-lg"
-                  maxLength={6}
-                />
-                <button 
-                  type="submit" 
-                  disabled={code.length < 5}
-                  className="bg-red-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center"
-                >
-                  Pair <ArrowRight className="w-4 h-4 ml-2" />
-                </button>
-              </form>
-            </div>
+            {!loading && !user && (
+              <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <Link href="/auth" className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white rounded-full font-medium transition-colors flex items-center text-lg w-full sm:w-auto justify-center shadow-xl shadow-red-900/30">
+                  Get Started Free
+                </Link>
+              </div>
+            )}
+            {!loading && user && (
+              <div className="flex justify-center">
+                <Link href="/dashboard" className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white rounded-full font-medium transition-colors flex items-center text-lg shadow-xl shadow-red-900/30">
+                  Go to Dashboard <ArrowRight className="w-5 h-5 ml-2" />
+                </Link>
+              </div>
+            )}
           </motion.div>
+        </div>
+      </section>
 
-          {/* Right Column: Features Graphic */}
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5, delay: 0.2 }} className="relative">
-            <div className="absolute inset-0 bg-gradient-to-tr from-red-500/20 to-transparent blur-3xl rounded-full" />
-            <div className="relative bg-neutral-900 border border-neutral-800 rounded-3xl p-8 shadow-2xl overflow-hidden">
-              <div className="space-y-6">
-                <FeatureCard 
-                  icon={<ShieldCheck className="w-6 h-6 text-emerald-400" />}
-                  title="Native DNS-over-HTTPS"
-                  desc="Bypass ISP throttling and blocking automatically via Cloudflare or Google DoH natively in the player."
-                />
-                <FeatureCard 
-                  icon={<Tv2 className="w-6 h-6 text-blue-400" />}
-                  title="Multi-View PiP Grid"
-                  desc="Watch up to 4 live streams simultaneously on a single screen with hardware-accelerated rendering."
-                />
-                <FeatureCard 
-                  icon={<Activity className="w-6 h-6 text-purple-400" />}
-                  title="Real-Time Cloud Sync"
-                  desc="Pause a movie in the living room and resume in the bedroom. Manage hidden channels directly from your phone."
-                />
+      {/* Features Grid */}
+      <section className="py-24 bg-neutral-900/30 border-y border-neutral-900">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold tracking-tight mb-4">Engineered for Performance</h2>
+            <p className="text-neutral-400 max-w-2xl mx-auto">Everything you need for a seamless streaming experience, built straight into the core.</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Feature 1 */}
+            <div className="bg-neutral-900/50 border border-neutral-800 p-8 rounded-3xl hover:bg-neutral-900 transition-colors">
+              <div className="w-12 h-12 bg-red-500/10 rounded-2xl flex items-center justify-center mb-6">
+                <Shield className="w-6 h-6 text-red-400" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Custom DNS (DoH)</h3>
+              <p className="text-neutral-400 leading-relaxed">
+                Bypass ISP domain blocking natively with integrated DNS-over-HTTPS. Keep your streams connected securely.
+              </p>
+            </div>
+
+            {/* Feature 2 */}
+            <div className="bg-neutral-900/50 border border-neutral-800 p-8 rounded-3xl hover:bg-neutral-900 transition-colors">
+              <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-6">
+                <Zap className="w-6 h-6 text-emerald-400" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Auto Frame Rate</h3>
+              <p className="text-neutral-400 leading-relaxed">
+                Eliminate judder completely. RedSurf dynamically switches your TV's hardware refresh rate to perfectly match the stream's FPS.
+              </p>
+            </div>
+
+            {/* Feature 3 */}
+            <div className="bg-neutral-900/50 border border-neutral-800 p-8 rounded-3xl hover:bg-neutral-900 transition-colors">
+              <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center mb-6">
+                <Server className="w-6 h-6 text-blue-400" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Multi-Playlist Support</h3>
+              <p className="text-neutral-400 leading-relaxed">
+                Merge and manage multiple Xtream and M3U accounts simultaneously with deep schema separation and master favorites.
+              </p>
+            </div>
+
+            {/* Feature 4 */}
+            <div className="bg-neutral-900/50 border border-neutral-800 p-8 rounded-3xl hover:bg-neutral-900 transition-colors">
+              <div className="w-12 h-12 bg-purple-500/10 rounded-2xl flex items-center justify-center mb-6">
+                <Search className="w-6 h-6 text-purple-400" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Global Matrix Search</h3>
+              <p className="text-neutral-400 leading-relaxed">
+                Unified search querying across Live Channels, VODs, Series, and EPG Program titles all at the exact same time.
+              </p>
+            </div>
+
+            {/* Feature 5 */}
+            <div className="lg:col-span-2 bg-gradient-to-br from-neutral-900 to-neutral-950 border border-neutral-800 p-8 rounded-3xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                <LayoutDashboard className="w-48 h-48" />
+              </div>
+              <div className="relative z-10">
+                <div className="w-12 h-12 bg-rose-500/10 rounded-2xl flex items-center justify-center mb-6">
+                  <Tv className="w-6 h-6 text-rose-400" />
+                </div>
+                <h3 className="text-2xl font-semibold mb-3">Cloud Pairing Console</h3>
+                <p className="text-neutral-400 leading-relaxed max-w-xl mb-6">
+                  Typing long Xtream credentials on a D-Pad is painful. Enter a 6-digit code on the RedSurf Cloud Console to instantly push your playlists, EPG offsets, and custom User-Agents securely to your TV.
+                </p>
+                {!loading && user ? (
+                  <Link href="/dashboard" className="inline-flex items-center text-rose-400 hover:text-rose-300 font-medium">
+                    Open Dashboard <ArrowRight className="w-4 h-4 ml-2" />
+                  </Link>
+                ) : (
+                  <Link href="/auth" className="inline-flex items-center text-rose-400 hover:text-rose-300 font-medium">
+                    Create your account <ArrowRight className="w-4 h-4 ml-2" />
+                  </Link>
+                )}
               </div>
             </div>
-          </motion.div>
-
+          </div>
         </div>
-      </main>
-    </div>
-  );
-}
+      </section>
 
-function FeatureCard({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
-  return (
-    <div className="flex items-start space-x-4 p-4 rounded-2xl hover:bg-neutral-800/50 transition-colors">
-      <div className="w-12 h-12 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-center flex-shrink-0 shadow-inner">
-        {icon}
-      </div>
-      <div>
-        <h4 className="text-lg font-semibold text-white mb-1">{title}</h4>
-        <p className="text-sm text-neutral-400 leading-relaxed">{desc}</p>
-      </div>
-    </div>
+      {/* Footer */}
+      <footer className="border-t border-neutral-900 py-12">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center text-sm text-neutral-500">
+          <p>© {new Date().getFullYear()} RedSurf IPTV. All rights reserved.</p>
+          <div className="flex space-x-6 mt-4 md:mt-0">
+            <Link href="#" className="hover:text-white transition-colors">Privacy Policy</Link>
+            <Link href="#" className="hover:text-white transition-colors">Terms of Service</Link>
+          </div>
+        </div>
+      </footer>
+    </main>
   );
 }
