@@ -136,9 +136,6 @@ class MainViewModel : ViewModel() {
         _state.value = AppState.Loading("Downloading playlist data...")
         viewModelScope.launch {
             try {
-                
-        val cleanUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) "http://$url" else url
-        val cleanServerUrl = if (!serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) "http://$serverUrl" else serverUrl
 
                 val playlistId = UUID.randomUUID().toString()
                 localDb?.playlistDao()?.insertPlaylist(
