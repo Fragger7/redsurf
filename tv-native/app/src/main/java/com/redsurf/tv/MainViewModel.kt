@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.FirebaseApp
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.ktx.Firebase
 import com.redsurf.tv.backup.BackupManager
 import com.redsurf.tv.data.Channel
@@ -35,7 +37,7 @@ sealed class AppState {
 }
 
 class MainViewModel : ViewModel() {
-    private val firestoreDb = Firebase.firestore
+    private val firestoreDb = FirebaseFirestore.getInstance(FirebaseApp.getInstance(), "ai-studio-streammateiptv-78859c44-ff72-4eb1-ad03-6166dc68ed30")
     private var localDb: RedSurfDatabase? = null
     
     private val _state = MutableStateFlow<AppState>(AppState.Loading)

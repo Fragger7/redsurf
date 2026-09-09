@@ -13,14 +13,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.network.IptvNetworkModule
+import com.redsurf.tv.player.tracks.TrackManager
 import com.redsurf.tv.player.tuning.AfrManager
 
 fun Context.findActivity(): Activity? = when (this) {
@@ -33,24 +32,22 @@ fun Context.findActivity(): Activity? = when (this) {
 @Composable
 fun ExoPlayerView(
     streamUrl: String,
-    streamName: String = "Live TV",
-    useSecureDns: Boolean = false,
-    dnsProvider: String = "Cloudflare",
-    viewModel: MainViewModel? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     
-    val exoPlayer = remember(useSecureDns, dnsProvider) {
-        val dataSourceFactory = IptvNetworkModule.getDataSourceFactory(null)
+    val exoPlayer = remember {
+        val dataSourceFactory = IptvNetworkModule.getDataSourceFactory()
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-        val player = ExoPlayer.Builder(context)
+        val trackManager = TrackManager(context)
+        ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
-            .build()
-        player.playWhenReady = true
-        player
+            .setTrackSelector(trackManager.trackSelector)
+            .build().apply {
+                playWhenReady = true
+            }
     }
-
+    
     val afrManager = remember {
         val manager = AfrManager(context, exoPlayer)
         val activity = context.findActivity()
@@ -63,28 +60,14 @@ fun ExoPlayerView(
     }
 
     DisposableEffect(streamUrl) {
-        val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                // Report to Firebase so the family dashboard knows what this TV is doing
-                viewModel?.cloudSyncManager?.reportPlaybackState(streamName, isPlaying)
-            }
-        }
-        exoPlayer.addListener(listener)
-
         if (streamUrl.isNotEmpty()) {
-            exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
+            val mediaItem = MediaItem.fromUri(streamUrl)
+            exoPlayer.setMediaItem(mediaItem)
             exoPlayer.prepare()
         }
         onDispose {
             afrManager.restoreOriginalMode()
-            
-            // Save VOD resume point before destroying
-            val currentPos = exoPlayer.currentPosition
-            viewModel?.cloudSyncManager?.saveVodResumePoint(streamUrl, streamName, currentPos)
-            viewModel?.cloudSyncManager?.reportPlaybackState(streamName, false)
-            
-            exoPlayer.removeListener(listener)
-            exoPlayer.release() 
+            exoPlayer.release()
         }
     }
 
@@ -94,7 +77,10 @@ fun ExoPlayerView(
                 player = exoPlayer
                 useController = false 
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
             }
         },
         modifier = modifier

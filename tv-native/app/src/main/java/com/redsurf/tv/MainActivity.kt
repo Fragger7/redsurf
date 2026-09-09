@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
                                     viewModel.loadXtreamCodes(server, user, pass)
                                 },
                                 onM3uSubmit = { url ->
-                                    viewModel.loadPlaylist(url = url, name = "M3U Playlist", serverUrl = url, username = "", type = "m3u")
+                                    viewModel.loadPlaylist(url, "M3U Playlist", url, "", "m3u")
                                 }
                             )
                         }

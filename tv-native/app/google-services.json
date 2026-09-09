@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "130154861588",
-    "project_id": "redsurf-fdd99",
-    "storage_bucket": "redsurf-fdd99.firebasestorage.app"
+    "project_number": "235290029551",
+    "project_id": "fourth-surge-1txfk",
+    "storage_bucket": "fourth-surge-1txfk.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:130154861588:android:placeholder123",
+        "mobilesdk_app_id": "1:235290029551:android:69bd54a54b8b96cef75a1a",
         "android_client_info": {
           "package_name": "com.redsurf.tv"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAbPHKgIcGCgP_FwNS8svBSfygkmfaCBfk"
+          "current_key": "AIzaSyAEMXqNKt4IVSYEx_SYKySjty_gDhyDUAM"
         }
       ],
       "services": {
