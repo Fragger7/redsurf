@@ -20,7 +20,7 @@ class RegressionTestSuite {
     @Test
     fun testDoHConfiguration() {
         // Mock DoH tests to ensure no regressions in UserAgent spoofing
-        assertEquals("VLC/3.0.18 LibVLC/3.0.18", com.redsurf.tv.network.IptvNetworkModule.currentUserAgent)
+        assertEquals("VLC/3.0.18 LibVLC/3.0.18", com.redsurf.tv.network.IptvNetworkModule.globalUserAgent)
         assertEquals(com.redsurf.tv.network.IptvNetworkModule.DnsProvider.SYSTEM, com.redsurf.tv.network.IptvNetworkModule.currentDnsProvider)
     }
 }

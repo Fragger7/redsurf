@@ -60,10 +60,10 @@ object UpdateManager {
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val uri = Uri.parse(downloadUrl)
         
-        val fileName = "RedSurf-\$versionName.apk"
+        val fileName = "RedSurf-$versionName.apk"
         val request = DownloadManager.Request(uri)
             .setTitle("Downloading RedSurf Update")
-            .setDescription("Version \$versionName")
+            .setDescription("Version $versionName")
             .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
 
@@ -89,7 +89,7 @@ object UpdateManager {
     private fun installApk(context: Context, fileName: String) {
         try {
             val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
-            val uri = FileProvider.getUriForFile(context, "\${BuildConfig.APPLICATION_ID}.fileprovider", file)
+            val uri = FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.fileprovider", file)
             
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")

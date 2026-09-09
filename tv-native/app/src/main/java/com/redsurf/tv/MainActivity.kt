@@ -19,6 +19,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.redsurf.tv.updater.UpdateManager
+import android.widget.Toast
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.redsurf.tv.ui.TiViMateLayout
 import com.redsurf.tv.ui.onboarding.OnboardingScreen
 import com.redsurf.tv.db.RedSurfDatabase
@@ -33,6 +39,18 @@ class MainActivity : ComponentActivity() {
         
         val db = RedSurfDatabase.getDatabase(this)
         viewModel.setDatabase(db, this)
+
+        // Trigger OTA Update check
+        lifecycleScope.launch {
+            val updateInfo = UpdateManager.checkForUpdates()
+            if (updateInfo != null && updateInfo.hasUpdate) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Downloading Update: ${updateInfo.newVersion}", Toast.LENGTH_LONG).show()
+                }
+                UpdateManager.downloadAndInstall(this@MainActivity, updateInfo.downloadUrl, updateInfo.newVersion)
+            }
+        }
+
         
         setContent {
             MaterialTheme {
