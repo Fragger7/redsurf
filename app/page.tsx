@@ -56,13 +56,19 @@ export default function Home() {
                 <Link href="/auth" className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white rounded-full font-medium transition-colors flex items-center text-lg w-full sm:w-auto justify-center shadow-xl shadow-red-900/30">
                   Get Started Free
                 </Link>
+                <a href="/api/download" className="px-8 py-4 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-white rounded-full font-medium transition-colors flex items-center text-lg w-full sm:w-auto justify-center">
+                  <Download className="w-5 h-5 mr-2" /> Download APK
+                </a>
               </div>
             )}
             {!loading && user && (
-              <div className="flex justify-center">
-                <Link href="/dashboard" className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white rounded-full font-medium transition-colors flex items-center text-lg shadow-xl shadow-red-900/30">
+              <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <Link href="/dashboard" className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white rounded-full font-medium transition-colors flex items-center text-lg w-full sm:w-auto justify-center shadow-xl shadow-red-900/30">
                   Go to Dashboard <ArrowRight className="w-5 h-5 ml-2" />
                 </Link>
+                <a href="/api/download" className="px-8 py-4 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-white rounded-full font-medium transition-colors flex items-center text-lg w-full sm:w-auto justify-center">
+                  <Download className="w-5 h-5 mr-2" /> Download APK
+                </a>
               </div>
             )}
           </motion.div>
