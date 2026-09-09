@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [formUser, setFormUser] = useState("");
   const [formPass, setFormPass] = useState("");
   const [formType, setFormType] = useState("xtream"); // "xtream" or "m3u"
+  const [formContentType, setFormContentType] = useState("both"); // "live", "vod", "both"
 
   const [pairingCode, setPairingCode] = useState("");
   const [selectedPlaylist, setSelectedPlaylist] = useState("");
@@ -69,9 +70,10 @@ export default function Dashboard() {
       username: formUser,
       password: formPass,
       type: formType,
+      contentType: formContentType,
       addedAt: serverTimestamp()
     });
-    setFormName(""); setFormServer(""); setFormUser(""); setFormPass("");
+    setFormName(""); setFormServer(""); setFormUser(""); setFormPass(""); setFormContentType("both");
     setShowAdd(false);
   };
 
@@ -101,6 +103,7 @@ export default function Dashboard() {
       await setDoc(doc(db, "pairingSessions", pairingCode.toUpperCase()), {
         status: "paired",
         playlistType: pl.type,
+        contentType: pl.contentType || "both",
         name: pl.name,
         server: pl.server,
         username: pl.username,
@@ -203,7 +206,7 @@ export default function Dashboard() {
 
               {showAdd && (
                 <motion.form initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} onSubmit={handleAddPlaylist} className="mb-6 space-y-4 bg-neutral-950 p-5 rounded-2xl border border-neutral-800">
-                  <div className="flex space-x-4 mb-2">
+                  <div className="flex space-x-4 mb-4">
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input type="radio" checked={formType === "xtream"} onChange={() => setFormType("xtream")} className="text-red-500 focus:ring-red-500 bg-neutral-900 border-neutral-700" />
                       <span className="text-sm">Xtream Codes</span>
@@ -213,11 +216,28 @@ export default function Dashboard() {
                       <span className="text-sm">M3U Link</span>
                     </label>
                   </div>
+                  
                   <input required placeholder="Provider Name (e.g. My Provider)" value={formName} onChange={(e: any)=>setFormName(e.target.value)} className="w-full bg-neutral-900 rounded-lg p-3 text-sm focus:outline-none focus:border-red-500 border border-transparent" />
                   <input required placeholder="Server URL (http://...)" value={formServer} onChange={(e: any)=>setFormServer(e.target.value)} className="w-full bg-neutral-900 rounded-lg p-3 text-sm focus:outline-none focus:border-red-500 border border-transparent" />
                   <input required placeholder={formType === "xtream" ? "Username" : "Username (optional)"} value={formUser} onChange={(e: any)=>setFormUser(e.target.value)} className="w-full bg-neutral-900 rounded-lg p-3 text-sm focus:outline-none focus:border-red-500 border border-transparent" />
                   <input required={formType === "xtream"} type="password" placeholder={formType === "xtream" ? "Password" : "Password (optional)"} value={formPass} onChange={(e: any)=>setFormPass(e.target.value)} className="w-full bg-neutral-900 rounded-lg p-3 text-sm focus:outline-none focus:border-red-500 border border-transparent" />
-                  <button type="submit" className="w-full bg-neutral-100 text-neutral-900 rounded-lg p-3 text-sm font-semibold hover:bg-white transition-colors">Save Credentials</button>
+                  
+                  {formType === "xtream" && (
+                    <div className="pt-2">
+                      <label className="block text-xs text-neutral-500 mb-2 uppercase tracking-wider font-semibold">Content to Load</label>
+                      <select 
+                        value={formContentType}
+                        onChange={(e) => setFormContentType(e.target.value)}
+                        className="w-full bg-neutral-900 border border-transparent rounded-lg p-3 text-sm focus:outline-none focus:border-red-500"
+                      >
+                        <option value="both">Both (Live TV & VOD/Series)</option>
+                        <option value="live">TV Channels Only</option>
+                        <option value="vod">VOD (Movies & Series) Only</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <button type="submit" className="w-full bg-neutral-100 text-neutral-900 rounded-lg p-3 text-sm font-semibold hover:bg-white transition-colors mt-4">Save Credentials</button>
                 </motion.form>
               )}
 
@@ -235,7 +255,14 @@ export default function Dashboard() {
                           <Server className="w-5 h-5 text-blue-400" />
                         </div>
                         <div className="overflow-hidden">
-                          <p className="text-sm font-semibold truncate">{pl.name}</p>
+                          <p className="text-sm font-semibold truncate">
+                            {pl.name}
+                            {pl.contentType && pl.contentType !== "both" && (
+                              <span className="ml-2 text-[10px] uppercase tracking-wider bg-neutral-800 text-neutral-400 px-1.5 py-0.5 rounded">
+                                {pl.contentType === "live" ? "Live Only" : "VOD Only"}
+                              </span>
+                            )}
+                          </p>
                           <p className="text-xs text-neutral-500 truncate">{pl.server}</p>
                         </div>
                       </div>

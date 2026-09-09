@@ -16,7 +16,10 @@ data class PlaylistEntity(
     val epgOffsetHours: Float = 0f,
     
     // Feature 5: Stalker support
-    val macAddress: String? = null
+    val macAddress: String? = null,
+    
+    // Content filter: "live", "vod", "both"
+    val contentType: String = "both"
 )
 
 @Entity(tableName = "channel_groups")

@@ -24,3 +24,14 @@ We have built the architectural skeleton for a world-class IPTV player. To achie
 ## 5. Deployment & Updates
 - [x] **Semantic Release CI/CD**: GitHub Actions auto-bumping versions and releasing `RedSurf-vX.Y.Z.apk`.
 - [x] **OTA Update Engine**: Native Android TV package installer polling GitHub Releases to auto-update the app without Play Store intervention.
+
+## Ultimate Goal: The "Cloud Moat" & Advanced Paywall
+
+1. **Real-Time Cross-Device Sync**: Firebase/Firestore sync across TVs for favorites, settings, and playback state (resume).
+2. **Global Netflix-Style Profiles**: Multi-user account isolation with PIN-protection on TV.
+3. **TMDB VOD Hydration**: TMDB API integration to enrich Xtream VODs with metadata (posters, cast, IMDb ratings).
+4. **DVR / Scheduled Local Recording**: Background `ForegroundService` to record `.ts` streams to USB/SMB drives.
+5. **Smart Channel Failover**: Auto-switch between providers on buffering/errors by channel name matching.
+6. **Multi-View (Quad-Screen)**: Hardware-accelerated 2-4 split screen live sports playback with audio focus shifting.
+7. **True Catch-Up TV Scrubbing**: Netflix-style scrubber with thumbnail track (if available) for Flussonic/Xtream archives.
+8. **Stripe / Google Play Billing**: Implement premium licensing (free tier vs premium unlocks).

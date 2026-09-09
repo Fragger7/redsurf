@@ -60,7 +60,7 @@ interface PlaylistDao {
     EpgProgramEntity::class,
     PlaylistEntity::class,
     ChannelGroupEntity::class
-], version = 4, exportSchema = false) // Bumped version to 4 for schema changes
+], version = 5, exportSchema = false) // Bumped version to 5 for contentType schema change
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao

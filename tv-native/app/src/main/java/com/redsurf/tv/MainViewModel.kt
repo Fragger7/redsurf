@@ -105,6 +105,7 @@ class MainViewModel : ViewModel() {
                     if (snapshot != null && snapshot.exists()) {
                         if (snapshot.getString("status") == "paired") {
                             val playlistType = snapshot.getString("playlistType") ?: "m3u"
+                            val contentType = snapshot.getString("contentType") ?: "both"
                             
                             pairingListener?.remove()
                             pairingListener = null
@@ -118,13 +119,13 @@ class MainViewModel : ViewModel() {
                             val offset = snapshot.getDouble("epgOffsetHours")?.toFloat() ?: 0f
 
                             if (playlistType == "xtream") {
-                                loadXtreamCodes(server, user, pass, name, code, userAgent, offset)
+                                loadXtreamCodes(server, user, pass, name, code, userAgent, offset, contentType)
                             } else if (playlistType == "stalker") {
-                                loadStalkerPortal(server, macAddress ?: "", name, code, userAgent, offset)
+                                loadStalkerPortal(server, macAddress ?: "", name, code, userAgent, offset, contentType)
                             } else {
                                 val url = snapshot.getString("url")
                                 if (!url.isNullOrEmpty()) {
-                                    loadPlaylist(url, name, url, "", "m3u", code, userAgent, offset, null)
+                                    loadPlaylist(url, name, url, "", "m3u", code, userAgent, offset, null, contentType)
                                 }
                             }
                         }
@@ -136,14 +137,25 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun loadXtreamCodes(server: String, user: String, pass: String, name: String = "Xtream Codes", code: String? = null, userAgent: String? = null, offset: Float = 0f) {
+    fun loadXtreamCodes(server: String, user: String, pass: String, name: String = "Xtream Codes", code: String? = null, userAgent: String? = null, offset: Float = 0f, contentType: String = "both") {
         val cleanServer = if (server.endsWith("/")) server.dropLast(1) else server
-        val url = "$cleanServer/get.php?username=$user&password=$pass&type=m3u_plus&output=ts"
-        loadPlaylist(url, name, server, user, "xtream", code, userAgent, offset, null)
+        
+        // Use type=m3u_plus for live, or type=m3u_plus&output=ts depending on content type
+        var urlType = "m3u_plus"
+        if (contentType == "live") {
+            urlType = "m3u_plus&type=live"
+        } else if (contentType == "vod") {
+            urlType = "m3u_plus&type=vod" 
+            // In a real implementation we would fetch VOD natively using XtreamApi get_vod_categories
+            // M3u parsing acts as a fallback.
+        }
+
+        val url = "$cleanServer/get.php?username=$user&password=$pass&type=$urlType&output=ts"
+        loadPlaylist(url, name, server, user, "xtream", code, userAgent, offset, null, contentType)
     }
 
     // Feature 5: Stalker type IPTV portal load
-    fun loadStalkerPortal(portalUrl: String, macAddress: String, name: String = "Stalker Portal", code: String? = null, userAgent: String? = null, offset: Float = 0f) {
+    fun loadStalkerPortal(portalUrl: String, macAddress: String, name: String = "Stalker Portal", code: String? = null, userAgent: String? = null, offset: Float = 0f, contentType: String = "both") {
         _state.value = AppState.Loading
         viewModelScope.launch {
             try {
@@ -152,24 +164,34 @@ class MainViewModel : ViewModel() {
                     PlaylistEntity(
                         id = playlistId, name = name, serverUrl = portalUrl, 
                         username = "", type = "stalker", userAgent = userAgent, 
-                        epgOffsetHours = offset, macAddress = macAddress
+                        epgOffsetHours = offset, macAddress = macAddress, contentType = contentType
                     )
                 )
 
                 // Handshake and get token/link
                 val isOnline = StalkerApi.getHandshake(portalUrl, macAddress, userAgent)
                 if(isOnline) {
-                    val categories = StalkerApi.getCategories(portalUrl, macAddress, "live", userAgent)
                     val entities = mutableListOf<ChannelEntity>()
                     
-                    // Simple mock for Stalker channels since getting every channel in Stalker is a paginated nightmare via their API.
-                    // A true Stalker implementation recursively queries all genres. For this demonstration, we'll construct a base.
-                    categories.forEachIndexed { i, cat ->
-                        entities.add(ChannelEntity(
-                            streamId = "stalker_${cat.id}", playlistId = playlistId, groupId = "default", num = i, 
-                            name = cat.name + " (Category)", streamType = "live", streamIcon = "", epgChannelId = "", groupName = "Stalker Live"
-                        ))
+                    if (contentType == "both" || contentType == "live") {
+                        val categories = StalkerApi.getCategories(portalUrl, macAddress, "live", userAgent)
+                        categories.forEachIndexed { i, cat ->
+                            entities.add(ChannelEntity(
+                                streamId = "stalker_live_${cat.id}", playlistId = playlistId, groupId = "default", num = i, 
+                                name = cat.name + " (Live)", streamType = "live", streamIcon = "", epgChannelId = "", groupName = "Stalker Live"
+                            ))
+                        }
                     }
+                    if (contentType == "both" || contentType == "vod") {
+                        val categories = StalkerApi.getCategories(portalUrl, macAddress, "vod", userAgent)
+                        categories.forEachIndexed { i, cat ->
+                            entities.add(ChannelEntity(
+                                streamId = "stalker_vod_${cat.id}", playlistId = playlistId, groupId = "default", num = i, 
+                                name = cat.name + " (VOD)", streamType = "vod", streamIcon = "", epgChannelId = "", groupName = "Stalker VOD"
+                            ))
+                        }
+                    }
+
                     if (entities.isNotEmpty()) {
                         localDb?.channelDao()?.insertChannels(entities)
                     }
@@ -184,7 +206,7 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun loadPlaylist(url: String, name: String, serverUrl: String, username: String, type: String, code: String? = null, userAgent: String? = null, offset: Float = 0f, macAddress: String? = null) {
+    fun loadPlaylist(url: String, name: String, serverUrl: String, username: String, type: String, code: String? = null, userAgent: String? = null, offset: Float = 0f, macAddress: String? = null, contentType: String = "both") {
         _state.value = AppState.Loading
         viewModelScope.launch {
             try {
@@ -192,7 +214,8 @@ class MainViewModel : ViewModel() {
                 localDb?.playlistDao()?.insertPlaylist(
                     PlaylistEntity(
                         id = playlistId, name = name, serverUrl = serverUrl, username = username, 
-                        type = type, userAgent = userAgent, epgOffsetHours = offset, macAddress = macAddress
+                        type = type, userAgent = userAgent, epgOffsetHours = offset, macAddress = macAddress,
+                        contentType = contentType
                     )
                 )
                 
@@ -203,7 +226,13 @@ class MainViewModel : ViewModel() {
                 var hiddenGroups = emptyList<String>()
                 code?.let { hiddenGroups = cleanupPairing(it) }
                 
-                val filteredChannels = channels.filter { it.group !in hiddenGroups }
+                // Filter by content type logic for M3U
+                val filteredChannels = channels.filter { it.group !in hiddenGroups }.filter { 
+                    if (contentType == "live") it.streamUrl.contains("/live/") || !it.streamUrl.contains("/movie/")
+                    else if (contentType == "vod") it.streamUrl.contains("/movie/") || it.streamUrl.contains("/series/")
+                    else true
+                }
+
                 val entities = filteredChannels.map {
                     ChannelEntity(
                         streamId = it.streamUrl, playlistId = playlistId, groupId = "default", num = 0, 
