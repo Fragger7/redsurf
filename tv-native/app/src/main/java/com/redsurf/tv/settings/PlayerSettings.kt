@@ -22,12 +22,16 @@ object PlayerSettings {
     // Audio offset for out-of-sync provider feeds
     var audioDelayMs: Long = 0L
 
+    // Global EPG Time Offset (Feature 3)
+    var globalEpgOffsetHours: Float = 0f
+
     fun load(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         useSoftwareDecoder = prefs.getBoolean("useSoftwareDecoder", false)
         minBufferMs = prefs.getInt("minBufferMs", 15000)
         maxBufferMs = prefs.getInt("maxBufferMs", 50000)
         audioDelayMs = prefs.getLong("audioDelayMs", 0L)
+        globalEpgOffsetHours = prefs.getFloat("globalEpgOffsetHours", 0f)
     }
 
     fun save(context: Context) {
@@ -36,6 +40,7 @@ object PlayerSettings {
         prefs.putInt("minBufferMs", minBufferMs)
         prefs.putInt("maxBufferMs", maxBufferMs)
         prefs.putLong("audioDelayMs", audioDelayMs)
+        prefs.putFloat("globalEpgOffsetHours", globalEpgOffsetHours)
         prefs.apply()
     }
 }

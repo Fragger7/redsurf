@@ -9,7 +9,14 @@ data class PlaylistEntity(
     val name: String,
     val serverUrl: String,
     val username: String,
-    val type: String // "xtream" or "m3u"
+    val type: String, // "xtream", "m3u", or "stalker"
+    
+    // Feature 1 & 3: Custom User-Agent & EPG Offset
+    val userAgent: String? = null,
+    val epgOffsetHours: Float = 0f,
+    
+    // Feature 5: Stalker support
+    val macAddress: String? = null
 )
 
 @Entity(tableName = "channel_groups")

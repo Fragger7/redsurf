@@ -48,6 +48,9 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists")
     fun getAllPlaylists(): Flow<List<PlaylistEntity>>
 
+    @Query("SELECT * FROM playlists WHERE id = :id")
+    suspend fun getPlaylistById(id: String): PlaylistEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlaylist(playlist: PlaylistEntity)
 }
@@ -57,7 +60,7 @@ interface PlaylistDao {
     EpgProgramEntity::class,
     PlaylistEntity::class,
     ChannelGroupEntity::class
-], version = 3, exportSchema = false)
+], version = 4, exportSchema = false) // Bumped version to 4 for schema changes
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao
