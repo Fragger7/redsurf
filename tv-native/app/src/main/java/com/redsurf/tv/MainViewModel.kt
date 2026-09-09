@@ -8,7 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.redsurf.tv.db.RedSurfDatabase
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.PlaylistEntity
-import com.redsurf.tv.engine.M3uParser
+import com.redsurf.tv.parser.M3uParser
 import com.redsurf.tv.vod.StalkerApi
 import com.redsurf.tv.server.PairingServer
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +25,7 @@ sealed class AppState {
     data class Loading(val message: String = "Loading...") : AppState()
     data class Onboarding(val localIp: String, val port: Int) : AppState()
     data class Loaded(
-        val groups: List<String>, 
+        val groups: List<com.redsurf.tv.data.ChannelGroup>, 
         val playlists: List<PlaylistEntity>,
         val activePlaylistId: String?
     ) : AppState()
@@ -57,7 +57,21 @@ class MainViewModel : ViewModel() {
                 val pId = currentPlaylistId ?: playlists.first().id
                 currentPlaylistId = pId
                 val channels = localDb?.channelDao()?.getAllChannels()?.first()?.filter { it.playlistId == pId } ?: emptyList()
-                val groups = channels.map { it.groupName }.distinct().sorted()
+                val groups = channels.groupBy { it.groupName }.map { entry -> 
+                    com.redsurf.tv.data.ChannelGroup(
+                        name = entry.key,
+                        channels = entry.value.map { 
+                            com.redsurf.tv.data.Channel(
+                                id = it.streamId, 
+                                name = it.name, 
+                                streamUrl = it.streamUrl, 
+                                logoUrl = it.logoUrl, 
+                                group = it.groupName, 
+                                epgId = it.epgId
+                            ) 
+                        }
+                    )
+                }.sortedBy { it.name }
                 withContext(Dispatchers.Main) {
                     _state.value = AppState.Loaded(groups, playlists, pId)
                 }

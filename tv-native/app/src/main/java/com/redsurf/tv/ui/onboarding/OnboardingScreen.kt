@@ -197,11 +197,12 @@ fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
         Text("Open your phone's web browser and go to:", color = Color.Gray)
         Spacer(modifier = Modifier.height(32.dp))
         
-        Surface(
-            colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color(0xFF18181B)),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .background(Color(0xFF18181B), shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .padding(32.dp)
         ) {
-            Text(url, style = androidx.tv.material3.MaterialTheme.typography.displayLarge, color = Color(0xFFE11D48), modifier = Modifier.padding(32.dp))
+            Text(url, style = androidx.tv.material3.MaterialTheme.typography.displayLarge, color = Color(0xFFE11D48))
         }
 
         Spacer(modifier = Modifier.height(48.dp))
