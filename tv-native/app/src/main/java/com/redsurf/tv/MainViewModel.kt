@@ -9,7 +9,7 @@ import com.redsurf.tv.db.RedSurfDatabase
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.engine.M3uParser
-import com.redsurf.tv.engine.StalkerApi
+import com.redsurf.tv.vod.StalkerApi
 import com.redsurf.tv.server.PairingServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,7 +47,7 @@ class MainViewModel : ViewModel() {
 
     private fun checkLocalCache(context: Context? = null) {
         viewModelScope.launch(Dispatchers.IO) {
-            val playlists = localDb?.playlistDao()?.getAllPlaylists() ?: emptyList()
+            val playlists: List<PlaylistEntity> = localDb?.playlistDao()?.getAllPlaylists() ?: emptyList()
             if (playlists.isEmpty()) {
                 withContext(Dispatchers.Main) {
                     startPairingServer(context)
