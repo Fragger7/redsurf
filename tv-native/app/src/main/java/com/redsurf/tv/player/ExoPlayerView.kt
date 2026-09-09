@@ -43,7 +43,7 @@ fun ExoPlayerView(
     val context = LocalContext.current
     
     val exoPlayer = remember(useSecureDns, dnsProvider) {
-        val dataSourceFactory = IptvNetworkModule.buildDataSourceFactory(context, useSecureDns, dnsProvider)
+        val dataSourceFactory = IptvNetworkModule.getDataSourceFactory(null)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
         val player = ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)

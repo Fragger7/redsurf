@@ -13,7 +13,7 @@ import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.TvLazyRow
 import androidx.tv.foundation.lazy.list.items
 import androidx.tv.material3.*
-import com.redsurf.tv.vod.VodCategory
+import com.redsurf.tv.vod.XtreamCategory
 import com.redsurf.tv.vod.VodMovie
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -21,17 +21,17 @@ import com.redsurf.tv.vod.VodMovie
 fun VodDashboardView() {
     // Mock Data simulating Netflix-style dashboard powered by Xtream API
     val categories = listOf(
-        VodCategory("1", "Trending Now"),
-        VodCategory("2", "Action Thrillers"),
-        VodCategory("3", "Comedy Movies")
+        XtreamCategory("1", "Trending Now", "0"),
+        XtreamCategory("2", "Action Thrillers", "0"),
+        XtreamCategory("3", "Comedy Movies", "0")
     )
     
     val mockMovies = listOf(
-        VodMovie(101, "The Dark Knight", "", 9.0),
-        VodMovie(102, "Inception", "", 8.8),
-        VodMovie(103, "Interstellar", "", 8.6),
-        VodMovie(104, "Dune: Part Two", "", 8.9),
-        VodMovie(105, "Avengers: Endgame", "", 8.4)
+        VodMovie("101", "The Dark Knight", "", "9.0", "mp4"),
+        VodMovie("102", "Inception", "", "8.8", "mp4"),
+        VodMovie("103", "Interstellar", "", "8.6", "mp4"),
+        VodMovie("104", "Dune: Part Two", "", "8.9", "mp4"),
+        VodMovie("105", "Avengers: Endgame", "", "8.4", "mp4")
     )
 
     TvLazyColumn(
