@@ -108,6 +108,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        AfrManager.restoreRefreshRate(this)
+        AfrManager.restoreOriginalMode()
     }
 }

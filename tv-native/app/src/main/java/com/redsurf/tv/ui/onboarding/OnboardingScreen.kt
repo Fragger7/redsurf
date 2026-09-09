@@ -199,7 +199,7 @@ fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
         
         Surface(
             colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color(0xFF18181B)),
-            shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
         ) {
             Text(url, style = androidx.tv.material3.MaterialTheme.typography.displayLarge, color = Color(0xFFE11D48), modifier = Modifier.padding(32.dp))
         }

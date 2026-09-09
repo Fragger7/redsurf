@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URL
@@ -47,7 +48,7 @@ class MainViewModel : ViewModel() {
 
     private fun checkLocalCache(context: Context? = null) {
         viewModelScope.launch(Dispatchers.IO) {
-            val playlists: List<PlaylistEntity> = localDb?.playlistDao()?.getAllPlaylists() ?: emptyList()
+            val playlists: List<PlaylistEntity> = localDb?.playlistDao()?.getAllPlaylists()?.first() ?: emptyList()
             if (playlists.isEmpty()) {
                 withContext(Dispatchers.Main) {
                     startPairingServer(context)
@@ -55,7 +56,7 @@ class MainViewModel : ViewModel() {
             } else {
                 val pId = currentPlaylistId ?: playlists.first().id
                 currentPlaylistId = pId
-                val channels = localDb?.channelDao()?.getChannelsForPlaylist(pId) ?: emptyList()
+                val channels = localDb?.channelDao()?.getAllChannels()?.first()?.filter { it.playlistId == pId } ?: emptyList()
                 val groups = channels.map { it.groupName }.distinct().sorted()
                 withContext(Dispatchers.Main) {
                     _state.value = AppState.Loaded(groups, playlists, pId)
