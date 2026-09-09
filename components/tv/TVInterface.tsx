@@ -37,6 +37,31 @@ export function TVInterface() {
   // Pairing State
   const [pairingCode, setPairingCode] = useState<string | null>(null);
 
+const loadPlaylist = async (url: string) => {
+    setIsLoadingM3u(true);
+    try {
+      const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+      const text = await res.text();
+      const parsed = parseM3U(text);
+      
+      if (parsed.channels.length > 0) {
+        setGroups(parsed.groups);
+        setChannels(parsed.channels as any);
+        setSelectedGroupIdx(0);
+        setSelectedChannelIdx(0);
+        setPlayingChannelId(parsed.channels[0].id);
+        setFocusArea('groups');
+      } else {
+        alert("No channels found in the playlist.");
+      }
+    } catch (err) {
+      console.error("Failed to fetch playlist", err);
+      alert("Failed to load playlist. Check the URL and CORS policy.");
+    } finally {
+      setIsLoadingM3u(false);
+    }
+  };
+
   // Auth & Initialization
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -105,33 +130,10 @@ export function TVInterface() {
     }
   };
 
-  const loadPlaylist = async (url: string) => {
-    setIsLoadingM3u(true);
-    try {
-      const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-      const text = await res.text();
-      const parsed = parseM3U(text);
-      
-      if (parsed.channels.length > 0) {
-        setGroups(parsed.groups);
-        setChannels(parsed.channels as any);
-        setSelectedGroupIdx(0);
-        setSelectedChannelIdx(0);
-        setPlayingChannelId(parsed.channels[0].id);
-        setFocusArea('groups');
-      } else {
-        alert("No channels found in the playlist.");
-      }
-    } catch (err) {
-      console.error("Failed to fetch playlist", err);
-      alert("Failed to load playlist. Check the URL and CORS policy.");
-    } finally {
-      setIsLoadingM3u(false);
-    }
-  };
+  
 
   // Derive active items
-  const activeGroup = useMemo(() => groups[selectedGroupIdx] || { id: 'all', name: 'All' }, [groups, selectedGroupIdx]);
+  const activeGroup = groups[selectedGroupIdx] || { id: 'all', name: 'All' };
   const channelsInGroup = useMemo(() => {
     if (!groups.length || !channels.length) return [];
     return activeGroup.id === 'all' 
@@ -159,7 +161,7 @@ export function TVInterface() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     resetInactivityTimer();
     return () => {
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);

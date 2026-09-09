@@ -96,7 +96,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-semibold mb-3">Auto Frame Rate</h3>
               <p className="text-neutral-400 leading-relaxed">
-                Eliminate judder completely. RedSurf dynamically switches your TV's hardware refresh rate to perfectly match the stream's FPS.
+                Eliminate judder completely. RedSurf dynamically switches your TV&apos;s hardware refresh rate to perfectly match the stream&apos;s FPS.
               </p>
             </div>
 

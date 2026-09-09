@@ -71,6 +71,7 @@ export default function Dashboard() {
       password: formPass,
       type: formType,
       contentType: formContentType,
+      isActive: true,
       addedAt: serverTimestamp()
     });
     setFormName(""); setFormServer(""); setFormUser(""); setFormPass(""); setFormContentType("both");
@@ -80,6 +81,11 @@ export default function Dashboard() {
   const handleDeletePlaylist = async (id: string) => {
     if (!user || !confirm("Are you sure you want to delete this playlist?")) return;
     await deleteDoc(doc(db, `users/${user.uid}/playlists`, id));
+  };
+
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    if (!user) return;
+    await setDoc(doc(db, `users/${user.uid}/playlists`, id), { isActive: !currentStatus }, { merge: true });
   };
 
   const handlePairTV = async (e: React.FormEvent) => {
@@ -170,7 +176,7 @@ export default function Dashboard() {
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-sm focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 appearance-none"
                   >
                     <option value="">Choose saved credentials...</option>
-                    {playlists.map(pl => <option key={pl.id} value={pl.id}>{pl.name} ({pl.type})</option>)}
+                    {playlists.filter(pl => pl.isActive !== false).map(pl => <option key={pl.id} value={pl.id}>{pl.name} ({pl.type})</option>)}
                   </select>
                 </div>
                 
@@ -266,9 +272,17 @@ export default function Dashboard() {
                           <p className="text-xs text-neutral-500 truncate">{pl.server}</p>
                         </div>
                       </div>
-                      <button onClick={() => handleDeletePlaylist(pl.id)} className="text-neutral-600 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-all">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => handleToggleActive(pl.id, pl.isActive !== false)} 
+                          className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded transition-colors font-bold ${pl.isActive !== false ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'bg-neutral-800 text-neutral-500 hover:bg-neutral-700'}`}
+                        >
+                          {pl.isActive !== false ? "Active" : "Inactive"}
+                        </button>
+                        <button onClick={() => handleDeletePlaylist(pl.id)} className="text-neutral-600 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-all">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}

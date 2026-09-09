@@ -5,14 +5,14 @@ export async function GET() {
     const res = await fetch('https://api.github.com/repos/Fragger7/redsurf/releases/latest', {
       headers: {
         'Accept': 'application/vnd.github.v3+json',
+        // Optional: 'Authorization': `Bearer ${process.env.GITHUB_TOKEN}` // if we get rate limited
       },
       next: { revalidate: 60 } // Cache for 60 seconds
     });
 
     if (!res.ok) {
-      console.error('Failed to fetch latest release from GitHub');
-      // Fallback to github releases page
-      return NextResponse.redirect('https://github.com/Fragger7/redsurf/releases/latest');
+      console.error('Failed to fetch latest release from GitHub:', await res.text());
+      return new NextResponse('Failed to fetch latest release', { status: 500 });
     }
 
     const data = await res.json();
@@ -24,9 +24,9 @@ export async function GET() {
       return NextResponse.redirect(apkAsset.browser_download_url);
     }
 
-    return NextResponse.redirect('https://github.com/Fragger7/redsurf/releases/latest');
+    return new NextResponse('APK asset not found in the latest release', { status: 404 });
   } catch (error) {
     console.error('Error redirecting to APK:', error);
-    return NextResponse.redirect('https://github.com/Fragger7/redsurf/releases/latest');
+    return new NextResponse('Internal Server Error', { status: 500 });
   }
 }
