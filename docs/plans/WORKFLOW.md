@@ -34,13 +34,16 @@ breadth-first and marking things complete that had never run.
 
 ### Gate: Phase 0 → Phase 1
 
-Phase 1 (design system + Live TV screen) may begin only once **all** of these are true:
+**Satisfied as of 2026-09-10. Phase 1 may begin.** All seven were required; all seven are done and
+verified against the actually running system, not just reviewed or built:
 
-1. `grep -rn '\\\$' --include="*.kt" tv-native` returns **zero** matches.
-2. The duplicate `worker/EpgSyncWorker.kt` stub is deleted.
-3. CI runs `./gradlew assembleRelease` and publishes a **release-signed** APK.
-4. ✅ **Done.** Two consecutive CI releases carry the same signing certificate — verified across
-   v0.17.4 and v0.17.5, both `1b13f1d9…d2510d8a`.
+1. ✅ Zero `\$` interpolation bugs remain (`grep -rn '\\\$' --include="*.kt" tv-native` returns
+   nothing).
+2. ✅ The duplicate `worker/EpgSyncWorker.kt` stub is deleted.
+3. ✅ CI runs `./gradlew assembleRelease` and publishes a release-signed APK; a debug-signed build
+   now fails the pipeline outright rather than being allowed to publish.
+4. ✅ Two consecutive CI releases carry the same signing certificate — verified across v0.17.4 and
+   v0.17.5, both `1b13f1d9…d2510d8a`.
 
    Compare certificates with **apksigner**, never by hashing the signature block:
    ```bash
@@ -49,13 +52,19 @@ Phase 1 (design system + Live TV screen) may begin only once **all** of these ar
    `unzip -p … META-INF/*.RSA | shasum` is **wrong** — that file is a PKCS#7 block containing the
    signature over *that specific APK*, so it differs on every build even when the certificate is
    identical. It will make correct releases look broken.
-5. The three OTA defects in `PHASE_0.md` §0.6b are fixed: real semantic version comparison, a user
-   consent prompt, and an "install unknown apps" permission request.
-6. `firestore.rules` no longer exposes `pairingSessions`, and the dashboard can save a playlist.
-7. **An in-app OTA update has been observed installing on the actual Chromecast** — the version
-   string on screen changed, with no manual step.
+5. ✅ All three OTA defects from `PHASE_0.md` §0.6b are fixed and device-verified: real semantic
+   version comparison, a consent dialog, and an install-permission check/explainer. Two more bugs
+   were caught only by testing live (the dialog didn't trap D-pad focus; its default colors were
+   unreadable) and are also fixed — see `PHASE_0.md` §0.7 for the full account.
+6. ✅ `firestore.rules` no longer exposes `pairingSessions`; the dashboard can save a playlist.
+   Verified with real HTTP requests against the live `redsurf-fdd99` project (a throwaway test
+   account, exercised, then deleted) — not emulated, not just reviewed.
+7. ✅ **An in-app OTA update was observed installing on the actual Chromecast**: consent dialog →
+   "Install now" → permission check → Android's own confirmation → installed, versionCode 61→62.
+   The permission-denial path was verified separately too.
 
-Item 7 is the real gate. Items 1–6 are how you get there. A green CI badge does not satisfy it.
+Item 7 was the real gate; the rest were how you get there. A green CI badge alone would not have
+satisfied it — every item above has a corresponding live observation on record in `PHASE_0.md`.
 
 ## Why Phase 1 is an Opus phase
 
