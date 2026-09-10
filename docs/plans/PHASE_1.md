@@ -36,14 +36,36 @@ These are the Opus-lane calls for this phase. Sonnet executes against them.
 1. **Cloud pairing is being revived** (user decision, 2026-09-10). The "Cloud Login" onboarding
    card stays. Nothing in Phase 1 touches pairing, the web app, or Firestore — the TV-side listener
    is the cloud phase's job. Just don't delete anything cloud-related.
-2. **No Paging 3 yet.** Channels are queried **per group** from Room as `Flow<List<ChannelEntity>>`.
-   The critical fix is that the app must **never load every channel across all groups into memory**
-   — which is exactly what `MainViewModel.checkLocalCache` and `performSearch` do today
-   (`getAllChannels()` then filter in Kotlin). A single group is typically hundreds to a few
-   thousand rows; that fits. If 1.6's memory measurement says otherwise on a real playlist,
-   Paging 3 (`androidx.room:room-paging`) is the escalation — as its own change, later.
-3. **Coil 2.6.0 for channel logos** (`io.coil-kt:coil-compose:2.6.0`). It's the one new
-   dependency this phase adds. It targets Kotlin 1.9 / Compose 1.5, which is what we're pinned to.
+2. **Paging 3 from the start, and design for scale — never to the Chromecast's limits.** The
+   user's real lists run to **60K channels and 150K+ VOD**, and a Shield Pro exists in another room.
+   The Chromecast is the primary test device because *if it's fast there it's fast everywhere* —
+   but nothing in the app may assume a channel-count ceiling. So: channels are a Room
+   `PagingSource` per group (`androidx.room:room-paging:2.6.1` + `androidx.paging:paging-compose:
+   3.2.1`, both Kotlin-1.9-compatible), rendered with `collectAsLazyPagingItems()`. The app must
+   **never load every channel into memory** — which is exactly what `MainViewModel.checkLocalCache`
+   and `performSearch` do today (`getAllChannels()` then filter in Kotlin). Memory must be O(1) in
+   playlist size; 1.6 measures exactly that. Groups stay a plain `Flow<List<GroupCount>>` — even a
+   thousand categories is a few hundred KB of tiny POJOs.
+
+   `TvLazyColumn` (alpha10) has no `items(LazyPagingItems)` extension — use the index form:
+   `items(count = paged.itemCount, key = paged.itemKey { it.streamId }) { i -> paged[i]?.let {
+   ChannelRow(it) } ?: PlaceholderRow() }`.
+2b. **Import streams and batches; VOD is classified, not dumped into Live TV.** `M3uParser.parse`
+   materialises every channel into a `List` and `loadPlaylist` inserts all of it in one
+   transaction — the "OOM JSON trap" in `IPTV_DOMAIN_KNOWLEDGE.md` §1, and it will not survive a
+   60K-line M3U on 449 MB. The parser becomes a streaming emitter (`useLines` already streams the
+   read; stop accumulating) with batched inserts of 500 rows. During import, set `streamType`
+   from the URL (`/movie/` → `vod`, `/series/` → `series`, else `live`) — today it's hardcoded
+   `"live"` for every row, so 150K VOD entries would flood the Live TV groups. Live TV queries
+   filter `streamType = 'live'`. A separate VOD table is the VOD phase's decision; the
+   classification has to be right now so that phase has clean data. Add an index on
+   `(playlistId, streamType, groupName)` — a `GROUP BY` over 60K rows without one is a full scan
+   and a visible stall. That's a schema change: **bump the Room version 5 → 6**; it's a destructive
+   migration (already configured), which is acceptable now — there is no user data to preserve yet
+   — and means reloading the playlist after install.
+3. **Coil 2.6.0 for channel logos** (`io.coil-kt:coil-compose:2.6.0`). With room-paging and
+   paging-compose (§2), that's the phase's three new dependencies — and the whole list. Coil
+   targets Kotlin 1.9 / Compose 1.5, which is what we're pinned to.
    If Gradle resolution drags in a newer Compose that conflicts, drop to `2.5.0` — do not upgrade
    Compose/tv-material to make Coil fit. Configure an explicit memory cache cap (see 1.5).
 4. **No Navigation Compose library.** The nav strip is a tab bar; an `enum class NavDestination` +
@@ -115,38 +137,54 @@ with tokens as part of this — it's a mechanical substitution, not a redesign.)
 
 ## 1.2 — Data layer
 
-**`db/RedSurfDatabase.kt`** — add to `ChannelDao`:
+**`app/build.gradle.kts`** — add `androidx.room:room-paging:2.6.1` and
+`androidx.paging:paging-compose:3.2.1`.
+
+**`db/EpgEntities.kt`** — on `ChannelEntity`: `@Entity(tableName = "channels", indices =
+[Index("playlistId", "streamType", "groupName")])`. **`db/RedSurfDatabase.kt`** — `version = 6`.
+
+Add to `ChannelDao`:
 
 ```kotlin
 data class GroupCount(val groupName: String, val count: Int)
 
 @Query("SELECT groupName, COUNT(*) AS count FROM channels " +
-       "WHERE playlistId = :playlistId AND isHidden = 0 " +
+       "WHERE playlistId = :playlistId AND streamType = 'live' AND isHidden = 0 " +
        "GROUP BY groupName ORDER BY groupName")
-fun getGroupCounts(playlistId: String): Flow<List<GroupCount>>
+fun getLiveGroupCounts(playlistId: String): Flow<List<GroupCount>>
 
-@Query("SELECT * FROM channels WHERE playlistId = :playlistId AND groupName = :groupName " +
-       "AND isHidden = 0 ORDER BY num, name")
-fun getChannelsInGroup(playlistId: String, groupName: String): Flow<List<ChannelEntity>>
+@Query("SELECT * FROM channels WHERE playlistId = :playlistId AND streamType = 'live' " +
+       "AND groupName = :groupName AND isHidden = 0 ORDER BY num, name")
+fun getLiveChannelsInGroup(playlistId: String, groupName: String): PagingSource<Int, ChannelEntity>
 ```
 
-Room returns the aggregate into the POJO directly. Bump the database `version` only if the schema
-changes — it doesn't here (queries only), so don't.
+Room generates the `PagingSource` via `room-paging`; the aggregate lands in the POJO directly.
 
-**`data/ChannelRepository.kt`** — thin wrapper exposing exactly those two flows plus
-`getPlaylists()`. Constructed as `ChannelRepository(db.channelDao(), db.playlistDao())`.
+**`parser/M3uParser.kt`** — streaming. Replace `parse(InputStream): List<Channel>` with
+`parse(InputStream, onBatch: suspend (List<Channel>) -> Unit, batchSize: Int = 500)` that emits
+each batch and clears it. The existing `M3uParserTest` adapts by collecting batches into a list —
+its assertions don't change. Classify `streamType` here from the URL (`/movie/` → `vod`,
+`/series/` → `series`, else `live`) so it's set once at the source.
+
+**`data/ChannelRepository.kt`** — exposes `liveGroups(playlistId): Flow<List<GroupCount>>`,
+`liveChannels(playlistId, group): Flow<PagingData<ChannelEntity>>` (a `Pager(PagingConfig(pageSize
+= 60, prefetchDistance = 120, enablePlaceholders = false))` over the DAO source, `.cachedIn`
+the caller's scope), and `playlists()`. Constructed as `ChannelRepository(db.channelDao(),
+db.playlistDao())`.
 
 **`MainViewModel.kt`** — slim it:
 - `AppState.Loaded` no longer carries `groups`. It carries `playlists` and `activePlaylistId` only.
-  The Live TV screen collects its own group/channel flows from the repository.
-- Delete the in-memory `groupBy` in `checkLocalCache` and the in-memory filter in `performSearch`
-  (search is a later phase; remove the method rather than leave a memory bomb behind).
+  The Live TV screen collects its own flows from the repository.
+- Delete the in-memory `groupBy` in `checkLocalCache` and `performSearch` entirely (search is a
+  later phase; remove it rather than leave a memory bomb behind).
+- `loadPlaylist` consumes the parser's batches: each batch → map to entities (`num` = running
+  index, so channel numbers mean something — it's `0` for every row today) → `insertChannels`.
+  Never hold more than one batch. Update `AppState.Loading("Importing… N channels")` per batch
+  so a 60K import isn't a frozen spinner.
 - Expose `val repository: ChannelRepository` (set in `setDatabase`).
-- In `loadPlaylist`, set `num = index` when mapping parsed channels to entities (it's `0` for every
-  row today, so the channel-number column would be meaningless). `mapIndexed`.
 
-**Acceptance:** builds; existing 11 unit tests pass; `MainViewModel` contains no call to
-`getAllChannels()`.
+**Acceptance:** builds; all unit tests pass (`M3uParserTest` adapted, still asserting the same
+parsed values); `grep -rn getAllChannels tv-native/app/src/main` → the DAO definition only.
 
 ## 1.3 — App shell + nav strip
 
@@ -188,8 +226,9 @@ right-aligned in `TextSecondary`**. Focusing a row (not clicking) selects the gr
 TiViMate/StreamVault behaviour and it makes browsing cheap. Row = `Surface(onClick)` with
 `RedSurfFocus`; the selected group uses the *selected* colours.
 
-**`ChannelsColumn.kt`** — header: group name + "N channels"; `TvLazyColumn` of channel rows from
-`getChannelsInGroup(activePlaylistId, selectedGroup)`. Each row: **logo chip** (Coil
+**`ChannelsColumn.kt`** — header: group name + "N channels" (the count comes from the groups
+query, not from the paged list); `TvLazyColumn` over `repository.liveChannels(activePlaylistId,
+selectedGroup).collectAsLazyPagingItems()` using the index form from Decisions §2. Each row: **logo chip** (Coil
 `AsyncImage`, 40dp, `Surface`-shaped fallback with the channel's initial when `streamIcon` is
 blank/404), **number** (`num`, `TextSecondary`), **name**, and a subtitle line. The subtitle is
 the current programme — EPG is not populated in Phase 1 (the sync worker is never scheduled; a
@@ -245,16 +284,25 @@ Try three channels before concluding anything.
 
 ## 1.6 — Memory + acceptance sweep
 
-With the **full** iptv-org index loaded (10k+ channels — the stress test) and preview playing:
+**The criterion is that memory does not grow with playlist size** — not a fixed number. Measure
+PSS with preview playing on the Live TV screen, twice:
 
 ```bash
 adb shell dumpsys meminfo com.redsurf.tv | grep -E "TOTAL PSS|Java Heap|Native Heap"
 ```
 
-Record it in this file. **Target ≤ 150 MB PSS, hard ceiling 200 MB.** Baseline before Phase 1 was
-41 MB at onboarding with no player. If it's over 200, the first suspect is 1.2's per-group query
-having been bypassed somewhere; the second is Coil's cache cap not being applied; the third is
-where Paging 3 becomes the answer. Report the number either way.
+1. with the small list loaded (iptv-org US subset, ~2K channels), and
+2. with the user's real ~30K-channel list loaded.
+
+Record both in this file. **They should be within ~30 MB of each other.** If (2) is much larger
+than (1), paging is bypassed somewhere — that's a bug, not a device limit. Baseline before Phase 1
+was 41 MB at onboarding with no player. As a Chromecast-specific sanity check only: expect
+somewhere around 80–150 MB with preview playing; investigate above 200 MB. That number is about
+*this* device's 449 MB free; it is not a product limit and the Shield would be fine far above it.
+
+Also time the import of the 30K list (`AppState.Loading` shows the count; note wall-clock start to
+Live TV). Report it; there's no pass/fail on it yet, but a number now means a regression is
+noticeable later.
 
 Then the sweep — every line below must be true, and each is either grep-checkable or has a
 screenshot on record:
@@ -262,8 +310,8 @@ screenshot on record:
 1. `grep -rn "Color(0xFF" --include="*.kt" tv-native/app/src/main | grep -v ui/theme/` → empty.
 2. `grep -rn "getAllChannels" --include="*.kt" tv-native/app/src/main` → only the DAO definition.
 3. `ExoPlayerView.kt` and `TiViMateLayout.kt` no longer exist.
-4. Checkpoint A and B screenshots are on record and reviewed.
-5. Memory number recorded, under the ceiling.
+4. Checkpoint A and B screenshots are on record and reviewed by the user.
+5. Both memory numbers recorded; the 30K-list number is within ~30 MB of the 2K-list number.
 6. `./gradlew :app:testDebugUnitTest` green; `assembleRelease` green and signed
    (`apksigner --print-certs` → `1b13f1d9…d2510d8a`).
 7. Status board above fully updated. `AGENTS.md` "Verified state" updated to match.
@@ -285,15 +333,32 @@ screenshot on record:
 
 ## Verification — test data
 
-Load a playlist via the TV's LAN pairing form (`http://<tv-ip>:8080`) or direct M3U entry:
+Two lists, two jobs:
 
-- **Smoke test:** `https://iptv-org.github.io/iptv/countries/us.m3u` (~1–2k channels, dozens of
-  groups). Use this for Checkpoints A and B.
-- **Stress test:** `https://iptv-org.github.io/iptv/index.m3u` (10k+ channels). Use this for 1.6
-  only.
+- **Small (checkpoints A and B):** `https://iptv-org.github.io/iptv/countries/us.m3u` — public,
+  legal, ~1–2K channels, dozens of groups. Fast to load, good enough to judge the layout.
+- **Real (1.6, and anything playback-related):** the user's own provider — ~30K channels plus a
+  large VOD catalogue. This is the list that actually matters; the small one is just cheaper to
+  iterate against.
 
-These are public, legal channel lists. The user may separately verify with their real provider
-credentials — entered by them on the TV, never shared in chat.
+**How the real credentials get in.** The user has offered them for testing. They must not be
+pasted into chat — transcripts persist. Either:
+1. **The user enters them on the TV** via the LAN pairing form (`http://<tv-ip>:8080`) or the
+   Xtream card. Nothing in the session ever sees them. Preferred.
+2. **For unattended reloads** (e.g. after the v6 schema wipe, while the user is away), the user
+   puts the M3U URL in `~/.redsurf/test-playlist.url` on the laptop — same directory as the
+   keystore, already outside the repo, never committed. The session reads that file and submits it
+   to the TV's pairing form with `curl`, exactly as a phone would. Ask the user to create the file
+   when it's first needed; don't ask for the contents.
+
+The device sleeps quickly. `adb shell input keyevent KEYCODE_WAKEUP` before every test, and
+check `dumpsys package com.redsurf.tv | grep versionName` before trusting any result — both
+lessons from Phase 0's §0.7.
+
+**A Shield Pro exists** (another room). It is not the primary test device — the Chromecast is,
+because it's the weakest hardware the app has to be good on. But if something is suspected to be
+a Chromecast limit rather than an app bug, the Shield is how to tell the difference. See
+`HARDWARE.md`.
 
 The device sleeps quickly. `adb shell input keyevent KEYCODE_WAKEUP` before every test, and
 check `dumpsys package com.redsurf.tv | grep versionName` before trusting any result — both
@@ -316,11 +381,36 @@ nothing lost, because everything it needs is in this file and the status board.
 
 ## Rules for whoever executes this
 
+**Verification is proportional to risk. This is a budget rule, not a suggestion.**
+
+- **Compile + unit tests is the default bar** for every task in 1.1–1.4. Build after each task;
+  do not screenshot after each task. The device round-trip happens once, at Checkpoint A, when
+  there's a whole screen to look at.
+- **Trivial changes get trivial verification.** A renamed val, a moved import, a comment, a colour
+  token swap — build it and move on. Don't install it, don't screenshot it, don't write a test for
+  it. Phase 0 spent real budget verifying things that couldn't have been wrong; don't repeat that.
+- **Device round-trips: two for the whole phase** (A, B) plus the single 1.6 measurement. Within
+  a checkpoint, take the screenshots once, send them, stop. Don't iterate on the TV alone.
+- **`[skip ci]` on every commit that doesn't change the APK** — docs, comments, this file.
+  Releases are for things the user can install.
+
+**Checkpoints are a hard stop, and the user reviews — not the session.**
+
+- At Checkpoint A and B: take the screenshots, **send them to the user with `SendUserFile`** so
+  they land in front of them on whatever device they're on, state plainly what to look at and
+  what's known-incomplete, and **stop**. Do not proceed to the next task until the user has
+  responded. Their eyes are the acceptance test for "does it look like RedSurf"; a session cannot
+  pass that test on its own.
+- Ask the user for the real-credentials file (`~/.redsurf/test-playlist.url`) the first time 1.6
+  or a playback problem needs the real list — not before, and never for the contents.
+
+**And the standing rules:**
+
 - **Never mark an item done without running it.** A compile is not a screenshot; a screenshot on
   the wrong build is nothing (Phase 0 §0.7 caught exactly that — check `versionName` first).
 - The decisions section is settled. If something in it turns out to be wrong in practice, stop and
   say so with evidence — don't quietly do something else.
 - Anything not covered here that requires a judgment call → stop and hand back to Opus, per
   `WORKFLOW.md`. Anything covered here → just do it.
-- Batch before you spend a device round-trip. Two checkpoints for the whole phase is the budget.
-- No Hilt. No dependency upgrades. No new screens beyond what's listed.
+- No Hilt. No dependency upgrades beyond the three named (Coil, room-paging, paging-compose). No
+  new screens beyond what's listed. No channel-count assumptions anywhere.

@@ -1,5 +1,21 @@
 # Target Hardware
 
+## The principle: design for scale, test on the weakest box
+
+The user's real playlists run to **~60K channels and 150K+ VOD items**, and the household has more
+than one device — a **Shield Pro** in another room alongside the Chromecast below. So two rules
+that must not be confused with each other:
+
+1. **Nothing in the app may assume a channel-count ceiling.** Lazy loading (Room `PagingSource`,
+   paged lists, streaming imports with batched inserts, bounded image caches) is how the app stays
+   flat in memory regardless of playlist size — see `IPTV_DOMAIN_KNOWLEDGE.md` §1, §6, §13. A
+   hard cap on data is a bug, not a safety measure.
+2. **The Chromecast is still the primary test device**, because it's the weakest hardware the app
+   has to be good on — if it's smooth there, it's smooth on the Shield. The measured limits below
+   are facts about *this box*, used to size caches and catch regressions. They are not product
+   limits. When something looks like a hardware ceiling, the Shield is how to tell a Chromecast
+   limit from an app bug.
+
 ## Primary test device: Chromecast with Google TV (1st gen, 4K, "Sabrina")
 
 **All values below were read off the device over ADB on 2026-09-10 — measured, not assumed.**
