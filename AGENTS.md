@@ -78,16 +78,23 @@ via OTA. CI is free — the repo is public.
 ## Verified state as of 2026-09-10
 
 **Real and working:** builds clean (debug + release); release signing verified end to end — CI
-publishes signed releases (v0.17.4 was the first), and an update was observed installing over an
-existing install on the Chromecast without an uninstall; installs and launches (41 MB PSS at
-onboarding); M3U parser with genuine unit tests; DoH / custom User-Agent networking; NanoHttpd LAN
-pairing server; Room schema; ExoPlayer + track selection; AFR logic wired into the player. The
-17 `\$` interpolation bugs are fixed and the duplicate `EpgSyncWorker` stub is deleted (0.2). The
-OTA updater now does real semantic version comparison, prompts for consent before installing, and
-checks/requests the install-unknown-apps permission instead of silently failing (0.6b) — build- and
-unit-test-verified (`UpdateManagerTest`, 7 passing tests), **not yet observed on the TV itself.**
-`lib/firebase.ts` no longer has hardcoded fallbacks; it now fails loudly if env vars are missing
-(0.5, verified directly against the compiled file).
+publishes signed releases, and **a genuine in-app OTA update has been observed completing on the
+Chromecast** (v0.17.6 → v0.17.7, versionCode 61→62, no manual step); installs and launches (41 MB
+PSS at onboarding); M3U parser with genuine unit tests; DoH / custom User-Agent networking;
+NanoHttpd LAN pairing server; Room schema; ExoPlayer + track selection; AFR logic wired into the
+player. The 17 `\$` interpolation bugs are fixed and the duplicate `EpgSyncWorker` stub is deleted
+(0.2). The OTA updater does real semantic version comparison, shows a consent dialog before
+installing anything, and checks/explains the install-unknown-apps permission instead of silently
+failing — all three **device-verified**, including the negative path (permission denied → the
+app's own explainer dialog, not a raw OS block). Two more bugs were caught only by live testing and
+are also fixed: the consent dialogs didn't actually trap D-pad focus (a same-composition overlay
+`Box` draws on top but doesn't own input focus — fixed by using a real
+`androidx.compose.ui.window.Dialog`), and `tv-material3`'s default `Surface` color is light, making
+white dialog text unreadable (fixed with explicit dark styling). See `docs/plans/PHASE_0.md` §0.7
+for the full account, including how the first test attempt was invalid (it tested v0.17.5, built
+*before* these fixes existed) and was caught by checking the running version rather than trusting
+the result. `lib/firebase.ts` no longer has hardcoded fallbacks; it now fails loudly if env vars
+are missing (0.5, verified directly against the compiled file).
 
 **Built but never wired up:** `GlobalSearchEngine`, `BackupManager`, `CatchupEngine`, `XtreamApi`
 (VOD/series), `TmdbApi`, `SettingsManager`, `PlayerSettings`. Favourites, hide and group-management

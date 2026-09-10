@@ -10,11 +10,48 @@
 | 0.4 | Firestore lockdown | ⬜ **not started** — `pairingSessions` still world-readable; dashboard schema still mismatched |
 | 0.5 | Drop dead Firebase project | ✅ **done & verified** — `firebase-applet-config.json` deleted; `lib/firebase.ts` fallbacks removed and now fails loudly with a clear error if env vars are missing (verified: throws when unset, initializes cleanly when set — tested directly against the compiled file, plus a clean full-project `tsc` check). See note below re: an unrelated pre-existing web-build issue found while verifying this |
 | 0.6 | Connect to the TV | ✅ **done & verified** — paired, installed, launched, screenshotted, 41 MB PSS |
-| 0.6b | Three OTA bugs | ✅ **done, build-verified — not yet device-verified** — real semver comparison (`UpdateManager.isNewerVersion`, 7 passing unit tests incl. the exact v1.0.0-vs-v0.17.3 regression scenario), a consent dialog before any install, and an install-permission prompt (`canInstallUnknownApps` / `requestInstallUnknownAppsPermission`) before attempting one. `assembleDebug`, `assembleRelease`, and `testDebugUnitTest` all green; release APK re-verified signed with the keystore. **Not yet observed running on the TV** — that's 0.7 |
-| 0.7 | Prove OTA end to end | 🟡 **in progress** — TV unexpectedly reachable today, live device test underway. First attempt tested v0.17.5 (built *before* the 0.6b fixes) by mistake — confirmed the *old* silent-auto-install bug still reproduces on that build, which is expected, not a regression. v0.17.6 (has the fixes) now installed via `adb install` to set up a clean test; this commit exists to cut a new release for v0.17.6 to detect and update to in-app |
+| 0.6b | Three OTA bugs | ✅ **done & device-verified** — real semver comparison, a consent dialog before any install, and a permission check/explainer before attempting one. All three observed live on the Chromecast (see 0.7 below), not just built |
+| 0.7 | Prove OTA end to end | ✅ **done & device-verified** — see the full account below |
 
-**Phase 0 is complete when 0.7 passes on the actual TV — not before.** Do not begin Phase 1 until
-then; see `WORKFLOW.md` for the gate.
+**Phase 0 is not yet complete — 0.4 (Firestore) is the only item left.** Everything else in this
+table is done and verified on `main`. Do not start Phase 1 until 0.4 lands too; see `WORKFLOW.md`
+for the exact gate.
+
+### 0.7 — what actually happened (2026-09-10, live device session)
+
+The TV was unexpectedly reachable, so this was done for real rather than deferred.
+
+1. Merged `phase-0/ota-fixes` to `main`; CI published **v0.17.6**, correctly signed.
+2. First test attempt was invalid by accident: the TV still had **v0.17.5** installed (built
+   *before* today's 0.6b fixes), so the "live test" just reproduced the *old* silent-auto-install
+   bug — expected on that build, not a finding. Caught by checking `versionName` before trusting
+   the result, per this doc's own rule about never assuming.
+3. Installed v0.17.6 directly to get the fixed code onto the device, pushed a docs commit to cut
+   **v0.17.7** so v0.17.6 had something real to detect, and re-ran the test properly.
+4. **Two new bugs were found live that no amount of reading the code had caught:**
+   - The consent dialog was a same-composition overlay `Box`, which draws on top but does **not**
+     capture D-pad focus. A directional press moved focus on the screen *underneath* the dialog —
+     confirmed by screenshot comparison (the background "Mobile Phone" card highlighted, not
+     either dialog button). A consent dialog nobody can reach with a remote isn't consent.
+   - `tv-material3`'s default `Surface` color is light, and the dialog text was set to white —
+     unreadable white-on-near-white.
+   - Fixed by rebuilding both dialogs on a real `androidx.compose.ui.window.Dialog` (a distinct
+     platform window, which genuinely owns input focus while shown) with explicit dark styling and
+     `FocusRequester` on the primary action. Re-verified by repeating the exact same
+     screenshot-comparison test: this time the dialog's own buttons highlighted correctly and the
+     background never moved.
+5. Full loop re-verified end to end on-device: consent dialog → "Install now" → permission granted
+   → Android's real "Do you want to update this app?" confirmation → **installed** (versionCode
+   61→62, versionName v0.17.6→v0.17.7).
+6. Permission-denial path separately verified: with `REQUEST_INSTALL_PACKAGES` revoked, tapping
+   "Install now" showed the app's own explainer dialog (correctly focus-trapped and legible) —
+   *not* the raw OS block from before.
+7. Device restored to a clean state on the genuine v0.17.7 GitHub release APK.
+
+**No screen-sleep issue was actually device state** — the Chromecast puts its display to sleep
+quickly with no interaction; several early confused results in this session traced back to
+sending input while the screen was asleep, or to background network being restricted while
+asleep. `adb shell input keyevent KEYCODE_WAKEUP` before any test avoids this.
 
 
 **Goal:** a working build-test loop. No new features. Nothing in this phase is user-visible

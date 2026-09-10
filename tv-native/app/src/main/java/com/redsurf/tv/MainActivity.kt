@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -24,13 +25,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.redsurf.tv.updater.UpdateManager
 import com.redsurf.tv.ui.TiViMateLayout
@@ -144,44 +148,42 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * "An update is available - install now?" TiViMate-class consent prompt. Phase 0 plumbing,
- * not the Phase 1 design system - uses the same overlay-Box + tv-material3 Button pattern
- * already established in OnboardingScreen.kt's CloudSetupContent.
+ * "An update is available - install now?" TiViMate-class consent prompt. Phase 0 plumbing, not
+ * the Phase 1 design system.
+ *
+ * Uses a real android.compose.ui.window.Dialog (a separate platform Window), not a same-
+ * composition overlay Box. A same-composition Box only draws on top - it does not capture D-pad
+ * focus, so the previous version of this dialog was unusable from a real remote: focus stayed
+ * on whatever was focused in the screen underneath, and a DPAD press would navigate the
+ * background instead of the dialog. This was caught by live-device testing, not by reading the
+ * code (see docs/plans/PHASE_0.md #0.7). A Dialog is a distinct window and owns input focus for
+ * as long as it's shown, which is what a modal actually requires.
  */
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun UpdateAvailableDialog(versionName: String, onInstall: () -> Unit, onDismiss: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Surface(
-            modifier = Modifier.widthIn(max = 520.dp)
-        ) {
-            Column(modifier = Modifier.padding(32.dp)) {
-                Text("Update available", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    "RedSurf $versionName is ready to install.",
-                    color = Color(0xFFA1A1AA),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Row {
-                    Button(
-                        onClick = onInstall,
-                        colors = ButtonDefaults.colors(containerColor = Color(0xFFE11D48))
-                    ) {
-                        Text("Install now")
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.colors(containerColor = Color.DarkGray)
-                    ) {
-                        Text("Later")
-                    }
-                }
+    ModalCard(onDismissRequest = onDismiss) { installButtonFocus ->
+        Text("Update available", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            "RedSurf $versionName is ready to install.",
+            color = Color(0xFFA1A1AA),
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Row {
+            Button(
+                onClick = onInstall,
+                modifier = Modifier.focusRequester(installButtonFocus),
+                colors = ButtonDefaults.colors(containerColor = Color(0xFFE11D48))
+            ) {
+                Text("Install now")
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.colors(containerColor = Color.DarkGray)
+            ) {
+                Text("Later")
             }
         }
     }
@@ -192,42 +194,68 @@ private fun UpdateAvailableDialog(versionName: String, onInstall: () -> Unit, on
  * install unknown apps yet (Android 8+, per-app toggle). Explains why before sending the user
  * to the system settings screen, rather than silently failing - the behaviour this replaces.
  */
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun InstallPermissionDialog(onGoToSettings: () -> Unit, onDismiss: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)),
-        contentAlignment = Alignment.Center
+    ModalCard(onDismissRequest = onDismiss) { settingsButtonFocus ->
+        Text("Permission needed", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            "To install updates, RedSurf needs permission to install unknown apps. " +
+                "You'll be taken to Settings - enable it there, then reopen RedSurf to install the update.",
+            color = Color(0xFFA1A1AA),
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Row {
+            Button(
+                onClick = onGoToSettings,
+                modifier = Modifier.focusRequester(settingsButtonFocus),
+                colors = ButtonDefaults.colors(containerColor = Color(0xFFE11D48))
+            ) {
+                Text("Open settings")
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.colors(containerColor = Color.DarkGray)
+            ) {
+                Text("Cancel")
+            }
+        }
+    }
+}
+
+/**
+ * Shared modal chrome for the two dialogs above: a real platform Dialog window (so it actually
+ * captures D-pad input, see UpdateAvailableDialog's doc comment), a dark card matching the rest
+ * of the app's palette (tv-material3's default Surface color is light, which produced unreadable
+ * white-on-white text - also caught live, not by reading the code), and the primary action
+ * pre-focused so OK works immediately without the user having to navigate to it first.
+ */
+@Composable
+private fun ModalCard(onDismissRequest: () -> Unit, content: @Composable (primaryActionFocus: FocusRequester) -> Unit) {
+    val primaryActionFocus = remember { FocusRequester() }
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(
-            modifier = Modifier.widthIn(max = 520.dp)
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)),
+            contentAlignment = Alignment.Center
         ) {
-            Column(modifier = Modifier.padding(32.dp)) {
-                Text("Permission needed", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    "To install updates, RedSurf needs permission to install unknown apps. " +
-                        "You'll be taken to Settings - enable it there, then reopen RedSurf to install the update.",
-                    color = Color(0xFFA1A1AA),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Row {
-                    Button(
-                        onClick = onGoToSettings,
-                        colors = ButtonDefaults.colors(containerColor = Color(0xFFE11D48))
-                    ) {
-                        Text("Open settings")
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.colors(containerColor = Color.DarkGray)
-                    ) {
-                        Text("Cancel")
-                    }
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 520.dp)
+                    .background(Color(0xFF18181B), RoundedCornerShape(16.dp))
+                    .padding(32.dp)
+            ) {
+                Column {
+                    content(primaryActionFocus)
                 }
             }
         }
+    }
+    LaunchedEffect(Unit) {
+        primaryActionFocus.requestFocus()
     }
 }
