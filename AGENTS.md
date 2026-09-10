@@ -19,26 +19,20 @@ a Next.js web portal at the repo root.
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which
 were false. It is kept for provenance only.
 
-## Before writing the Phase 1 brief
+## Current phase: Phase 1 — `docs/plans/PHASE_1.md`
 
-**Get the user's decision on this before finalizing scope — it changes what Phase 1 covers.**
+Design system + Live TV screen. The brief makes every architectural call up front (theme, focus
+model, per-group Room queries, one-player-per-screen, Coil, no Paging 3 yet, no nav library) so
+execution is Sonnet-lane; Opus reviews at the two screenshot checkpoints. Read the brief's
+"Decisions already made" section before touching anything — those are settled.
 
-`pairingSessions` (Firestore) was locked down for security on 2026-09-10, which surfaced a real
-product question that fixing the rules didn't answer: **nothing reads that collection anymore.**
-The native TV app replaced Firebase-based pairing with local NanoHttpd pairing a while back and
-was never reconnected to Firestore, so both web pairing flows —
-`app/dashboard/page.tsx`'s `handlePairTV` (push a saved playlist to a code) and
-`app/pair/[code]/page.tsx` (type credentials directly) — currently write to a dead end. A user
-completing either flow sees "success" and nothing happens.
+## Product decisions on record
 
-Two ways this resolves, and they lead to different Phase 1 scope:
-- **Revive it** — wire the TV app back up to listen for `pairingSessions` writes (in addition to,
-  or instead of, NanoHttpd), making cloud pairing a real second pairing path again.
-- **Remove it** — delete the two web flows and simplify the onboarding story to LAN pairing +
-  direct entry, matching what `PRODUCT_VISION.md` actually describes as the fallback chain.
-
-Ask before assuming either. Don't build Phase 1's onboarding/pairing UI against a feature whose
-fate hasn't been decided.
+- **Cloud pairing: revive** (user, 2026-09-10). Background: `pairingSessions` was locked down for
+  security, which surfaced that nothing reads it — the TV app moved to local NanoHttpd pairing and
+  was never reconnected, so both web pairing flows (`app/dashboard`'s push, `app/pair/[code]`)
+  currently write to a dead end. Decision: keep them; the TV-side Firestore listener gets built in
+  the cloud phase. Until then, don't delete anything cloud-related, and don't build on it either.
 
 ## The one rule that matters
 

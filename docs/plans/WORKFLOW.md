@@ -76,10 +76,12 @@ device.
 
 Phase 0, by contrast, is entirely mechanical. It is a good Sonnet phase.
 
-**Before writing the Phase 1 brief, resolve the open pairing-architecture question in
-`AGENTS.md`** ("Before writing the Phase 1 brief" section) — whether cloud pairing gets revived
-or the dead web flows get removed changes what the onboarding/pairing UI in Phase 1 needs to
-cover. Ask the user; don't assume either direction.
+**The Phase 1 brief is written: `PHASE_1.md`** (2026-09-10). The pairing question that gated it
+was resolved — revive — and is on record in `AGENTS.md`. The brief front-loads every
+architectural decision precisely so that the *execution* is Sonnet-lane; Opus is needed only at
+the two screenshot checkpoints (A after the layout, B after playback) and for anything the brief
+didn't anticipate. That's the intended budget shape: one expensive planning pass, cheap execution,
+two short reviews.
 
 ## Docs-only commits: skip the release
 
