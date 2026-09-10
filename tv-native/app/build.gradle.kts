@@ -1,8 +1,25 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp") version "1.9.22-1.0.17"
 }
+
+// Release signing.
+// Locally: ~/.redsurf/keys/signing.properties (created by scripts/setup-signing.sh, never committed).
+// In CI:   env vars decoded from GitHub Actions secrets.
+// If neither is present the release build simply stays unsigned rather than failing — so a fresh
+// clone can still run `assembleDebug` without any keystore.
+val signingProps = Properties().apply {
+    val f = File(System.getProperty("user.home"), ".redsurf/keys/signing.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun signingOf(prop: String, env: String): String? =
+    signingProps.getProperty(prop) ?: System.getenv(env)
+
+val releaseStorePath: String? = signingOf("storeFile", "KEYSTORE_FILE")
+val hasReleaseSigning: Boolean = releaseStorePath != null && File(releaseStorePath).exists()
 
 android {
     namespace = "com.redsurf.tv"
@@ -24,6 +41,28 @@ android {
         compose = true 
     }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.8" }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = File(releaseStorePath!!)
+                storePassword = signingOf("storePassword", "KEYSTORE_PASSWORD")
+                keyAlias = signingOf("keyAlias", "KEY_ALIAS")
+                keyPassword = signingOf("keyPassword", "KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // R8 stays off for now. Turn it on as its own isolated change, so a shrinking
+            // bug is never mistaken for a feature bug.
+            isMinifyEnabled = false
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
 }
 
 dependencies {

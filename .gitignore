@@ -5,3 +5,17 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# signing material - never commit (repo is public)
+*.jks
+*.keystore
+signing.properties
+local.properties
+
+# Android build output
+build/
+.gradle/
+*.apk
+*.aab
+captures/
+.cxx/
