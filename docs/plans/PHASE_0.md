@@ -7,15 +7,21 @@
 | 0.1 | Local toolchain + Gradle wrapper | ✅ **done & verified** — JDK 17, Gradle 8.7 wrapper committed, SDK 498 MB, `assembleDebug` + `assembleRelease` both green |
 | 0.2 | Fix generator-script damage | ✅ **done & verified** — all 17 `\$` interpolation bugs fixed (`grep -rn '\\\$' tv-native` returns 0), duplicate `worker/EpgSyncWorker.kt` stub deleted, `assembleDebug` + `assembleRelease` both still green |
 | 0.3 | Release signing | ✅ **done & verified end to end** — CI publishes `assembleRelease` signed with the permanent keystore and refuses to publish anything debug-signed. **v0.17.4 is the first correctly-signed release.** Its published APK cert matches `1b13f1d9…d2510d8a`, and it was observed **installing over an existing v1.0.0 install without an uninstall** (versionCode 1 → 59) on the actual Chromecast |
-| 0.4 | Firestore lockdown | ⬜ **not started** — `pairingSessions` still world-readable; dashboard schema still mismatched |
+| 0.4 | Firestore lockdown | ✅ **done & verified against the live project, not just written** — deployed to `redsurf-fdd99` via `firebase deploy --only firestore:rules`. Verified with real HTTP requests, not review: unauthenticated read of `pairingSessions` → 403; unauthenticated playlist write → 403; **a real signed-in user's exact "Add Playlist" schema → 200** (the old rule's `{url, addedAt}`-only schema never matched what the dashboard actually sends, which is why Add Playlist never worked); cross-user write → 403; write missing a required field → 403; the `isActive`-only toggle update → 200. Test account and document deleted afterward, no trace left in the project |
 | 0.5 | Drop dead Firebase project | ✅ **done & verified** — `firebase-applet-config.json` deleted; `lib/firebase.ts` fallbacks removed and now fails loudly with a clear error if env vars are missing (verified: throws when unset, initializes cleanly when set — tested directly against the compiled file, plus a clean full-project `tsc` check). See note below re: an unrelated pre-existing web-build issue found while verifying this |
 | 0.6 | Connect to the TV | ✅ **done & verified** — paired, installed, launched, screenshotted, 41 MB PSS |
 | 0.6b | Three OTA bugs | ✅ **done & device-verified** — real semver comparison, a consent dialog before any install, and a permission check/explainer before attempting one. All three observed live on the Chromecast (see 0.7 below), not just built |
 | 0.7 | Prove OTA end to end | ✅ **done & device-verified** — see the full account below |
 
-**Phase 0 is not yet complete — 0.4 (Firestore) is the only item left.** Everything else in this
-table is done and verified on `main`. Do not start Phase 1 until 0.4 lands too; see `WORKFLOW.md`
-for the exact gate.
+**Phase 0 is complete.** All seven items are done and verified — most against the actual running
+system (device, live Firestore project), not just by reading code or a green build. See
+`WORKFLOW.md` for the Phase 1 gate this satisfies.
+
+**One product question raised while fixing 0.4, not resolved by it:** `pairingSessions` is now
+correctly locked down, but nothing reads it — the native TV app moved to local NanoHttpd pairing
+and never got reconnected to Firestore. Both web pairing flows (`app/dashboard`'s push,
+`app/pair/[code]`'s manual entry) currently write to a dead end. Worth a decision before Phase 1:
+revive cloud pairing on the TV side, or remove the two web flows.
 
 ### 0.7 — what actually happened (2026-09-10, live device session)
 

@@ -101,11 +101,20 @@ are missing (0.5, verified directly against the compiled file).
 DAO methods are all dead. `VodDashboard` is hardcoded film titles.
 
 **Known broken:** EPG never populates (no `WorkManager` enqueue exists, so neither sync worker ever
-runs); `firestore.rules` leaves `pairingSessions` world-readable while the web app writes IPTV
-credentials into it; the cloud dashboard cannot save a playlist because the rules and the app
-disagree on the schema (0.4, not started); no design system, so nothing shows a focus state; the
-web app cannot currently be built locally on this machine — a pre-existing, unrelated native-binary
-install issue with `@tailwindcss/oxide`/`lightningcss`, see `docs/plans/PHASE_0.md`.
+runs); no design system, so nothing shows a focus state; the web app cannot currently be built
+locally on this machine — a pre-existing, unrelated native-binary install issue with
+`@tailwindcss/oxide`/`lightningcss`, see `docs/plans/PHASE_0.md`.
+
+**Fixed 2026-09-10, verified against the live Firestore project with real HTTP requests, not just
+reviewed:** `firestore.rules` no longer leaves `pairingSessions` world-readable, and the playlist
+schema now matches what the dashboard actually writes, so "Add Playlist" works. One thing this
+surfaced but didn't resolve: nothing reads `pairingSessions` anymore — the native app's Firebase
+pairing was replaced by local NanoHttpd pairing and never reconnected — so the two web pairing
+flows are currently a dead end. Revive or remove is a product decision, not made here.
+
+**Phase 0 is complete as of 2026-09-10.** Every item in `docs/plans/PHASE_0.md` is done and
+verified — most against the actual running system, not just a green build. Phase 1 (the design
+system) may begin.
 
 Update this section when the facts change. It is the file everyone reads first, so a stale claim
 here is worse than none.

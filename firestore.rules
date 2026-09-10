@@ -13,31 +13,93 @@ service cloud.firestore {
     function existing() { return resource.data; }
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
 
-    // Blueprint Validation: Playlist
+    // Real schema written by app/dashboard/page.tsx's handleAddPlaylist (see docs/plans/PHASE_0.md
+    // #0.4). The previous version of this function only allowed {url, addedAt} - two fields the
+    // dashboard never actually wrote - so every "Add Playlist" was silently rejected.
     function isValidPlaylist(data) {
-      return data.keys().hasAll(['url', 'addedAt']) 
-        && data.keys().size() == 2
-        && data.url is string 
-        && data.url.size() <= 2048
-        && data.addedAt is number;
+      return data.keys().hasAll(['name', 'server', 'username', 'password', 'type', 'contentType', 'isActive', 'addedAt'])
+        && data.keys().size() == 8
+        && data.name is string && data.name.size() <= 200
+        && data.server is string && data.server.size() <= 2048
+        && data.username is string && data.username.size() <= 200
+        && data.password is string && data.password.size() <= 500
+        && data.type in ['xtream', 'm3u', 'stalker']
+        && data.contentType in ['live', 'vod', 'both']
+        && data.isActive is bool;
+      // addedAt is written via serverTimestamp(); Firestore resolves that sentinel to a
+      // real timestamp before rules evaluate, so it's intentionally not type-checked here -
+      // the client can't set it to anything else regardless.
     }
 
     match /users/{userId}/playlists/{playlistId} {
       allow read: if isSignedIn() && isOwner(userId);
-      allow create: if isSignedIn() 
-                    && isOwner(userId) 
-                    && isValidId(playlistId)
-                    && isValidPlaylist(incoming());
-      allow update: if isSignedIn() 
+      allow create: if isSignedIn()
                     && isOwner(userId)
                     && isValidId(playlistId)
-                    && isValidPlaylist(incoming())
-                    && incoming().diff(existing()).affectedKeys().hasOnly(['url', 'addedAt']);
+                    && isValidPlaylist(incoming());
+      allow update: if isSignedIn()
+                    && isOwner(userId)
+                    && isValidId(playlistId)
+                    && (
+                      // A full, valid rewrite of the document.
+                      isValidPlaylist(incoming())
+                      ||
+                      // Or just the isActive toggle (handleToggleActive), touching nothing else.
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['isActive']) && incoming().isActive is bool)
+                    );
       allow delete: if isSignedIn() && isOwner(userId);
     }
 
+    // pairingSessions: credential handoff for pairing a TV. Two real write paths exist -
+    // app/dashboard/page.tsx's handlePairTV (signed in, pushes a saved playlist to a code) and
+    // app/pair/[code]/page.tsx's handleSubmit (anonymous - the point of a pairing code is that
+    // knowing it is the authorization, no account required). Both write to the same document
+    // shape union below.
+    //
+    // NOTE: as of 2026-09-10 nothing reads this collection. The native TV app's Firebase
+    // pairing was removed in favour of local NanoHttpd pairing (see AGENTS.md) and never
+    // reconnected here, so both web flows above currently write to a collection nothing
+    // consumes. Read is denied outright rather than left open for a consumer that doesn't
+    // exist. This is a product question (revive cloud pairing on the TV side, or remove these
+    // two web flows) for the user to decide, not something to resolve inside a rules fix.
+    function isValidPairingCode(code) {
+      return code is string && code.matches('^[A-Za-z0-9]{6}$');
+    }
+
+    function isValidPairingWrite(data) {
+      return data.keys().hasOnly(
+              ['status', 'playlistType', 'contentType', 'name', 'server', 'username',
+               'password', 'hiddenGroups', 'userId', 'url', 'updatedAt'])
+        && data.status is string && data.status.size() <= 20
+        && (!('name' in data) || (data.name is string && data.name.size() <= 200))
+        && (!('server' in data) || (data.server is string && data.server.size() <= 2048))
+        && (!('username' in data) || (data.username is string && data.username.size() <= 200))
+        && (!('password' in data) || (data.password is string && data.password.size() <= 500))
+        && (!('url' in data) || (data.url is string && data.url.size() <= 2048))
+        && (!('playlistType' in data) || (data.playlistType is string && data.playlistType.size() <= 50))
+        && (!('contentType' in data) || (data.contentType is string && data.contentType.size() <= 50))
+        && (!('hiddenGroups' in data) || data.hiddenGroups is list)
+        && (!('userId' in data) || (data.userId is string && data.userId.size() <= 200))
+        && (!('updatedAt' in data) || data.updatedAt is number);
+    }
+
     match /pairingSessions/{code} {
-      allow read, write: if true; // Temporary open access for pairing mechanism
+      allow read: if false;
+      allow create, update: if isValidPairingCode(code)
+                             && isValidPairingWrite(incoming())
+                             // A write claiming a userId must be the caller's own uid - stops
+                             // one account's push being spoofed as another's.
+                             && (!('userId' in incoming()) || (isSignedIn() && incoming().userId == request.auth.uid));
+      allow delete: if false;
+    }
+
+    // family_devices: read by the dashboard (app/dashboard/page.tsx) to list paired devices.
+    // Nothing in the codebase writes to it - it's read-only/aspirational today. Allow signed-in
+    // read so the dashboard's listener doesn't hit a permission error; deny write since no
+    // feature actually needs it yet.
+    match /family_devices/{deviceId} {
+      allow read: if isSignedIn();
+      allow write: if false;
     }
   }
 }
