@@ -39,8 +39,16 @@ Phase 1 (design system + Live TV screen) may begin only once **all** of these ar
 1. `grep -rn '\\\$' --include="*.kt" tv-native` returns **zero** matches.
 2. The duplicate `worker/EpgSyncWorker.kt` stub is deleted.
 3. CI runs `./gradlew assembleRelease` and publishes a **release-signed** APK.
-4. **Two consecutive CI releases carry the same signing certificate.** Verify:
-   `unzip -p RedSurf-vX.apk META-INF/*.RSA | shasum -a 256` on both — the hashes must match.
+4. ✅ **Done.** Two consecutive CI releases carry the same signing certificate — verified across
+   v0.17.4 and v0.17.5, both `1b13f1d9…d2510d8a`.
+
+   Compare certificates with **apksigner**, never by hashing the signature block:
+   ```bash
+   apksigner verify --print-certs RedSurf-vX.apk | grep "SHA-256 digest"
+   ```
+   `unzip -p … META-INF/*.RSA | shasum` is **wrong** — that file is a PKCS#7 block containing the
+   signature over *that specific APK*, so it differs on every build even when the certificate is
+   identical. It will make correct releases look broken.
 5. The three OTA defects in `PHASE_0.md` §0.6b are fixed: real semantic version comparison, a user
    consent prompt, and an "install unknown apps" permission request.
 6. `firestore.rules` no longer exposes `pairingSessions`, and the dashboard can save a playlist.
@@ -58,3 +66,11 @@ something an acceptance criterion can capture. Expect to iterate against screens
 device.
 
 Phase 0, by contrast, is entirely mechanical. It is a good Sonnet phase.
+
+## Docs-only commits: skip the release
+
+Every push to `main` triggers the release workflow and publishes a new version. For commits that
+change nothing shippable — docs, comments, this file — put `[skip ci]` in the commit message and
+GitHub will skip the run entirely.
+
+Reserve real releases for changes that actually alter the APK.
