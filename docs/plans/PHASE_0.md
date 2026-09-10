@@ -1,5 +1,22 @@
 # Phase 0 — Make the loop work
 
+## Status board (update as you go)
+
+| # | Task | State |
+|---|---|---|
+| 0.1 | Local toolchain + Gradle wrapper | ✅ **done & verified** — JDK 17, Gradle 8.7 wrapper committed, SDK 498 MB, `assembleDebug` + `assembleRelease` both green |
+| 0.2 | Fix generator-script damage | ⬜ **partly** — 3,361 lines of `tv_*.sh` deleted ✅; the **17 `\$` interpolation bugs and the duplicate `EpgSyncWorker` remain** |
+| 0.3 | Release signing | 🟡 **local half done & verified** — keystore exists, `signingConfig` wired, release APK cert matches `1b13f1d9…d2510d8a`. **CI still runs `assembleDebug`** — must switch to `./gradlew assembleRelease` + decode `KEYSTORE_BASE64` |
+| 0.4 | Firestore lockdown | ⬜ **not started** — `pairingSessions` still world-readable; dashboard schema still mismatched |
+| 0.5 | Drop dead Firebase project | 🟡 `firebase-applet-config.json` deleted ✅; **hardcoded fallbacks in `lib/firebase.ts` remain** |
+| 0.6 | Connect to the TV | ✅ **done & verified** — paired, installed, launched, screenshotted, 41 MB PSS |
+| 0.6b | Three OTA bugs | ⬜ **not started** — see section below |
+| 0.7 | Prove OTA end to end | ⬜ **blocked** on 0.2, 0.3, 0.6b |
+
+**Phase 0 is complete when 0.7 passes on the actual TV — not before.** Do not begin Phase 1 until
+then; see `WORKFLOW.md` for the gate.
+
+
 **Goal:** a working build-test loop. No new features. Nothing in this phase is user-visible
 except that updates start installing.
 

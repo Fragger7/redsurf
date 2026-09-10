@@ -12,7 +12,8 @@ a Next.js web portal at the repo root.
 | `docs/vision/UI_SPEC.md` | The design language: palette, focus model, screen layouts. |
 | `docs/vision/IPTV_DOMAIN_KNOWLEDGE.md` | Hard-won IPTV engineering knowledge. Read before touching parsing, networking or playback. |
 | `docs/plans/HARDWARE.md` | The target device's real, measured limits. |
-| `docs/plans/PHASE_*.md` | What is being built right now, with acceptance criteria. |
+| `docs/plans/PHASE_*.md` | What is being built right now, with a status board and acceptance criteria. |
+| `docs/plans/WORKFLOW.md` | Which model does which work, when to escalate, and the phase gates. |
 | `docs/vision/references/` | Screenshots: `streamvault/` for layout, `tivimate/` for workflow, `../mockups/` for colour. |
 
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which
