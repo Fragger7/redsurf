@@ -76,6 +76,11 @@ device.
 
 Phase 0, by contrast, is entirely mechanical. It is a good Sonnet phase.
 
+**Before writing the Phase 1 brief, resolve the open pairing-architecture question in
+`AGENTS.md`** ("Before writing the Phase 1 brief" section) — whether cloud pairing gets revived
+or the dead web flows get removed changes what the onboarding/pairing UI in Phase 1 needs to
+cover. Ask the user; don't assume either direction.
+
 ## Docs-only commits: skip the release
 
 Every push to `main` triggers the release workflow and publishes a new version. For commits that
