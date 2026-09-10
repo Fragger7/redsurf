@@ -11,7 +11,7 @@
 | 0.5 | Drop dead Firebase project | ✅ **done & verified** — `firebase-applet-config.json` deleted; `lib/firebase.ts` fallbacks removed and now fails loudly with a clear error if env vars are missing (verified: throws when unset, initializes cleanly when set — tested directly against the compiled file, plus a clean full-project `tsc` check). See note below re: an unrelated pre-existing web-build issue found while verifying this |
 | 0.6 | Connect to the TV | ✅ **done & verified** — paired, installed, launched, screenshotted, 41 MB PSS |
 | 0.6b | Three OTA bugs | ✅ **done, build-verified — not yet device-verified** — real semver comparison (`UpdateManager.isNewerVersion`, 7 passing unit tests incl. the exact v1.0.0-vs-v0.17.3 regression scenario), a consent dialog before any install, and an install-permission prompt (`canInstallUnknownApps` / `requestInstallUnknownAppsPermission`) before attempting one. `assembleDebug`, `assembleRelease`, and `testDebugUnitTest` all green; release APK re-verified signed with the keystore. **Not yet observed running on the TV** — that's 0.7 |
-| 0.7 | Prove OTA end to end | ⬜ **not started — needs the TV powered on** |
+| 0.7 | Prove OTA end to end | 🟡 **in progress** — TV unexpectedly reachable today, live device test underway. First attempt tested v0.17.5 (built *before* the 0.6b fixes) by mistake — confirmed the *old* silent-auto-install bug still reproduces on that build, which is expected, not a regression. v0.17.6 (has the fixes) now installed via `adb install` to set up a clean test; this commit exists to cut a new release for v0.17.6 to detect and update to in-app |
 
 **Phase 0 is complete when 0.7 passes on the actual TV — not before.** Do not begin Phase 1 until
 then; see `WORKFLOW.md` for the gate.
