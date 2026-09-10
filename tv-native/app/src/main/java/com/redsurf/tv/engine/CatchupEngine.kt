@@ -30,11 +30,11 @@ object CatchupEngine {
         return when (type) {
             CatchupType.DEFAULT -> {
                 val connector = if (liveUrl.contains("?")) "&" else "?"
-                "\$liveUrl\${connector}utc=\$startTimeUnix&lutc=\${startTimeUnix + (durationMinutes * 60)}"
+                "$liveUrl${connector}utc=$startTimeUnix&lutc=${startTimeUnix + (durationMinutes * 60)}"
             }
             CatchupType.APPEND -> {
                 val connector = if (liveUrl.contains("?")) "&" else "?"
-                "\$liveUrl\${connector}utc=\$startTimeUnix"
+                "$liveUrl${connector}utc=$startTimeUnix"
             }
             CatchupType.SHIFT -> {
                 // Highly provider specific. Example conversion:
@@ -53,7 +53,7 @@ object CatchupEngine {
                         val pass = parts[parts.size - 2]
                         val channelId = parts.last()
                         
-                        "\$host/timeshift/\$user/\$pass/\$durationMinutes/\$dateString/\$channelId"
+                        "$host/timeshift/$user/$pass/$durationMinutes/$dateString/$channelId"
                     } else {
                         liveUrl // Fallback if format is unknown
                     }

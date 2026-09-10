@@ -5,13 +5,13 @@
 | # | Task | State |
 |---|---|---|
 | 0.1 | Local toolchain + Gradle wrapper | ✅ **done & verified** — JDK 17, Gradle 8.7 wrapper committed, SDK 498 MB, `assembleDebug` + `assembleRelease` both green |
-| 0.2 | Fix generator-script damage | ⬜ **partly** — 3,361 lines of `tv_*.sh` deleted ✅; the **17 `\$` interpolation bugs and the duplicate `EpgSyncWorker` remain** |
+| 0.2 | Fix generator-script damage | ✅ **done & verified** — all 17 `\$` interpolation bugs fixed (`grep -rn '\\\$' tv-native` returns 0), duplicate `worker/EpgSyncWorker.kt` stub deleted, `assembleDebug` + `assembleRelease` both still green |
 | 0.3 | Release signing | ✅ **done & verified end to end** — CI publishes `assembleRelease` signed with the permanent keystore and refuses to publish anything debug-signed. **v0.17.4 is the first correctly-signed release.** Its published APK cert matches `1b13f1d9…d2510d8a`, and it was observed **installing over an existing v1.0.0 install without an uninstall** (versionCode 1 → 59) on the actual Chromecast |
 | 0.4 | Firestore lockdown | ⬜ **not started** — `pairingSessions` still world-readable; dashboard schema still mismatched |
-| 0.5 | Drop dead Firebase project | 🟡 `firebase-applet-config.json` deleted ✅; **hardcoded fallbacks in `lib/firebase.ts` remain** |
+| 0.5 | Drop dead Firebase project | ✅ **done & verified** — `firebase-applet-config.json` deleted; `lib/firebase.ts` fallbacks removed and now fails loudly with a clear error if env vars are missing (verified: throws when unset, initializes cleanly when set — tested directly against the compiled file, plus a clean full-project `tsc` check). See note below re: an unrelated pre-existing web-build issue found while verifying this |
 | 0.6 | Connect to the TV | ✅ **done & verified** — paired, installed, launched, screenshotted, 41 MB PSS |
-| 0.6b | Three OTA bugs | ⬜ **not started** — see section below |
-| 0.7 | Prove OTA end to end | ⬜ **blocked** on 0.2, 0.3, 0.6b |
+| 0.6b | Three OTA bugs | ✅ **done, build-verified — not yet device-verified** — real semver comparison (`UpdateManager.isNewerVersion`, 7 passing unit tests incl. the exact v1.0.0-vs-v0.17.3 regression scenario), a consent dialog before any install, and an install-permission prompt (`canInstallUnknownApps` / `requestInstallUnknownAppsPermission`) before attempting one. `assembleDebug`, `assembleRelease`, and `testDebugUnitTest` all green; release APK re-verified signed with the keystore. **Not yet observed running on the TV** — that's 0.7 |
+| 0.7 | Prove OTA end to end | ⬜ **not started — needs the TV powered on** |
 
 **Phase 0 is complete when 0.7 passes on the actual TV — not before.** Do not begin Phase 1 until
 then; see `WORKFLOW.md` for the gate.
@@ -172,3 +172,20 @@ actual TV, this phase is not done — do not mark it complete from a green CI ba
 - Read `../vision/README.md` first. Two binding constraints: **no Dagger Hilt** (it caused the KSP
   compiler loops that killed the predecessor project), and **borrow techniques, never transplant
   UI**.
+
+## Note — web app local build (found 2026-09-10, not fixed, out of scope for 0.5)
+
+Running `npm install && npm run build` at the repo root currently fails with
+`Error: Failed to load native binding` from `@tailwindcss/oxide` (and separately
+from `lightningcss`). This is npm failing to install the platform-specific native
+binary packages for this machine (darwin-x64) — unrelated to any code change.
+`lightningcss-darwin-x64` could be force-installed manually, but `@tailwindcss/oxide`
+hit the same class of failure and this was not chased further, since it's a separate
+issue from anything in the Phase 0 task list.
+
+The repo ships both `package-lock.json` and `bun.lock`; `bun` is not installed on this
+machine. Worth trying `bun install` instead of `npm install` next time this needs
+fixing — bun is the lockfile that looks authoritative here.
+
+This does not block CI (Vercel likely resolves platform binaries correctly in its own
+build environment) but does block local `next dev`/`next build` on this machine.

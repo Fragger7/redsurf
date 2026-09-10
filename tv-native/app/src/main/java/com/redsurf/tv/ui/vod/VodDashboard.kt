@@ -139,7 +139,7 @@ fun MovieCard(movie: VodMovie) {
                 colors = ClickableSurfaceDefaults.colors(containerColor = Color.Black.copy(alpha = 0.7f))
             ) {
                 Text(
-                    text = "★ \${movie.rating}",
+                    text = "★ ${movie.rating}",
                     style = MaterialTheme.typography.labelMedium,
                     color = Color(0xFFFFD700),
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)

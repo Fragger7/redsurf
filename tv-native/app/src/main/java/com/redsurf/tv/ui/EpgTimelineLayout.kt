@@ -95,7 +95,7 @@ fun EpgTimelineLayout(
                                             )
                                             val timeFormat = SimpleDateFormat("h:mm a", Locale.US)
                                             Text(
-                                                "\${timeFormat.format(Date(program.startTime))} - \${timeFormat.format(Date(program.endTime))}",
+                                                "${timeFormat.format(Date(program.startTime))} - ${timeFormat.format(Date(program.endTime))}",
                                                 color = if (isFocused) Color.White.copy(alpha=0.7f) else Color.Gray,
                                                 style = MaterialTheme.typography.labelSmall
                                             )

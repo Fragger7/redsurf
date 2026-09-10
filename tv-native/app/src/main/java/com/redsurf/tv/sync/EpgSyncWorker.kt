@@ -21,7 +21,7 @@ class EpgSyncWorker(
         val epgUrl = inputData.getString("EPG_URL") ?: return@withContext Result.failure()
 
         try {
-            Log.d("EpgSyncWorker", "Starting silent EPG update from: \$epgUrl")
+            Log.d("EpgSyncWorker", "Starting silent EPG update from: $epgUrl")
             val client = IptvNetworkModule.getOkHttpClient()
             val request = Request.Builder().url(epgUrl).build()
             

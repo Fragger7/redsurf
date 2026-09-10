@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.redsurf.tv.BuildConfig
@@ -40,8 +41,8 @@ object UpdateManager {
                 
                 // Compare with current version
                 val currentVersion = BuildConfig.VERSION_NAME
-                
-                if (latestTag.isNotEmpty() && latestTag != currentVersion) {
+
+                if (latestTag.isNotEmpty() && isNewerVersion(latestTag, currentVersion)) {
                     val assets = json.optJSONArray("assets")
                     if (assets != null && assets.length() > 0) {
                         val downloadUrl = assets.getJSONObject(0).optString("browser_download_url")
@@ -90,7 +91,7 @@ object UpdateManager {
         try {
             val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
             val uri = FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.fileprovider", file)
-            
+
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -99,5 +100,59 @@ object UpdateManager {
         } catch (e: Exception) {
             Log.e("UpdateManager", "Failed to launch package installer", e)
         }
+    }
+
+    /**
+     * Whether the OS will currently let this app trigger the package installer.
+     * On API 26+, "install unknown apps" is a per-app toggle the user must grant
+     * explicitly (this is the prompt observed live: "your TV currently isn't allowed
+     * to install unknown apps from this source"). Below API 26 there is no such
+     * per-app toggle - REQUEST_INSTALL_PACKAGES in the manifest is sufficient.
+     */
+    fun canInstallUnknownApps(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.packageManager.canRequestPackageInstalls()
+        } else {
+            true
+        }
+    }
+
+    /** Sends the user to the system settings screen to grant install permission for this app. */
+    fun requestInstallUnknownAppsPermission(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = Uri.parse("package:${context.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        }
+    }
+
+    /**
+     * True only if [remote] is a strictly newer semantic version than [current].
+     * Tags look like "v0.17.4"; a leading "v" is optional and missing trailing
+     * components are treated as 0 (e.g. "v1.0" == "v1.0.0"). Any tag that doesn't
+     * parse as dot-separated integers returns false rather than risking a false
+     * positive - the version this replaces used plain string inequality, which
+     * treated a locally-built "v1.0.0" as different from (and therefore "newer"
+     * than) every published tag, downgrading the app on every single launch.
+     */
+    internal fun isNewerVersion(remote: String, current: String): Boolean {
+        fun parse(tag: String): List<Int>? {
+            val cleaned = tag.removePrefix("v").trim()
+            if (cleaned.isEmpty()) return null
+            return cleaned.split(".").map { it.toIntOrNull() ?: return null }
+        }
+
+        val remoteParts = parse(remote) ?: return false
+        val currentParts = parse(current) ?: return false
+
+        val length = maxOf(remoteParts.size, currentParts.size)
+        for (i in 0 until length) {
+            val r = remoteParts.getOrElse(i) { 0 }
+            val c = currentParts.getOrElse(i) { 0 }
+            if (r != c) return r > c
+        }
+        return false
     }
 }

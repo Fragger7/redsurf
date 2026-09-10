@@ -185,7 +185,7 @@ fun TrackSelectionMenu(exoPlayer: ExoPlayer, onClose: () -> Unit) {
                 } else {
                     items(audioGroup.length) { i ->
                         val format = audioGroup.getTrackFormat(i)
-                        val language = format.language ?: "Track \${i + 1}"
+                        val language = format.language ?: "Track ${i + 1}"
                         OsdButton(
                             text = language.uppercase(),
                             onClick = {

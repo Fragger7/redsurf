@@ -33,7 +33,7 @@ class AfrManager(private val context: Context, private val player: ExoPlayer) {
                 val format = player.videoFormat
                 if (format != null && format.frameRate > 0) {
                     val frameRate = format.frameRate
-                    Log.d("AfrManager", "Detected stream frame rate: \$frameRate")
+                    Log.d("AfrManager", "Detected stream frame rate: $frameRate")
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         switchRefreshRate(frameRate)
                     }
@@ -64,7 +64,7 @@ class AfrManager(private val context: Context, private val player: ExoPlayer) {
         }
 
         bestMode?.let { mode ->
-            Log.d("AfrManager", "Switching TV panel to: \${mode.refreshRate}Hz")
+            Log.d("AfrManager", "Switching TV panel to: ${mode.refreshRate}Hz")
             // In a real activity, this is applied to window.attributes.preferredDisplayModeId
             // We expose this so the MainActivity can observe and apply it.
             onModeFound?.invoke(mode.modeId)

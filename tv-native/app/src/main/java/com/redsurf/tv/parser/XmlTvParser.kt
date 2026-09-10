@@ -61,7 +61,7 @@ object XmlTvParser {
                         if (name == "programme" && currentChannelId.isNotEmpty()) {
                             programsBatch.add(
                                 EpgProgramEntity(
-                                    id = "\$currentChannelId-\$currentStart",
+                                    id = "$currentChannelId-$currentStart",
                                     channelEpgId = currentChannelId,
                                     title = currentTitle,
                                     description = currentDesc,
@@ -89,7 +89,7 @@ object XmlTvParser {
                 epgDao.insertPrograms(programsBatch)
                 insertedCount += programsBatch.size
             }
-            Log.d("XmlTvParser", "Successfully parsed and inserted \$insertedCount EPG programs.")
+            Log.d("XmlTvParser", "Successfully parsed and inserted $insertedCount EPG programs.")
 
         } catch (e: Exception) {
             Log.e("XmlTvParser", "Fatal error during EPG parsing", e)

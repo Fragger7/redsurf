@@ -24,8 +24,8 @@ class BackupManager(private val context: Context) {
     suspend fun createBackup(outputUri: Uri): Boolean = withContext(Dispatchers.IO) {
         try {
             val dbFile = context.getDatabasePath(dbName)
-            val walFile = context.getDatabasePath("\$dbName-wal")
-            val shmFile = context.getDatabasePath("\$dbName-shm")
+            val walFile = context.getDatabasePath("$dbName-wal")
+            val shmFile = context.getDatabasePath("$dbName-shm")
 
             context.contentResolver.openOutputStream(outputUri)?.use { fos ->
                 ZipOutputStream(fos).use { zos ->

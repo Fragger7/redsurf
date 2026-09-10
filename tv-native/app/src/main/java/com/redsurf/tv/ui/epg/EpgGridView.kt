@@ -110,7 +110,7 @@ fun EpgGridView(channels: List<Channel>, onChannelSelected: (Channel) -> Unit) {
                                     )
                                     val timeFmt = SimpleDateFormat("HH:mm", Locale.US)
                                     Text(
-                                        text = "\${timeFmt.format(Date(program.startUnix))} - \${timeFmt.format(Date(program.endUnix))}",
+                                        text = "${timeFmt.format(Date(program.startUnix))} - ${timeFmt.format(Date(program.endUnix))}",
                                         color = Color.Gray,
                                         style = MaterialTheme.typography.bodySmall
                                     )

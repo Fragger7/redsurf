@@ -294,7 +294,7 @@ fun PlaylistItem(playlist: PlaylistEntity, isActive: Boolean, onClick: () -> Uni
     ) {
         Row(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "\${playlist.name} (\${playlist.type})",
+                text = "${playlist.name} (${playlist.type})",
                 style = MaterialTheme.typography.titleMedium,
                 color = if (isActive) Color.White else Color.LightGray
             )

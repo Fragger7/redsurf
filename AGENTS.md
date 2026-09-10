@@ -81,17 +81,24 @@ via OTA. CI is free — the repo is public.
 publishes signed releases (v0.17.4 was the first), and an update was observed installing over an
 existing install on the Chromecast without an uninstall; installs and launches (41 MB PSS at
 onboarding); M3U parser with genuine unit tests; DoH / custom User-Agent networking; NanoHttpd LAN
-pairing server; Room schema; ExoPlayer + track selection; AFR logic wired into the player.
+pairing server; Room schema; ExoPlayer + track selection; AFR logic wired into the player. The
+17 `\$` interpolation bugs are fixed and the duplicate `EpgSyncWorker` stub is deleted (0.2). The
+OTA updater now does real semantic version comparison, prompts for consent before installing, and
+checks/requests the install-unknown-apps permission instead of silently failing (0.6b) — build- and
+unit-test-verified (`UpdateManagerTest`, 7 passing tests), **not yet observed on the TV itself.**
+`lib/firebase.ts` no longer has hardcoded fallbacks; it now fails loudly if env vars are missing
+(0.5, verified directly against the compiled file).
 
 **Built but never wired up:** `GlobalSearchEngine`, `BackupManager`, `CatchupEngine`, `XtreamApi`
 (VOD/series), `TmdbApi`, `SettingsManager`, `PlayerSettings`. Favourites, hide and group-management
 DAO methods are all dead. `VodDashboard` is hardcoded film titles.
 
 **Known broken:** EPG never populates (no `WorkManager` enqueue exists, so neither sync worker ever
-runs); the OTA updater auto-downgrades on every launch and never requests install permission
-(`docs/plans/PHASE_0.md` §0.6b); `firestore.rules` leaves `pairingSessions` world-readable while the
-web app writes IPTV credentials into it; the cloud dashboard cannot save a playlist because the
-rules and the app disagree on the schema; no design system, so nothing shows a focus state.
+runs); `firestore.rules` leaves `pairingSessions` world-readable while the web app writes IPTV
+credentials into it; the cloud dashboard cannot save a playlist because the rules and the app
+disagree on the schema (0.4, not started); no design system, so nothing shows a focus state; the
+web app cannot currently be built locally on this machine — a pre-existing, unrelated native-binary
+install issue with `@tailwindcss/oxide`/`lightningcss`, see `docs/plans/PHASE_0.md`.
 
 Update this section when the facts change. It is the file everyone reads first, so a stale claim
 here is worse than none.
