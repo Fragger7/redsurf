@@ -77,8 +77,9 @@ via OTA. CI is free — the repo is public.
 
 ## Verified state as of 2026-09-10
 
-**Real and working:** builds clean (debug + release); release signing with the permanent keystore
-(fingerprint `1b13f1d9…d2510d8a`); installs and launches on the Chromecast (41 MB PSS at
+**Real and working:** builds clean (debug + release); release signing verified end to end — CI
+publishes signed releases (v0.17.4 was the first), and an update was observed installing over an
+existing install on the Chromecast without an uninstall; installs and launches (41 MB PSS at
 onboarding); M3U parser with genuine unit tests; DoH / custom User-Agent networking; NanoHttpd LAN
 pairing server; Room schema; ExoPlayer + track selection; AFR logic wired into the player.
 

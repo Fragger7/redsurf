@@ -6,7 +6,7 @@
 |---|---|---|
 | 0.1 | Local toolchain + Gradle wrapper | ✅ **done & verified** — JDK 17, Gradle 8.7 wrapper committed, SDK 498 MB, `assembleDebug` + `assembleRelease` both green |
 | 0.2 | Fix generator-script damage | ⬜ **partly** — 3,361 lines of `tv_*.sh` deleted ✅; the **17 `\$` interpolation bugs and the duplicate `EpgSyncWorker` remain** |
-| 0.3 | Release signing | 🟡 **local half done & verified** — keystore exists, `signingConfig` wired, release APK cert matches `1b13f1d9…d2510d8a`. **CI still runs `assembleDebug`** — must switch to `./gradlew assembleRelease` + decode `KEYSTORE_BASE64` |
+| 0.3 | Release signing | ✅ **done & verified end to end** — CI publishes `assembleRelease` signed with the permanent keystore and refuses to publish anything debug-signed. **v0.17.4 is the first correctly-signed release.** Its published APK cert matches `1b13f1d9…d2510d8a`, and it was observed **installing over an existing v1.0.0 install without an uninstall** (versionCode 1 → 59) on the actual Chromecast |
 | 0.4 | Firestore lockdown | ⬜ **not started** — `pairingSessions` still world-readable; dashboard schema still mismatched |
 | 0.5 | Drop dead Firebase project | 🟡 `firebase-applet-config.json` deleted ✅; **hardcoded fallbacks in `lib/firebase.ts` remain** |
 | 0.6 | Connect to the TV | ✅ **done & verified** — paired, installed, launched, screenshotted, 41 MB PSS |
