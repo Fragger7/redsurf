@@ -17,12 +17,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -63,24 +66,46 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsState()
 
                 // OTA update: check once per launch, but never install without the user's
-                // consent, and never attempt the install if the OS will just block it.
-                var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
+                // consent, and never attempt the install if the OS will just block it. State
+                // lives in MainViewModel (not locally here) so Settings' manual "Check for
+                // updates" button shares the same result - see MainViewModel.updateStatus.
+                val updateStatus by viewModel.updateStatus.collectAsState()
                 var showInstallPermissionPrompt by remember { mutableStateOf(false) }
+                // Set right before sending the user to system Settings to grant the install
+                // permission; checked again on return so a granted permission resumes the
+                // install automatically instead of making the user tap "Install now" twice
+                // (found live, 2026-09-11: the dialog reappeared unchanged after Settings with
+                // no indication the permission had actually been granted).
+                var retryInstallOnResume by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
 
                 LaunchedEffect(Unit) {
-                    val info = UpdateManager.checkForUpdates()
-                    if (info != null && info.hasUpdate) {
-                        updateInfo = info
+                    viewModel.checkForUpdates()
+                }
+
+                DisposableEffect(Unit) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            retryInstallOnResume?.let { info ->
+                                if (UpdateManager.canInstallUnknownApps(this@MainActivity)) {
+                                    retryInstallOnResume = null
+                                    showInstallPermissionPrompt = false
+                                    UpdateManager.downloadAndInstall(this@MainActivity, info.downloadUrl, info.newVersion)
+                                    viewModel.dismissUpdatePrompt()
+                                }
+                            }
+                        }
                     }
+                    lifecycle.addObserver(observer)
+                    onDispose { lifecycle.removeObserver(observer) }
                 }
 
                 // No blanket BackHandler here. AppShell and LiveTvScreen register their own,
                 // narrowly enabled only when there's somewhere specific to go back to
-                // (fullscreen -> columns, a tab -> Live TV). When neither is enabled - the root
-                // Live TV screen - Back correctly falls through to Android's default: finish the
-                // activity, returning to the TV home screen. The previous always-enabled handler
-                // here deliberately no-op'd for AppState.Loaded ("prevent exiting the app"),
-                // which is exactly what trapped a real user: found live, 2026-09-11.
+                // (fullscreen -> columns, a tab -> Home). When neither is enabled - the Home
+                // destination itself - Back correctly falls through to Android's default: finish
+                // the activity, returning to the TV home screen. The previous always-enabled
+                // handler here deliberately no-op'd for AppState.Loaded ("prevent exiting the
+                // app"), which is exactly what trapped a real user: found live, 2026-09-11.
 
                 Box(
                     modifier = Modifier.fillMaxSize().background(Background),
@@ -117,28 +142,32 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    updateInfo?.let { info ->
+                    // Only one dialog at a time: the permission prompt takes priority since it's
+                    // reached mid-flow from the update dialog, not alongside it.
+                    val availableUpdate = (updateStatus as? UpdateCheckStatus.Available)?.info
+                    if (showInstallPermissionPrompt && availableUpdate != null) {
+                        InstallPermissionDialog(
+                            onGoToSettings = {
+                                retryInstallOnResume = availableUpdate
+                                UpdateManager.requestInstallUnknownAppsPermission(this@MainActivity)
+                            },
+                            onDismiss = {
+                                showInstallPermissionPrompt = false
+                                retryInstallOnResume = null
+                            }
+                        )
+                    } else if (availableUpdate != null) {
                         UpdateAvailableDialog(
-                            versionName = info.newVersion,
+                            versionName = availableUpdate.newVersion,
                             onInstall = {
                                 if (UpdateManager.canInstallUnknownApps(this@MainActivity)) {
-                                    UpdateManager.downloadAndInstall(this@MainActivity, info.downloadUrl, info.newVersion)
-                                    updateInfo = null
+                                    UpdateManager.downloadAndInstall(this@MainActivity, availableUpdate.downloadUrl, availableUpdate.newVersion)
+                                    viewModel.dismissUpdatePrompt()
                                 } else {
                                     showInstallPermissionPrompt = true
                                 }
                             },
-                            onDismiss = { updateInfo = null }
-                        )
-                    }
-
-                    if (showInstallPermissionPrompt) {
-                        InstallPermissionDialog(
-                            onGoToSettings = {
-                                UpdateManager.requestInstallUnknownAppsPermission(this@MainActivity)
-                                showInstallPermissionPrompt = false
-                            },
-                            onDismiss = { showInstallPermissionPrompt = false }
+                            onDismiss = { viewModel.dismissUpdatePrompt() }
                         )
                     }
                 }

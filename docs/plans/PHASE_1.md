@@ -160,14 +160,50 @@ end-to-end milestone. Alongside that, four issues:
 (`1b13f1d9…d2510d8a`). **Not yet verified:** any of the four on the actual device - next round of
 user testing, no ADB screenshot loop.
 
+## Checkpoint B, round 3 — OTA getting stuck + Back exiting the app outright (2026-09-11)
+
+Two more reports, both investigated live on the device (user explicitly authorized ADB for the
+OTA one, as before):
+
+1. **"No OTA update notification," even after force-close + clear cache.** Root cause found live,
+   not guessed: a previous install attempt had sent the user to Android's system "install unknown
+   apps" permission screen, and that screen (a separate system task, not part of RedSurf) was left
+   parked in the foreground. Relaunching RedSurf from the launcher kept landing back on that
+   system screen instead of RedSurf's own UI - which is what read as "no notification." Confirmed
+   the underlying check → download → install pipeline actually works: once that stuck state was
+   cleared, the device silently finished the pending install and is now on **v0.19.2**, the exact
+   latest release at time of testing.
+   Fixed the real gap this surfaced - no retry after granting the permission: `MainActivity` now
+   observes `ON_RESUME` and, if the user just came back from the "install unknown apps" Settings
+   screen with permission now granted, resumes the install automatically instead of making them
+   tap "Install now" a second time.
+   Also added the fallback the user asked for either way: a **"Check for updates" button in
+   Settings**, sharing the exact same `MainViewModel.updateStatus` the launch-time silent check
+   uses (not a second, separate path) - a safety net for whenever a release publishes after the
+   app already opened, or the silent check otherwise doesn't surface a prompt.
+2. **Back on the root Live TV screen now exits the app outright, no stop in between.** Not a bug -
+   the round-1 fix (removing the trap) was correct, but the user's actual preference, now stated,
+   is a stop before exiting. `Home` is now the back-stack root instead of Live TV: Back from any
+   other destination (including Live TV, even though the app still opens directly on it) returns
+   to Home; Back on Home itself falls through to Android's default (exit). Home is still just a
+   placeholder - that's fine for now, per the user ("at least for now") - the point was giving
+   Back a stop, not building a real Home screen yet.
+
+**Verified:** clean build, 13/13 tests, `assembleRelease` completes with the real signing config
+(no ad-hoc local versionName/Code installed to the device this round - see the isNewerVersion note
+above for why that matters). **Not yet verified:** the resume-retry install flow and the new Back
+behavior on the device - next round of user testing.
+
 ## Checkpoint B — what to check on the real TV
 
 1. Opening a channel — does it play in one step now, not two?
 2. Does the accent color read as red, not pink?
 3. Overall spacing/sizing on the Live TV screen — closer to StreamVault's proportions?
 4. Mobile Phone pairing screen — does the QR code render and actually scan to the pairing URL?
-5. Does Back still work - on the root Live TV screen, and to exit fullscreen?
-6. Settings → "Reset & add a different playlist" → confirm → does it return to Onboarding cleanly?
+5. Back on the root Live TV screen — does it now go to Home first, then exit on a second press?
+6. Does Back still work - to exit fullscreen, and from other tabs back to Home?
+7. Settings → "Check for updates" — does it show a result (up to date / update found)?
+8. Settings → "Reset & add a different playlist" → confirm → does it return to Onboarding cleanly?
 
 That's the whole ask.
 

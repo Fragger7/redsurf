@@ -13,6 +13,7 @@ import com.redsurf.tv.parser.M3uParser
 import com.redsurf.tv.vod.StalkerApi
 import com.redsurf.tv.vod.XtreamApi
 import com.redsurf.tv.server.PairingServer
+import com.redsurf.tv.updater.UpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +23,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URL
 import java.util.UUID
+
+/**
+ * Idle: nothing checked yet this session. Checking: a request is in flight - Settings shows this
+ * so "Check for updates" doesn't look like it did nothing while the network call is out.
+ * UpToDate: checked, current version is already the latest. Available: an update exists - this
+ * is the only state MainActivity turns into the install-prompt dialog.
+ */
+sealed class UpdateCheckStatus {
+    object Idle : UpdateCheckStatus()
+    object Checking : UpdateCheckStatus()
+    object UpToDate : UpdateCheckStatus()
+    data class Available(val info: UpdateManager.UpdateInfo) : UpdateCheckStatus()
+}
 
 sealed class AppState {
     data class Loading(val message: String = "Loading...") : AppState()
@@ -48,6 +62,30 @@ class MainViewModel : ViewModel() {
 
     private var currentPlaylistId: String? = null
     private var pairingServer: PairingServer? = null
+
+    private val _updateStatus = MutableStateFlow<UpdateCheckStatus>(UpdateCheckStatus.Idle)
+    /** Owned here, not in MainActivity's Composable, so both the launch-time auto-check and the
+     * Settings screen's manual "Check for updates" button (user request, 2026-09-11 - a fallback
+     * for whenever the silent check doesn't surface a prompt) share one source of truth. */
+    val updateStatus: StateFlow<UpdateCheckStatus> = _updateStatus.asStateFlow()
+
+    /** Safe to call repeatedly - a check already in flight is a no-op, not a stacked request. */
+    fun checkForUpdates() {
+        if (_updateStatus.value is UpdateCheckStatus.Checking) return
+        viewModelScope.launch {
+            _updateStatus.value = UpdateCheckStatus.Checking
+            val info = UpdateManager.checkForUpdates()
+            _updateStatus.value = if (info != null && info.hasUpdate) {
+                UpdateCheckStatus.Available(info)
+            } else {
+                UpdateCheckStatus.UpToDate
+            }
+        }
+    }
+
+    fun dismissUpdatePrompt() {
+        _updateStatus.value = UpdateCheckStatus.Idle
+    }
 
     fun setDatabase(db: RedSurfDatabase, context: Context) {
         localDb = db
