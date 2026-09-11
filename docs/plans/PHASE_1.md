@@ -50,19 +50,66 @@ These are the Opus-lane calls for this phase. Sonnet executes against them.
    `TvLazyColumn` (alpha10) has no `items(LazyPagingItems)` extension — use the index form:
    `items(count = paged.itemCount, key = paged.itemKey { it.streamId }) { i -> paged[i]?.let {
    ChannelRow(it) } ?: PlaceholderRow() }`.
-2b. **Import streams and batches; VOD is classified, not dumped into Live TV.** `M3uParser.parse`
-   materialises every channel into a `List` and `loadPlaylist` inserts all of it in one
-   transaction — the "OOM JSON trap" in `IPTV_DOMAIN_KNOWLEDGE.md` §1, and it will not survive a
-   60K-line M3U on 449 MB. The parser becomes a streaming emitter (`useLines` already streams the
-   read; stop accumulating) with batched inserts of 500 rows. During import, set `streamType`
-   from the URL (`/movie/` → `vod`, `/series/` → `series`, else `live`) — today it's hardcoded
-   `"live"` for every row, so 150K VOD entries would flood the Live TV groups. Live TV queries
-   filter `streamType = 'live'`. A separate VOD table is the VOD phase's decision; the
-   classification has to be right now so that phase has clean data. Add an index on
-   `(playlistId, streamType, groupName)` — a `GROUP BY` over 60K rows without one is a full scan
-   and a visible stall. That's a schema change: **bump the Room version 5 → 6**; it's a destructive
-   migration (already configured), which is acceptable now — there is no user data to preserve yet
-   — and means reloading the playlist after install.
+2b. **Measured, not guessed — the user's real provider (2026-09-10, fetched once from the laptop):**
+   the `m3u_plus` link is **327 MB, 1,232,531 entries, and 38 s of silence before the first byte**
+   — even with a `VLC/3.0.18` User-Agent. Per the user, that silence is most likely a provider
+   anti-bot/throttling measure, not a slow server; `IPTV_DOMAIN_KNOWLEDGE.md` §2 is the playbook
+   for it (see §2c). Of those entries: **28,166 live, 158,581 movies, 1,045,814 series episodes.** Live URLs have **no `/live/` segment** — they're `http://host/USER/PASS/ID`
+   — so the existing `contains("/live/")` filter in `loadPlaylist` would have classified every live
+   channel as *not* live. Two consequences, both binding:
+
+   - **Xtream providers use the panel's JSON API, not the M3U** (§2c). The M3U path stays for
+     genuine M3U-only providers.
+   - **The M3U path streams, batches, classifies, and skips non-live rows.** `M3uParser.parse`
+     materialises every entry into a `List` and `loadPlaylist` inserts all of it in one transaction
+     — the "OOM JSON trap" in `IPTV_DOMAIN_KNOWLEDGE.md` §1; 1.2M objects is an OOM on the Shield,
+     never mind the Chromecast. The parser becomes a streaming emitter (`useLines` already streams
+     the read; stop accumulating) with batched inserts of 500 rows. Classify `streamType` from the
+     URL: `/movie/` → `vod`, `/series/` → `series`, **else `live`** (that "else" is what makes the
+     bare `/USER/PASS/ID` shape work). **In Phase 1, non-live rows are counted and dropped, not
+     stored** — importing 1.2M VOD rows is ~500 MB of SQLite on a box with 880 MB free, and the VOD
+     phase will fetch that catalogue per category on demand anyway. Live TV queries filter
+     `streamType = 'live'` regardless, so a later phase that does store VOD can't leak into it.
+   - Add an index on `(playlistId, streamType, groupName)` — a `GROUP BY` over 28K+ rows without
+     one is a full scan and a visible stall. Schema change: **bump the Room version 5 → 6**;
+     destructive migration (already configured) is acceptable now — no user data to preserve yet —
+     and means reloading the playlist after install.
+2c. **Xtream: `player_api.php`, streamed with `JsonReader`.** For `type == "xtream"`,
+   `loadXtreamCodes` stops building a `get.php` M3U URL (that path is also carrying a real bug — it
+   produces `&type=m3u_plus&type=live`, a duplicated query param). Instead:
+   `GET {server}/player_api.php?username=U&password=P&action=get_live_categories` (small JSON,
+   `id → name`), then `…&action=get_live_streams` (~28K objects for this provider), parsed with
+   Android's built-in **`android.util.JsonReader`** — streaming, one object at a time, batched
+   into Room every 500 rows. **Never** `JSONObject(response.body.string())` a payload this size.
+   Fields: `stream_id`, `name`, `stream_icon`, `category_id` (→ `groupName` via the categories
+   map), `epg_channel_id`, `num`. Stream URL is constructed, not read:
+   `{server}/live/{user}/{pass}/{stream_id}.ts`. Put this in `vod/XtreamApi.kt` as
+   `getLiveStreams(...)` — the file already has `getCategories` and is otherwise dead code; this
+   makes it real.
+
+   **Navigating the provider's anti-bot measures** — follow `IPTV_DOMAIN_KNOWLEDGE.md` §2 and §4,
+   not intuition:
+   - **User-Agent:** the doc's whitelisted legacy agent is `IPTVSmartersPro/1.1.1`. The current
+     default (`VLC/3.0.18 LibVLC/3.0.18`) still drew the 38 s throttle from the laptop. Make the
+     default `IPTVSmartersPro/1.1.1` for API *and* stream requests (the doc is explicit that
+     ExoPlayer's requests must spoof too — `getDataSourceFactory` already threads the UA through,
+     keep it that way). `RegressionTestSuite.testDoHConfiguration` asserts the old default —
+     update the assertion, don't delete the test.
+   - **Drop the giveaway header.** `getOkHttpClient` sets `Referer` to the bare hostname. That's
+     non-standard, no real player sends it, and §2 says not to send headers that mark a scraper.
+     Remove it. Keep `Accept: */*`.
+   - **Bounded, not infinite (§4):** wrap playlist/API fetches in `withTimeoutOrNull(90_000)` and
+     give them a client with a 90 s read timeout; leave the 15 s default for update checks and
+     everything else. On `UnknownHostException` / `ConnectException`, fail immediately with a
+     clear message — don't retry with different agents, the host is unreachable.
+   - **Measure, then keep what works.** If the API fetch from the app is still slow or blocked
+     after the above, that's a finding to report with timings, not something to keep tweaking
+     blind. Report it and stop; Opus decides.
+   - **Out of the app's scope:** if the provider is unreachable from the Chromecast at all, the
+     first in-app tool is the existing DoH support (ISP DNS blocking is common — `SettingsManager
+     .useSecureDns` exists but nothing sets it yet; a later phase). Beyond that, a VPN is a
+     device-level fix the user applies, not code. Check the laptop can reach the host (it could,
+     2026-09-10) to tell a provider block from a device problem.
 3. **Coil 2.6.0 for channel logos** (`io.coil-kt:coil-compose:2.6.0`). With room-paging and
    paging-compose (§2), that's the phase's three new dependencies — and the whole list. Coil
    targets Kotlin 1.9 / Compose 1.5, which is what we're pinned to.
@@ -345,11 +392,19 @@ Two lists, two jobs:
 pasted into chat — transcripts persist. Either:
 1. **The user enters them on the TV** via the LAN pairing form (`http://<tv-ip>:8080`) or the
    Xtream card. Nothing in the session ever sees them. Preferred.
-2. **For unattended reloads** (e.g. after the v6 schema wipe, while the user is away), the user
-   puts the M3U URL in `~/.redsurf/test-playlist.url` on the laptop — same directory as the
-   keystore, already outside the repo, never committed. The session reads that file and submits it
-   to the TV's pairing form with `curl`, exactly as a phone would. Ask the user to create the file
-   when it's first needed; don't ask for the contents.
+2. **For unattended reloads** (e.g. after the v6 schema wipe, while the user is away):
+   `~/.redsurf/test-playlist.url` on the laptop — same directory as the keystore, outside the
+   repo, mode 600. **It already exists** (created 2026-09-10) and holds this provider's
+   `get.php` URL. That one URL contains everything the Xtream path needs: host → `server`,
+   `username=` → user, `password=` → pass. Parse those three out of it and submit them to the
+   TV's pairing form (`POST http://<tv-ip>:8080/submit`, fields `type=xtream`, `server`, `user`,
+   `pass`, `contentType=live`) with `curl`, exactly as a phone would. **Do not fetch the M3U URL
+   itself** — that's the 327 MB / 38 s path §2b exists to avoid, and it's a heavy pull on a
+   throttled provider. Never print the file's contents.
+
+   **This provider allows one concurrent connection** (`Max Conns: 1`). If the user is watching it
+   on another device, a Chromecast test stream will fail or kick them — check before playback
+   tests, and don't expect multiview to work against it in a later phase. It expires 2026-11-08.
 
 The device sleeps quickly. `adb shell input keyevent KEYCODE_WAKEUP` before every test, and
 check `dumpsys package com.redsurf.tv | grep versionName` before trusting any result — both
