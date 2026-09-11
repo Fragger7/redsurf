@@ -113,6 +113,21 @@ class MainViewModel : ViewModel() {
         checkLocalCache()
     }
 
+    /**
+     * Testing-enablement, not full multi-playlist management (user request, 2026-09-11): wipes
+     * every saved playlist and its channels, then re-checks the cache, which correctly finds
+     * zero playlists and returns to Onboarding so a different M3U/Xtream/Stalker source can be
+     * tried without reinstalling the app.
+     */
+    fun resetAndAddNewPlaylist() {
+        viewModelScope.launch(Dispatchers.IO) {
+            localDb?.channelDao()?.deleteAllChannels()
+            localDb?.playlistDao()?.deleteAllPlaylists()
+            currentPlaylistId = null
+            withContext(Dispatchers.Main) { checkLocalCache() }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         pairingServer?.stop()

@@ -74,13 +74,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                BackHandler(enabled = true) {
-                    // Prevent exiting the app on back press if we are in loaded state
-                    // We can handle deep backstack here if we had one, otherwise do nothing or prompt
-                    if (state is AppState.Onboarding) {
-                        finish()
-                    }
-                }
+                // No blanket BackHandler here. AppShell and LiveTvScreen register their own,
+                // narrowly enabled only when there's somewhere specific to go back to
+                // (fullscreen -> columns, a tab -> Live TV). When neither is enabled - the root
+                // Live TV screen - Back correctly falls through to Android's default: finish the
+                // activity, returning to the TV home screen. The previous always-enabled handler
+                // here deliberately no-op'd for AppState.Loaded ("prevent exiting the app"),
+                // which is exactly what trapped a real user: found live, 2026-09-11.
 
                 Box(
                     modifier = Modifier.fillMaxSize().background(Background),

@@ -101,16 +101,38 @@ for queries is untouched); rows gained rounded corners and more generous padding
 (`1b13f1d9…d2510d8a`). **Not verified:** actual playback on the device - that's what Checkpoint B
 is now for, done by the user via OTA, not by an agent watching a screen.
 
+## Checkpoint B, round 1 — user feedback, fixed (2026-09-11)
+
+First real-device test found two more bugs the build/test verification couldn't have caught:
+
+1. **Back did nothing on the root Live TV screen - the user got trapped.** Root cause:
+   `MainActivity` had a leftover `BackHandler(enabled = true)` from the pre-Phase-1 architecture
+   that deliberately no-op'd for `AppState.Loaded` ("prevent exiting the app"). `AppShell`'s and
+   `LiveTvScreen`'s newer, narrower handlers are correctly *disabled* on the root screen (nowhere
+   more specific to return to) - so Back fell through to the old blanket one, which did nothing.
+   Fixed by deleting it outright: with no handler active, Back now correctly falls through to
+   Android's default (exit to the TV home screen).
+2. **No way to test a different playlist without reinstalling.** Added a real (not placeholder)
+   Settings screen with one action - reset the saved playlist, with a confirm step
+   (`PlaylistDao.deleteAllPlaylists`, `ChannelDao.deleteAllChannels`, then `MainViewModel
+   .resetAndAddNewPlaylist()` returns to Onboarding). This is a deliberate, disclosed exception to
+   "Settings stays a placeholder" - a direct user request, not scope drift.
+
+OTA not triggering after the user force-stopped the app was very likely a symptom of being
+trapped by bug 1, not a separate bug - the release itself published successfully
+(`gh run list` confirmed).
+
+**Verified:** clean build, 13/13 tests, signed release. **Not yet verified:** that Back and the
+Settings reset actually work on the device - next round of user testing.
+
 ## Checkpoint B — what to check on the real TV
 
-Update to the latest release (should offer automatically), open Live TV, focus a few channels,
-press OK on one. Report back:
-1. Does fullscreen actually play video, or does it fail/crash?
-2. Do group names look right (arrows instead of raw semicolons)?
-3. Does the extra spacing/rounding look better, worse, or not enough?
-4. Anything else that looks obviously wrong.
+1. Does fullscreen actually play video?
+2. Does Back now work - on the root Live TV screen, and to exit fullscreen?
+3. Settings → "Reset & add a different playlist" → confirm → does it return to Onboarding cleanly?
+4. Group names / spacing - better?
 
-That's the whole ask - no need to check anything not listed.
+That's the whole ask.
 
 ---
 

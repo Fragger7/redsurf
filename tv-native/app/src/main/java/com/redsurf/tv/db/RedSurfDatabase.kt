@@ -46,6 +46,11 @@ interface ChannelDao {
 
     @Query("DELETE FROM channels WHERE playlistId = :playlistId")
     suspend fun deleteChannelsByPlaylist(playlistId: String)
+
+    /** Testing-enablement (user request, 2026-09-11) - paired with PlaylistDao.deleteAllPlaylists
+     * so resetting doesn't leave orphaned channel rows behind on a storage-constrained device. */
+    @Query("DELETE FROM channels")
+    suspend fun deleteAllChannels()
     
     @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' AND isHidden = 0")
     suspend fun searchChannels(query: String): List<ChannelEntity>
@@ -73,6 +78,10 @@ interface PlaylistDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlaylist(playlist: PlaylistEntity)
+
+    /** Testing-enablement (user request, 2026-09-11) - wipes every saved playlist. */
+    @Query("DELETE FROM playlists")
+    suspend fun deleteAllPlaylists()
 }
 
 @Database(entities = [

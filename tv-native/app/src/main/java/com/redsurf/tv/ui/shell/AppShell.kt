@@ -23,7 +23,14 @@ import com.redsurf.tv.ui.theme.tvSafeArea
  *
  * BACK on any non-LiveTv destination returns to LiveTv. LiveTvScreen owns its own BackHandler for
  * leaving fullscreen (mutually exclusive with the one here via the `enabled` flags, so only one
- * is ever live at a time).
+ * is ever live at a time). BACK on the root Live TV screen intentionally has no handler here at
+ * all - it falls through to Android's default (exit to the TV home screen). A previous
+ * always-enabled handler at the Activity level deliberately no-op'd there, which trapped a real
+ * user with no way out; removed 2026-09-11.
+ *
+ * Settings (user request, 2026-09-11) is a real minimal screen, not a placeholder like the other
+ * four unbuilt destinations - one button to reset the saved playlist for testing a different
+ * source, since there's no other way to do that without reinstalling.
  */
 @Composable
 fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
@@ -44,6 +51,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 )
             destination == NavDestination.LiveTv ->
                 PlaceholderScreen("Live TV", "No active playlist")
+            destination == NavDestination.Settings ->
+                SettingsScreen(onResetPlaylist = { viewModel.resetAndAddNewPlaylist() })
             else ->
                 PlaceholderScreen(destination.label, "Coming in a later phase")
         }
