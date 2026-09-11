@@ -12,7 +12,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import com.redsurf.tv.data.Channel
-import com.redsurf.tv.player.ExoPlayerView
+import com.redsurf.tv.player.PlayerHost
 
 /**
  * TiViMate Parity: Multi-View (watching 2 to 9 streams simultaneously).
@@ -51,9 +51,13 @@ fun MultiViewScreen(
                                 ),
                             colors = ClickableSurfaceDefaults.colors(containerColor = Color.Black)
                         ) {
-                            // Each surface gets its own dedicated hardware player instance
-                            ExoPlayerView(
+                            // Each surface gets its own dedicated hardware player instance.
+                            // This screen is unreferenced dead code (PHASE_1.md Non-goals -
+                            // multiview is a later phase); updated only to keep it compiling
+                            // after ExoPlayerView -> PlayerHost.
+                            PlayerHost(
                                 streamUrl = channel.streamUrl,
+                                fullscreen = false,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

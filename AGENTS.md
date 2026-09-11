@@ -26,14 +26,20 @@ model, per-group paged Room queries, one-player-per-screen, Coil, no nav library
 Sonnet-lane; Opus reviews at the two screenshot checkpoints. Read the brief's "Decisions already
 made" section before touching anything — those are settled.
 
-**1.1–1.4 done, device-verified, Checkpoint A screenshots sent to the user (2026-09-11).** Real
-playlist loaded on the Chromecast via the LAN pairing server; group counts matched the source M3U
-exactly; the two-state focus model confirmed working (a nav pill showing the ring while a
-different pill stays filled/selected, simultaneously); focusing a group correctly re-queried the
-paged channel list. One real bug found live, not fixed (out of this phase's scope): the M3U/Xtream
-onboarding forms use a non-TV-aware text field that traps D-pad focus — a real remote user would
-get stuck unable to submit. See `PHASE_1.md`'s "what actually happened" note under 1.1–1.4 for the
-full account. 1.5/1.6/Checkpoint B not started; waiting on the user's review of Checkpoint A.
+**1.1–1.5 done (2026-09-11).** 1.1–1.4 device-verified on the Chromecast (group counts matched the
+source M3U exactly; two-state focus model confirmed with both states true simultaneously on
+different elements). 1.5 (real fullscreen playback via new `player/PlayerHost.kt`) plus a visual
+polish pass (group-name formatting, spacing/rounding) are build-verified but not yet watched
+playing on the device — see `PHASE_1.md`'s Checkpoint B for what the user is checking.
+
+**Workflow change, from user feedback:** stop doing per-task ADB screenshot round-trips — too
+expensive. Build + verify with compile/tests only, batch several changes together, hand off a
+build for the user to test on the real TV via OTA instead. Standing permission to merge to `main`
+freely is granted (no live users) — don't ask before merging.
+
+One real bug found live in 1.1–1.4, not fixed (out of scope): the M3U/Xtream onboarding forms use
+a non-TV-aware text field that traps D-pad focus — a real remote user would get stuck unable to
+submit. Documented in `PHASE_1.md` for a later pass.
 
 ## Product decisions on record
 

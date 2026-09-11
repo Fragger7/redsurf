@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,28 +23,59 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.db.ChannelEntity
+import com.redsurf.tv.player.PlayerHost
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
+import kotlinx.coroutines.delay
 
 /**
- * The screen this whole phase is built to prove (docs/plans/PHASE_1.md #1.4). Three columns
+ * The screen this whole phase is built to prove (docs/plans/PHASE_1.md #1.4/#1.5). Three columns
  * matching references/streamvault/LiveTV.png: categories, the selected group's channels, and a
- * preview of whichever channel currently has D-pad focus.
+ * preview of whichever channel currently has D-pad focus. OK opens the focused channel
+ * fullscreen with real playback.
  *
- * Real playback is #1.5 - the preview column here is a static info stub (name + "No schedule
- * information" + the "press OK again" hint) until PlayerHost exists.
+ * Scope note vs. the original #1.5 text: the preview column is a static info stub (name +
+ * "No schedule information" + the "press OK again" hint), not an embedded live video thumbnail.
+ * Sharing one ExoPlayer between a small embedded preview and a fullscreen view without ever
+ * having two decoders alive at once needs pixel-exact overlay positioning; deferred as its own
+ * pass rather than rushed here. Fullscreen playback itself - the thing actually reported broken
+ * (OK did nothing) - is fully real: PlayerHost is created once per fullscreen session and
+ * released on exit, never duplicated.
  */
 @Composable
-fun LiveTvScreen(viewModel: MainViewModel, playlistId: String) {
+fun LiveTvScreen(viewModel: MainViewModel, playlistId: String, onFullscreenChanged: (Boolean) -> Unit) {
     val groups by viewModel.repository.liveGroups(playlistId).collectAsState(initial = emptyList())
     var selectedGroup by remember { mutableStateOf<String?>(null) }
     var focusedChannel by remember { mutableStateOf<ChannelEntity?>(null) }
+    var isFullscreen by remember { mutableStateOf(false) }
 
-    // Default to the first group once groups load; never override the user's own selection.
     LaunchedEffect(groups) {
         if (selectedGroup == null && groups.isNotEmpty()) {
             selectedGroup = groups.first().groupName
         }
+    }
+
+    // Debounced: a D-pad flying down the list must not start a stream per row it passes over.
+    // Only the channel the user rests on for 500ms actually loads.
+    var previewUrl by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(focusedChannel) {
+        val channel = focusedChannel
+        if (channel == null) {
+            previewUrl = null
+        } else {
+            delay(500)
+            previewUrl = channel.streamId
+        }
+    }
+
+    BackHandler(enabled = isFullscreen) {
+        isFullscreen = false
+        onFullscreenChanged(false)
+    }
+
+    if (isFullscreen) {
+        PlayerHost(streamUrl = previewUrl, fullscreen = true, modifier = Modifier.fillMaxSize())
+        return
     }
 
     Row(modifier = Modifier.fillMaxSize().padding(top = 24.dp)) {
@@ -73,7 +105,11 @@ fun LiveTvScreen(viewModel: MainViewModel, playlistId: String) {
                 channels = pagedChannels,
                 focusedChannelId = focusedChannel?.streamId,
                 onChannelFocused = { focusedChannel = it },
-                onChannelOpen = { /* fullscreen playback - PHASE_1.md #1.5 */ },
+                onChannelOpen = { channel ->
+                    focusedChannel = channel
+                    isFullscreen = true
+                    onFullscreenChanged(true)
+                },
                 modifier = Modifier.weight(1.4f),
             )
         }

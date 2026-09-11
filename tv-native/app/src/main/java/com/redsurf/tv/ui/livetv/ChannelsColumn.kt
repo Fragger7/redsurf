@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,15 +53,15 @@ fun ChannelsColumn(
     onChannelOpen: (ChannelEntity) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxHeight().padding(end = 16.dp)) {
-        Text(groupName, style = MaterialTheme.typography.headlineSmall, color = TextPrimary)
+    Column(modifier = modifier.fillMaxHeight().padding(end = 24.dp)) {
+        Text(groupName.replace(";", " › "), style = MaterialTheme.typography.headlineSmall, color = TextPrimary, maxLines = 1)
         Text(
             "$groupCount channels",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
-            modifier = Modifier.padding(bottom = 12.dp),
+            modifier = Modifier.padding(bottom = 16.dp),
         )
-        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(count = channels.itemCount, key = channels.itemKey { it.streamId }) { index ->
                 val channel = channels[index]
                 if (channel != null) {
@@ -83,6 +85,7 @@ private fun ChannelRow(channel: ChannelEntity, selected: Boolean, onFocused: () 
         onClick = onOpen,
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
             .onFocusChanged { if (it.isFocused) onFocused() },
         colors = RedSurfFocus.colors(selected = selected),
         scale = RedSurfFocus.scale(),
@@ -90,11 +93,11 @@ private fun ChannelRow(channel: ChannelEntity, selected: Boolean, onFocused: () 
         glow = RedSurfFocus.glow(),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ChannelLogo(channel)
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(16.dp))
             Text(
                 channel.num.toString(),
                 style = MaterialTheme.typography.bodyMedium,
@@ -102,7 +105,8 @@ private fun ChannelRow(channel: ChannelEntity, selected: Boolean, onFocused: () 
                 modifier = Modifier.width(36.dp),
             )
             Column {
-                Text(channel.name, style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
+                Text(channel.name, style = MaterialTheme.typography.bodyLarge, color = TextPrimary, maxLines = 1)
+                Spacer(modifier = Modifier.height(2.dp))
                 Text("No schedule information", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
         }

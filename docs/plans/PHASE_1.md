@@ -9,8 +9,8 @@
 | 1.3 | App shell: top nav strip + placeholder tabs | ✅ done & device-verified |
 | 1.4 | Live TV: groups column + channels column | ✅ done & device-verified |
 | **A** | **Checkpoint — screenshot review (Opus + user)** | 🟡 **screenshots sent, awaiting user review** |
-| 1.5 | Preview pane with playback + fullscreen | ⬜ not started |
-| **B** | **Checkpoint — screenshot + logcat review (Opus + user)** | ⬜ |
+| 1.5 | Preview pane with playback + fullscreen | 🟡 done with a disclosed scope trim — see note below; build-verified, **not yet watched playing on the TV** |
+| **B** | **Checkpoint — user tests on device, reports back** | ⬜ awaiting user |
 | 1.6 | Memory measurement + acceptance sweep | ⬜ not started |
 
 **Goal:** the app *looks like RedSurf* on the one screen the family will use every day, and every
@@ -70,8 +70,47 @@ scope (#9) and deserves its own pass rather than a rushed fix mid-checkpoint.
 `VodDashboard.kt`, `PlayerOsd.kt`, and `player/multiview/MultiViewEngine.kt` - all three are
 explicit Non-goals (VOD phase, player phase). The 1.1 acceptance grep is clean everywhere else.
 
-**Not yet done:** 1.5 (playback), 1.6 (memory at 30K channels), Checkpoint B. Those start once the
-user has reviewed the Checkpoint A screenshots.
+### 1.5 — what actually happened (2026-09-11), and the workflow change that came with it
+
+User feedback on Checkpoint A changed two things immediately: the visuals need real polish (raw
+`Comedy;Movies;Series` group names, tight spacing - not a taste call, unfinished work), and the
+per-task device-screenshot loop was too expensive to keep doing. Going forward: bigger batches,
+build+test verification only, hand a build to the user to test on the real TV instead of an agent
+doing repeated ADB round-trips. Standing permission to merge to `main` freely was also granted
+(no live users) - recorded in `WORKFLOW.md`.
+
+**PlayerHost built** (`player/PlayerHost.kt`, replaces `ExoPlayerView.kt`): owns one ExoPlayer,
+swaps media items rather than recreating the player, AFR tied to a `fullscreen` flag. OK on a
+channel now genuinely enters fullscreen and plays - `AppShell` hides the nav strip and skips the
+overscan padding while fullscreen so video goes edge to edge.
+
+**Disclosed scope trim:** the brief's original `PreviewPane.kt` called for a live embedded video
+thumbnail in the third column while browsing. Sharing one ExoPlayer between a small embedded
+preview and a fullscreen view without two decoders ever being alive at once needs pixel-exact
+overlay positioning - judged not worth building in this pass. The preview column stays the static
+info stub from 1.4 (name + "No schedule information" + the hint). Fullscreen playback itself - the
+thing actually reported broken ("OK doesn't play anything") - is fully real and is the thing that
+needs testing.
+
+**Visual polish pass**, direct response to specific feedback: group names now render with `;`
+replaced by `›` for readability (`formatGroupName` in `GroupsColumn.kt`; the underlying value used
+for queries is untouched); rows gained rounded corners and more generous padding in both
+`GroupsColumn` and `ChannelsColumn`.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, signed `assembleRelease`
+(`1b13f1d9…d2510d8a`). **Not verified:** actual playback on the device - that's what Checkpoint B
+is now for, done by the user via OTA, not by an agent watching a screen.
+
+## Checkpoint B — what to check on the real TV
+
+Update to the latest release (should offer automatically), open Live TV, focus a few channels,
+press OK on one. Report back:
+1. Does fullscreen actually play video, or does it fail/crash?
+2. Do group names look right (arrows instead of raw semicolons)?
+3. Does the extra spacing/rounding look better, worse, or not enough?
+4. Anything else that looks obviously wrong.
+
+That's the whole ask - no need to check anything not listed.
 
 ---
 

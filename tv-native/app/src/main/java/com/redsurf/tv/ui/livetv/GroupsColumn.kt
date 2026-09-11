@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
@@ -19,6 +21,13 @@ import com.redsurf.tv.db.GroupCount
 import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
+
+/**
+ * Provider group names are often a raw hierarchy path ("Animation;Kids", "Comedy;Movies;Series")
+ * with no space around the separator - unreadable as-is. Displayed with a visual arrow instead;
+ * the underlying groupName (used for queries) is untouched.
+ */
+private fun formatGroupName(raw: String): String = raw.replace(";", " › ")
 
 /**
  * Left column: live-channel groups with counts (docs/vision/UI_SPEC.md #4,
@@ -40,7 +49,7 @@ fun GroupsColumn(
             color = TextPrimary,
             modifier = Modifier.padding(bottom = 12.dp),
         )
-        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(groups, key = { it.groupName }) { group ->
                 GroupRow(
                     group = group,
@@ -58,6 +67,7 @@ private fun GroupRow(group: GroupCount, selected: Boolean, onFocused: () -> Unit
         onClick = {},
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
             .onFocusChanged { if (it.isFocused) onFocused() },
         colors = RedSurfFocus.colors(selected = selected),
         scale = RedSurfFocus.scale(),
@@ -65,10 +75,15 @@ private fun GroupRow(group: GroupCount, selected: Boolean, onFocused: () -> Unit
         glow = RedSurfFocus.glow(),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(group.groupName, style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
+            Text(
+                formatGroupName(group.groupName),
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextPrimary,
+                maxLines = 1,
+            )
             Text(group.count.toString(), style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
     }

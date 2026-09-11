@@ -18,27 +18,43 @@ import com.redsurf.tv.ui.theme.tvSafeArea
  * PHASE_1.md #1.3). A nav strip over whichever destination is current, inside the 48dp
  * overscan safe area (UI_SPEC.md #8) applied once here at the shell root.
  *
- * BACK on any non-LiveTv destination returns to LiveTv. BACK on LiveTv itself keeps
- * MainActivity's existing top-level behaviour (it's still enabled there for AppState.Onboarding;
- * on Loaded/LiveTv there is currently nothing further back to go, matching pre-Phase-1 behaviour).
+ * Fullscreen playback (#1.5) is the one exception to both: while Live TV is fullscreen, the nav
+ * strip is hidden and the safe-area padding is skipped so video goes edge to edge, not inset.
+ *
+ * BACK on any non-LiveTv destination returns to LiveTv. LiveTvScreen owns its own BackHandler for
+ * leaving fullscreen (mutually exclusive with the one here via the `enabled` flags, so only one
+ * is ever live at a time).
  */
 @Composable
 fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     var destination by remember { mutableStateOf(NavDestination.LiveTv) }
+    var liveTvFullscreen by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = destination != NavDestination.LiveTv) {
+    BackHandler(enabled = !liveTvFullscreen && destination != NavDestination.LiveTv) {
         destination = NavDestination.LiveTv
     }
 
-    Column(modifier = Modifier.fillMaxSize().tvSafeArea()) {
-        NavStrip(current = destination, onSelect = { destination = it })
+    val content: @Composable () -> Unit = {
         when {
             destination == NavDestination.LiveTv && activePlaylistId != null ->
-                LiveTvScreen(viewModel = viewModel, playlistId = activePlaylistId)
+                LiveTvScreen(
+                    viewModel = viewModel,
+                    playlistId = activePlaylistId,
+                    onFullscreenChanged = { liveTvFullscreen = it },
+                )
             destination == NavDestination.LiveTv ->
                 PlaceholderScreen("Live TV", "No active playlist")
             else ->
                 PlaceholderScreen(destination.label, "Coming in a later phase")
+        }
+    }
+
+    if (liveTvFullscreen) {
+        content()
+    } else {
+        Column(modifier = Modifier.fillMaxSize().tvSafeArea()) {
+            NavStrip(current = destination, onSelect = { destination = it })
+            content()
         }
     }
 }
