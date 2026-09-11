@@ -224,18 +224,71 @@ Fixed both in `MainViewModel`:
 no ad-hoc local build installed to the device. **Not yet verified:** actual resume-triggered and
 periodic behavior on the device - next round of user testing.
 
+## Checkpoint B, round 5 — user report, mixed (2026-09-11)
+
+Confirmed working by the user: accent color reads as red now, QR code renders on the pairing
+screen. OTA "possibly working, erratic - might be good enough for now" - not investigated further
+this round, no reproducible complaint attached; revisit if it recurs with specifics.
+
+**Fixed - real root cause found, not a guess:** the user reported two things that turned out to be
+the same bug: (1) "duplicate screens to get a channel to play" persisting even after the round-2
+debounce fix, and (2) Back after watching a channel losing all state and landing on the first
+group with nothing focused, instead of where the user actually was. Root cause: `AppShell` called
+its `content()` lambda (which composes `LiveTvScreen`) from two different structural positions -
+directly under `if (liveTvFullscreen)`, and nested inside the `Column` under `else`. Those read as
+identical but are different Compose composition groups: every fullscreen toggle tore the whole
+`LiveTvScreen` subtree down and remounted it from scratch, silently wiping every `remember` inside
+it - `selectedGroup`, `focusedChannel`, and `LiveTvScreen`'s own `isFullscreen` flag. That explains
+both reports exactly: the first OK press's fullscreen state was destroyed the instant AppShell's
+branch flipped (hence needing a second press), and exiting fullscreen always remounted fresh
+(hence always landing back on the first group). Fixed by restructuring `AppShell` so
+`LiveTvScreen` is composed from exactly one stable call site regardless of `liveTvFullscreen` -
+only the NavStrip/safe-area padding around it are conditional now, not the destination content
+itself. See `AppShell.kt`'s doc comment for the full explanation - this class of bug (state
+silently lost across a conditional composition branch) is worth remembering for future screens.
+
+**Not understood, logged honestly rather than guessed at:** after the most recent update, the user
+saw the Onboarding/welcome screen with no sign of the previously loaded playlist. Checked whether a
+Room schema version bump forced `fallbackToDestructiveMigration()` to wipe the DB - it didn't; the
+schema has been at version 6, unchanged, since before v0.19.1 was ever cut, so every update this
+session was same-schema and should have preserved data. No other cause confirmed yet. If it
+recurs: check `adb shell run-as com.redsurf.tv ls files/` (or pull the DB file) for whether
+`redsurf_tv_database` actually still exists and is non-empty right after an update, before
+guessing further.
+
+**Visual/spacing - explicitly not attempted this round.** The user's own assessment stands: still
+far from target despite the round-2 pass. They gave concrete references to target next:
+`docs/vision/references/streamvault/LiveTV.png` for proportions, and
+`docs/vision/references/tivimate/RedThemedEPGLiveTVScreen.jpg` - noting TiviMate doesn't split out
+a separate EPG/Guide screen, the Live TV screen does that job directly. Explicit preference: **top
+nav bar (StreamVault-style), not TiviMate's left rail** - already how `NavStrip` is built, so no
+change needed there, just confirms the current direction. This is queued as the next major
+Checkpoint B item, not attempted in this round alongside the state-loss fix, since it's a bigger,
+more deliberate design pass than a quick edit and deserves its own focused round.
+
+**Verified:** clean build, 13/13 tests, `assembleRelease` succeeds with the real signing config,
+no ad-hoc local build installed to the device. **Not yet verified:** the state-preservation fix on
+the actual device - next round of user testing.
+
 ## Checkpoint B — what to check on the real TV
 
 1. Opening a channel — does it play in one step now, not two?
-2. Does the accent color read as red, not pink?
-3. Overall spacing/sizing on the Live TV screen — closer to StreamVault's proportions?
-4. Mobile Phone pairing screen — does the QR code render and actually scan to the pairing URL?
-5. Back on the root Live TV screen — does it now go to Home first, then exit on a second press?
-6. Does Back still work - to exit fullscreen, and from other tabs back to Home?
-7. Settings → "Check for updates" — does it show a result (up to date / update found)?
-8. Settings → "Reset & add a different playlist" → confirm → does it return to Onboarding cleanly?
-9. With a newer release published, does backgrounding RedSurf (Home button, not force-close) and
-   returning to it - without ever force-closing - surface the update prompt?
+2. Watch a channel, hit Back — does it return to the exact group/channel you were on, not the
+   first group with nothing focused?
+3. Does the accent color still read as red, not pink? (already confirmed once - re-check with a
+   fresh eye alongside the state fix)
+4. Overall spacing/sizing on the Live TV screen — next major pass, not yet attempted; see the
+   references logged above.
+5. Mobile Phone pairing screen — does the QR code render and actually scan to the pairing URL?
+6. Back on the root Live TV screen — does it now go to Home first, then exit on a second press?
+7. Does Back still work - to exit fullscreen, and from other tabs back to Home?
+8. Settings → "Check for updates" — does it show a result (up to date / update found)?
+9. Settings → "Reset & add a different playlist" → confirm → does it return to Onboarding cleanly?
+10. With a newer release published, does backgrounding RedSurf (Home button, not force-close) and
+    returning to it - without ever force-closing - surface the update prompt?
+11. If the "went back to welcome screen after update" recurs, note it with detail (which version →
+    which version, force-closed first or not) rather than "maybe expected?" - it isn't expected,
+    it just isn't understood yet.
 
 That's the whole ask.
 

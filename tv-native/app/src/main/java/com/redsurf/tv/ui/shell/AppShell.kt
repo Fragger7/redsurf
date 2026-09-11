@@ -24,6 +24,16 @@ import com.redsurf.tv.ui.theme.tvSafeArea
  *
  * Fullscreen playback (#1.5) is the one exception to both: while Live TV is fullscreen, the nav
  * strip is hidden and the safe-area padding is skipped so video goes edge to edge, not inset.
+ * Critically, the destination content is composed from exactly ONE call site regardless of
+ * `liveTvFullscreen` - only the NavStrip/padding around it are conditional. An earlier version
+ * called `content()` from two different structural positions (directly under `if`, nested inside
+ * the Column under `else`), which - however identical the two branches read - are different
+ * Compose composition groups: toggling fullscreen tore the whole subtree down and remounted it
+ * fresh each time, silently wiping every `remember` inside LiveTvScreen (selectedGroup,
+ * focusedChannel, its own isFullscreen). That's what caused "duplicate screens to get a channel
+ * to play" (the first OK press's fullscreen state was lost the instant AppShell's structural
+ * branch flipped) and Back-from-fullscreen resetting to the first group with no focus, instead of
+ * where the user actually was. Found and fixed 2026-09-11.
  *
  * Home is the back-stack root (user request, 2026-09-11: Back from Live TV was exiting the app
  * outright with no stop in between). BACK from any other destination - including Live TV, even
@@ -51,7 +61,16 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         destination = NavDestination.Home
     }
 
-    val content: @Composable () -> Unit = {
+    val rootModifier = if (liveTvFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxSize().tvSafeArea()
+
+    Column(modifier = rootModifier) {
+        if (!liveTvFullscreen) {
+            NavStrip(current = destination, onSelect = { destination = it })
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        // One call site, always reached when destination == LiveTv, regardless of
+        // liveTvFullscreen - see the class doc above for why that matters.
         when {
             destination == NavDestination.LiveTv && activePlaylistId != null ->
                 LiveTvScreen(
@@ -71,16 +90,6 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             }
             else ->
                 PlaceholderScreen(destination.label, "Coming in a later phase")
-        }
-    }
-
-    if (liveTvFullscreen) {
-        content()
-    } else {
-        Column(modifier = Modifier.fillMaxSize().tvSafeArea()) {
-            NavStrip(current = destination, onSelect = { destination = it })
-            Spacer(modifier = Modifier.height(32.dp))
-            content()
         }
     }
 }
