@@ -42,14 +42,14 @@ fun GroupsColumn(
     onGroupFocused: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxHeight().padding(end = 16.dp)) {
+    Column(modifier = modifier.fillMaxHeight().padding(end = 32.dp)) {
         Text(
             "Categories",
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleLarge,
             color = TextPrimary,
-            modifier = Modifier.padding(bottom = 12.dp),
+            modifier = Modifier.padding(bottom = 20.dp),
         )
-        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(groups, key = { it.groupName }) { group ->
                 GroupRow(
                     group = group,
@@ -75,14 +75,15 @@ private fun GroupRow(group: GroupCount, selected: Boolean, onFocused: () -> Unit
         glow = RedSurfFocus.glow(),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
                 formatGroupName(group.groupName),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
                 maxLines = 1,
+                modifier = Modifier.padding(end = 12.dp),
             )
             Text(group.count.toString(), style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }

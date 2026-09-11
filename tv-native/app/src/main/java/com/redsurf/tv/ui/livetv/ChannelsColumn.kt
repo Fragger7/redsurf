@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -53,15 +52,16 @@ fun ChannelsColumn(
     onChannelOpen: (ChannelEntity) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxHeight().padding(end = 24.dp)) {
-        Text(groupName.replace(";", " › "), style = MaterialTheme.typography.headlineSmall, color = TextPrimary, maxLines = 1)
+    Column(modifier = modifier.fillMaxHeight().padding(end = 32.dp)) {
+        Text(groupName.replace(";", " › "), style = MaterialTheme.typography.titleLarge, color = TextPrimary, maxLines = 1)
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             "$groupCount channels",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
-            modifier = Modifier.padding(bottom = 16.dp),
+            modifier = Modifier.padding(bottom = 20.dp),
         )
-        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(count = channels.itemCount, key = channels.itemKey { it.streamId }) { index ->
                 val channel = channels[index]
                 if (channel != null) {
@@ -93,21 +93,20 @@ private fun ChannelRow(channel: ChannelEntity, selected: Boolean, onFocused: () 
         glow = RedSurfFocus.glow(),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ChannelLogo(channel)
             Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                channel.num.toString(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                modifier = Modifier.width(36.dp),
-            )
             Column {
-                Text(channel.name, style = MaterialTheme.typography.bodyLarge, color = TextPrimary, maxLines = 1)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text("No schedule information", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                Text(
+                    "${channel.num}  ${channel.name}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
+                    maxLines = 1,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("No schedule information", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
             }
         }
     }
@@ -116,16 +115,20 @@ private fun ChannelRow(channel: ChannelEntity, selected: Boolean, onFocused: () 
 /** Shown while a page hasn't loaded yet - Paging returns null placeholders during that gap. */
 @Composable
 private fun ChannelRowPlaceholder() {
-    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(SurfaceColor))
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(SurfaceColor))
     }
 }
 
-/** 40dp logo chip; falls back to the channel's initial when the icon is blank or fails to load. */
+/** 52dp square logo chip (squarish, matching real channel logo art); falls back to the
+ * channel's initial when the icon is blank or fails to load. */
 @Composable
 private fun ChannelLogo(channel: ChannelEntity) {
     Box(
-        modifier = Modifier.size(40.dp).clip(CircleShape).background(SurfaceColor),
+        modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(SurfaceColor),
         contentAlignment = Alignment.Center,
     ) {
         val icon = channel.streamIcon

@@ -101,8 +101,9 @@ dependencies {
     // Local Web Server for Mobile Pairing
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     
-    // QR Code Generation
-    
+    // QR Code Generation - pure-Java encoder (no Android deps in zxing:core itself), so the
+    // BitMatrix -> Bitmap conversion below is done by hand rather than via zxing:android.
+    implementation("com.google.zxing:core:3.5.3")
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {

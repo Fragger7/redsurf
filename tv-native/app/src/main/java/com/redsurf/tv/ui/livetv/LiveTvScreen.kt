@@ -1,12 +1,17 @@
 package com.redsurf.tv.ui.livetv
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -14,7 +19,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import androidx.paging.cachedIn
@@ -24,6 +31,8 @@ import androidx.tv.material3.Text
 import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.player.PlayerHost
+import com.redsurf.tv.ui.theme.Accent
+import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
@@ -78,7 +87,7 @@ fun LiveTvScreen(viewModel: MainViewModel, playlistId: String, onFullscreenChang
         return
     }
 
-    Row(modifier = Modifier.fillMaxSize().padding(top = 24.dp)) {
+    Row(modifier = Modifier.fillMaxSize()) {
         GroupsColumn(
             groups = groups,
             selectedGroup = selectedGroup,
@@ -107,6 +116,12 @@ fun LiveTvScreen(viewModel: MainViewModel, playlistId: String, onFullscreenChang
                 onChannelFocused = { focusedChannel = it },
                 onChannelOpen = { channel ->
                     focusedChannel = channel
+                    // Bypass the 500ms browse-debounce above: opening is a deliberate action,
+                    // not a D-pad fly-by, so PlayerHost must get the URL on this same frame.
+                    // Without this, isFullscreen flips true immediately but previewUrl (what
+                    // PlayerHost actually plays) only catches up after the debounce delay,
+                    // which read to the user as a "duplicate 2-step" to get a channel playing.
+                    previewUrl = channel.streamId
                     isFullscreen = true
                     onFullscreenChanged(true)
                 },
@@ -118,16 +133,58 @@ fun LiveTvScreen(viewModel: MainViewModel, playlistId: String, onFullscreenChang
     }
 }
 
+/**
+ * Right column: a real preview card (references/streamvault/LiveTV.png), not bare text - a 16:9
+ * thumbnail area (the channel's initial until embedded live preview lands, see the scope note
+ * above), title, metadata, and an accent-colored action hint so the column reads as an actual
+ * part of the product rather than a debug stub.
+ */
 @Composable
 private fun PreviewStub(channel: ChannelEntity?, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.padding(start = 16.dp)) {
-        Text("Channel Preview", style = MaterialTheme.typography.titleMedium, color = TextSecondary)
+    Column(modifier = modifier.padding(start = 8.dp)) {
+        Text(
+            "Channel Preview",
+            style = MaterialTheme.typography.titleLarge,
+            color = TextPrimary,
+            modifier = Modifier.padding(bottom = 20.dp),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(16.dp))
+                .background(SurfaceRaised),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (channel != null) {
+                Text(
+                    channel.name.take(1).uppercase(),
+                    style = MaterialTheme.typography.displayLarge,
+                    color = TextSecondary,
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(12.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Accent)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text("LIVE", style = MaterialTheme.typography.labelSmall, color = TextPrimary)
+                }
+            }
+        }
+
         if (channel != null) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(channel.name, style = MaterialTheme.typography.headlineSmall, color = TextPrimary)
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(channel.name, style = MaterialTheme.typography.headlineSmall, color = TextPrimary, maxLines = 2)
+            Spacer(modifier = Modifier.height(6.dp))
             Text("No schedule information", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Press OK again to open this channel", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Press OK again to open this channel", style = MaterialTheme.typography.bodyMedium, color = Accent)
+        } else {
+            Spacer(modifier = Modifier.height(20.dp))
+            Text("Focus a channel to preview it here", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
     }
 }

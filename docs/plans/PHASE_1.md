@@ -9,8 +9,8 @@
 | 1.3 | App shell: top nav strip + placeholder tabs | ✅ done & device-verified |
 | 1.4 | Live TV: groups column + channels column | ✅ done & device-verified |
 | **A** | **Checkpoint — screenshot review (Opus + user)** | 🟡 **screenshots sent, awaiting user review** |
-| 1.5 | Preview pane with playback + fullscreen | 🟡 done with a disclosed scope trim — see note below; build-verified, **not yet watched playing on the TV** |
-| **B** | **Checkpoint — user tests on device, reports back** | ⬜ awaiting user |
+| 1.5 | Preview pane with playback + fullscreen | ✅ **device-confirmed playing** (user, 2026-09-11): playlist loads via Mobile Phone pairing, 3-pane screen renders, a channel plays |
+| **B** | **Checkpoint — user tests on device, reports back** | 🟡 round 2 fixes shipped, awaiting user retest |
 | 1.6 | Memory measurement + acceptance sweep | ⬜ not started |
 
 **Goal:** the app *looks like RedSurf* on the one screen the family will use every day, and every
@@ -125,12 +125,49 @@ trapped by bug 1, not a separate bug - the release itself published successfully
 **Verified:** clean build, 13/13 tests, signed release. **Not yet verified:** that Back and the
 Settings reset actually work on the device - next round of user testing.
 
+## Checkpoint B, round 2 — first confirmed playback + a real polish pass (2026-09-11)
+
+The user confirmed, on real hardware with a real playlist: Mobile Phone pairing loads a playlist,
+the 3-pane Live TV screen renders, and **a channel actually plays**, snappily. First true
+end-to-end milestone. Alongside that, four issues:
+
+1. **"Duplicate 2-step" behavior to get a channel playing.** Root cause: `onChannelOpen` set
+   `isFullscreen = true` immediately, but `PlayerHost` only receives a URL through the separate
+   `LaunchedEffect(focusedChannel)`, which deliberately debounces 500ms so a D-pad flying down the
+   channel list doesn't start a stream per row. Opening fullscreen is a deliberate action, not a
+   fly-by - it shouldn't wait on that timer. Fixed: `onChannelOpen` now also sets `previewUrl`
+   directly, same frame as `isFullscreen`.
+2. **Accent color read as pink, not red.** Confirmed objectively rather than by eye: sampled actual
+   pixel colors from the project's own mockups (`docs/vision/mockups/*.jpg`) via Pillow - purest
+   samples clustered around `#A30820`–`#C70402`, while the shipped `Accent` (`#E11D48`, Rose-600)
+   carries a disproportionately high blue channel. Replaced with Tailwind red-600 (`#DC2626`),
+   directly derived from that sampling, not guessed.
+3. **Spacing/sizing "unprofessional."** A first pass (rounded corners, modest padding) wasn't
+   enough. This round is a heavier pass referencing `references/streamvault/LiveTV.png` directly:
+   wider column gutters (16→32dp), taller rows with more padding, group/channel name text bumped
+   a typography tier, square (not circular) logo chips matching real channel-logo art, channel
+   number folded inline into the title line instead of a separate muted column, and the preview
+   column rebuilt from a bare text stub into an actual card (16:9 thumbnail placeholder with a
+   LIVE badge, title, metadata, an accent-colored action hint, and a real empty state). Also added
+   a 32dp gap between the nav strip and screen content in `AppShell`, which had none.
+4. **QR code for Mobile Phone pairing**, so the URL doesn't have to be typed by hand on the phone.
+   Added `com.google.zxing:core` (pure-Java QR encoder — the `BitMatrix` → `Bitmap` conversion is
+   done by hand since zxing:core has no Android dependency). Rendered on a white quiet-zone card
+   next to the existing text URL in `MobilePairingView` - a QR on the app's dark background doesn't
+   scan reliably regardless of theme, so the white card is deliberate, not a theme break.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, signed `assembleRelease`
+(`1b13f1d9…d2510d8a`). **Not yet verified:** any of the four on the actual device - next round of
+user testing, no ADB screenshot loop.
+
 ## Checkpoint B — what to check on the real TV
 
-1. Does fullscreen actually play video?
-2. Does Back now work - on the root Live TV screen, and to exit fullscreen?
-3. Settings → "Reset & add a different playlist" → confirm → does it return to Onboarding cleanly?
-4. Group names / spacing - better?
+1. Opening a channel — does it play in one step now, not two?
+2. Does the accent color read as red, not pink?
+3. Overall spacing/sizing on the Live TV screen — closer to StreamVault's proportions?
+4. Mobile Phone pairing screen — does the QR code render and actually scan to the pairing URL?
+5. Does Back still work - on the root Live TV screen, and to exit fullscreen?
+6. Settings → "Reset & add a different playlist" → confirm → does it return to Onboarding cleanly?
 
 That's the whole ask.
 

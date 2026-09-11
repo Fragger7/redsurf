@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.*
@@ -12,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -21,6 +23,9 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.Background
 import com.redsurf.tv.ui.theme.Surface as SurfaceColor
@@ -212,20 +217,40 @@ fun M3uInputForm(onSubmit: (String) -> Unit, onBack: () -> Unit) {
 @Composable
 fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
     val url = "http://$ip:$port"
-    
+    val qrBitmap = remember(url) { generatePairingQrCode(url) }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Add via Mobile Phone", style = MaterialTheme.typography.displayMedium, color = Color.White)
         Spacer(modifier = Modifier.height(16.dp))
         Text("Ensure your phone is on the same WiFi as the TV.", color = Color.Gray)
-        Text("Open your phone's web browser and go to:", color = Color.Gray)
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        Box(
-            modifier = Modifier
-                .background(SurfaceColor, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-                .padding(32.dp)
-        ) {
-            Text(url, style = MaterialTheme.typography.displayLarge, color = Accent)
+        Spacer(modifier = Modifier.height(40.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+            // White quiet zone is deliberate - a QR rendered straight onto the dark theme
+            // background doesn't scan reliably, regardless of app theme (user request, 2026-09-11:
+            // avoid typing the pairing URL by hand on the phone).
+            if (qrBitmap != null) {
+                Box(
+                    modifier = Modifier
+                        .background(Color.White, shape = RoundedCornerShape(16.dp))
+                        .padding(20.dp),
+                ) {
+                    Image(bitmap = qrBitmap, contentDescription = "QR code for $url", modifier = Modifier.size(200.dp))
+                }
+            }
+
+            Column(horizontalAlignment = Alignment.Start) {
+                Text("Scan with your phone's camera, or", color = Color.Gray)
+                Text("open your phone's browser and go to:", color = Color.Gray)
+                Spacer(modifier = Modifier.height(20.dp))
+                Box(
+                    modifier = Modifier
+                        .background(SurfaceColor, shape = RoundedCornerShape(16.dp))
+                        .padding(horizontal = 28.dp, vertical = 20.dp),
+                ) {
+                    Text(url, style = MaterialTheme.typography.headlineMedium, color = Accent)
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(48.dp))
@@ -236,6 +261,26 @@ fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
             Text("Back to Options")
         }
     }
+}
+
+/**
+ * zxing:core is pure Java - no Android Bitmap support built in - so the BitMatrix it returns is
+ * converted to an Android Bitmap by hand, one pixel at a time (a QR at typical sizes is a few
+ * hundred px per side, so this is cheap). Null on any encode failure (e.g. a malformed URL) so
+ * the pairing screen degrades to text-only rather than crashing.
+ */
+private fun generatePairingQrCode(content: String, sizePx: Int = 480): ImageBitmap? = try {
+    val hints = mapOf(EncodeHintType.MARGIN to 0)
+    val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx, hints)
+    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.RGB_565)
+    for (x in 0 until sizePx) {
+        for (y in 0 until sizePx) {
+            bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+        }
+    }
+    bitmap.asImageBitmap()
+} catch (e: Exception) {
+    null
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
