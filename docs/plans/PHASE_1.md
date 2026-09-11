@@ -4,11 +4,11 @@
 
 | # | Task | State |
 |---|---|---|
-| 1.1 | Theme + focus system (`ui/theme/`) | ⬜ not started |
-| 1.2 | Data layer: per-group Room queries, slim the ViewModel | ⬜ not started |
-| 1.3 | App shell: top nav strip + placeholder tabs | ⬜ not started |
-| 1.4 | Live TV: groups column + channels column | ⬜ not started |
-| **A** | **Checkpoint — screenshot review (Opus + user)** | ⬜ |
+| 1.1 | Theme + focus system (`ui/theme/`) | ✅ done & build-verified |
+| 1.2 | Data layer: per-group Room queries, slim the ViewModel | ✅ done & device-verified |
+| 1.3 | App shell: top nav strip + placeholder tabs | ✅ done & device-verified |
+| 1.4 | Live TV: groups column + channels column | ✅ done & device-verified |
+| **A** | **Checkpoint — screenshot review (Opus + user)** | 🟡 **screenshots sent, awaiting user review** |
 | 1.5 | Preview pane with playback + fullscreen | ⬜ not started |
 | **B** | **Checkpoint — screenshot + logcat review (Opus + user)** | ⬜ |
 | 1.6 | Memory measurement + acceptance sweep | ⬜ not started |
@@ -26,6 +26,52 @@ search, favourites, cloud — is a later phase and is **out of scope here** (see
 design language with visible focus at every step of a D-pad walk, groups show correct counts,
 focusing a channel previews it, OK opens it fullscreen, memory stays inside the budget in 1.6 —
 all **observed on the Chromecast**, not inferred from a green build.
+
+### 1.1–1.4 and Checkpoint A — what actually happened (2026-09-11)
+
+Built straight through 1.1→1.4 with one build after each task (no device round-trip until all
+four were done, per the budget rules below). Full clean build (`:app:clean` then
+`:app:compileDebugKotlin`, 17/17 tasks executed — not an incremental false-positive) succeeded on
+the first real attempt; all 13 unit tests pass; `assembleRelease` signed correctly
+(`1b13f1d9…d2510d8a`, matching the keystore).
+
+**Device-verified**, using the small iptv-org US list (via the LAN pairing server, not the
+on-screen form — see finding below):
+
+- **Group counts are exactly right**, checked against the real downloaded M3U, not assumed:
+  `grep -c 'group-title="Animation"'` → 13, matches the app exactly; same for `Animation;Kids` (6)
+  and `Animation;Classic` (1).
+- **The two-state focus model works as designed**, including the case that actually matters —
+  both states true on different elements at once. One screenshot shows "Home" with the focus
+  ring while "Live TV" independently keeps its filled/selected state, unprompted, from ordinary
+  D-pad navigation.
+- **Focusing a group re-queries the paged channel list and clears the stale preview** — moving
+  onto `Animation;Classic` correctly swapped the channel list to its one channel (`RetroCrush`)
+  and reset the preview pane, proving the `remember(playlistId, currentGroup)` + Paging wiring is
+  live, not just compiling.
+- **Coil logo loading works** — channel logos (Animation+, ANIME x HIDIVE, RetroCrush, Crunchyroll)
+  render from real URLs in the list.
+- **Channel focus drives the preview stub** — focusing a channel shows its name and "Press OK
+  again to open this channel", exactly per `UI_SPEC.md` §4.
+
+**A real bug found only by testing, not by reading the code:** the M3U/Xtream onboarding forms
+(`OnboardingScreen.kt`, pre-existing, out of scope to fix under decision #9) use
+`androidx.compose.material3.OutlinedTextField` - a mobile-oriented component that does not
+participate in tv-foundation's D-pad focus traversal. Once the text field has focus, DPAD_DOWN
+does not escape it to reach the Connect/Back buttons - multiple presses and a direct touch tap
+both failed to move focus. **A real remote user typing an M3U URL or Xtream credentials today
+would get stuck in the text field with no way to submit the form via D-pad.** Worked around for
+this checkpoint by submitting to the LAN pairing server directly (`POST /submit`), which is
+unaffected since it doesn't go through this form. This is a real, user-facing bug - flagging it
+rather than fixing it, since fixing onboarding's input handling is out of this phase's decided
+scope (#9) and deserves its own pass rather than a rushed fix mid-checkpoint.
+
+**Known, and correctly out of scope for this checkpoint:** `Color(0xFF` literals remain in
+`VodDashboard.kt`, `PlayerOsd.kt`, and `player/multiview/MultiViewEngine.kt` - all three are
+explicit Non-goals (VOD phase, player phase). The 1.1 acceptance grep is clean everywhere else.
+
+**Not yet done:** 1.5 (playback), 1.6 (memory at 30K channels), Checkpoint B. Those start once the
+user has reviewed the Checkpoint A screenshots.
 
 ---
 

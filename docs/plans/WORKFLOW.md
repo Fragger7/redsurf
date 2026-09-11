@@ -23,7 +23,9 @@ what the brief should say, that's Opus.**
   screenshot behind it. That is the exact failure mode this project was rebuilt to escape — stop
   and hand back rather than guess.
 - A fix requires changing architecture rather than code.
-- Anything touching signing, Firestore rules, or a push to `main` (which cuts a public release).
+- Anything touching signing or Firestore rules.
+- ~~Push to `main`~~ — **the user has granted standing permission** (2026-09-11): no live users,
+  merge freely to get builds onto the TV via OTA. Don't re-ask.
 - Two documents disagree and you can't tell which is authoritative.
 
 ## Phase gates

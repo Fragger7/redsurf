@@ -21,6 +21,10 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.redsurf.tv.ui.theme.Accent
+import com.redsurf.tv.ui.theme.Background
+import com.redsurf.tv.ui.theme.Surface as SurfaceColor
+import com.redsurf.tv.ui.theme.TextSecondary
 
 @Composable
 fun OnboardingScreen(
@@ -36,14 +40,14 @@ fun OnboardingScreen(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF09090B)),
+        modifier = Modifier.fillMaxSize().background(Background),
         contentAlignment = Alignment.Center
     ) {
         if (selectedMethod == null) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 // App Logo / Name
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 32.dp)) {
-                    Box(modifier = Modifier.size(64.dp).background(Color(0xFFE11D48), androidx.compose.foundation.shape.CircleShape))
+                    Box(modifier = Modifier.size(64.dp).background(Accent, androidx.compose.foundation.shape.CircleShape))
                     Spacer(modifier = Modifier.width(16.dp))
                     Text("RedSurf", style = MaterialTheme.typography.displayLarge, color = Color.White)
                 }
@@ -100,7 +104,7 @@ enum class OnboardingMethod { Xtream, M3U, Mobile, Cloud }
 fun CloudSetupContent(onBack: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(500.dp)) {
         Text("Cloud Login", style = MaterialTheme.typography.headlineLarge, color = Color.White, modifier = Modifier.padding(bottom = 16.dp))
-        Text("Web syncing is currently disabled in this version for local privacy. Please use the Local Setup (Mobile Phone) option.", color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text("Web syncing is currently disabled in this version for local privacy. Please use the Local Setup (Mobile Phone) option.", color = TextSecondary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         androidx.tv.material3.Button(
             onClick = onBack,
             colors = androidx.tv.material3.ButtonDefaults.colors(containerColor = Color.DarkGray)
@@ -121,8 +125,8 @@ fun OnboardingCard(title: String, subtitle: String, onClick: () -> Unit) {
             .height(180.dp)
             .onFocusChanged { isFocused = it.isFocused },
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color(0xFF18181B),
-            focusedContainerColor = Color(0xFFE11D48)
+            containerColor = SurfaceColor,
+            focusedContainerColor = Accent
         )
     ) {
         Column(
@@ -218,10 +222,10 @@ fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
         
         Box(
             modifier = Modifier
-                .background(Color(0xFF18181B), shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(SurfaceColor, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
                 .padding(32.dp)
         ) {
-            Text(url, style = MaterialTheme.typography.displayLarge, color = Color(0xFFE11D48))
+            Text(url, style = MaterialTheme.typography.displayLarge, color = Accent)
         }
 
         Spacer(modifier = Modifier.height(48.dp))
@@ -253,7 +257,7 @@ fun TvTextField(
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Color(0xFFE11D48),
+            focusedBorderColor = Accent,
             unfocusedBorderColor = Color.DarkGray,
             focusedTextColor = Color.White,
             unfocusedTextColor = Color.LightGray

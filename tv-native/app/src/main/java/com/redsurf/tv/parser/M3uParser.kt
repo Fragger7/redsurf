@@ -6,9 +6,26 @@ import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.util.UUID
 
+/**
+ * Streams and batches rather than materializing the whole playlist (see docs/plans/PHASE_1.md
+ * #2b - the "OOM JSON trap"). The user's real provider's M3U is 327 MB / 1.23M entries; loading
+ * that into one List would OOM the target device, and the Shield too.
+ */
 object M3uParser {
-    suspend fun parse(inputStream: InputStream): List<Channel> = withContext(Dispatchers.IO) {
-        val channels = mutableListOf<Channel>()
+
+    /**
+     * Parses [inputStream] and invokes [onBatch] with up to [batchSize] channels at a time,
+     * never holding more than one batch in memory. Every channel is classified by URL shape:
+     * "/movie/" -> vod, "/series/" -> series, otherwise live (this "else" branch is what makes
+     * Xtream's bare /user/pass/id live-channel URLs - no /live/ segment - classify correctly;
+     * measured on the real provider, see PHASE_1.md #2b).
+     */
+    suspend fun parse(
+        inputStream: InputStream,
+        batchSize: Int = 500,
+        onBatch: suspend (List<Channel>) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val batch = mutableListOf<Channel>()
         var currentName = ""
         var currentLogo = ""
         var currentGroup = ""
@@ -20,40 +37,47 @@ object M3uParser {
                 if (trimmed.isEmpty()) continue
 
                 if (trimmed.startsWith("#EXTINF:")) {
-                    // Extract tvg-logo
                     val logoRegex = "tvg-logo=\"([^\"]+)\"".toRegex()
                     currentLogo = logoRegex.find(trimmed)?.groupValues?.get(1) ?: ""
 
-                    // Extract group-title
                     val groupRegex = "group-title=\"([^\"]+)\"".toRegex()
                     currentGroup = groupRegex.find(trimmed)?.groupValues?.get(1) ?: "Uncategorized"
 
-                    // Extract tvg-id (EPG)
                     val idRegex = "tvg-id=\"([^\"]+)\"".toRegex()
                     currentEpgId = idRegex.find(trimmed)?.groupValues?.get(1) ?: ""
 
-                    // Extract name (after the last comma)
                     currentName = trimmed.substringAfterLast(",").trim()
                 } else if (!trimmed.startsWith("#")) {
-                    // It's a URL
-                    channels.add(
+                    val streamType = when {
+                        trimmed.contains("/movie/") -> "vod"
+                        trimmed.contains("/series/") -> "series"
+                        else -> "live"
+                    }
+                    batch.add(
                         Channel(
                             id = UUID.randomUUID().toString(),
                             name = currentName.ifEmpty { "Unknown Channel" },
                             streamUrl = trimmed,
                             logoUrl = currentLogo,
                             group = currentGroup,
-                            epgId = currentEpgId
+                            epgId = currentEpgId,
+                            streamType = streamType,
                         )
                     )
-                    // Reset
                     currentName = ""
                     currentLogo = ""
                     currentGroup = ""
                     currentEpgId = ""
+
+                    if (batch.size >= batchSize) {
+                        onBatch(batch.toList())
+                        batch.clear()
+                    }
                 }
             }
         }
-        channels
+        if (batch.isNotEmpty()) {
+            onBatch(batch.toList())
+        }
     }
 }

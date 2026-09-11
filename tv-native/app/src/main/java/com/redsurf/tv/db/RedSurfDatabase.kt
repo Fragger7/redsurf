@@ -1,16 +1,36 @@
 package com.redsurf.tv.db
 
 import android.content.Context
+import androidx.paging.PagingSource
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
+/** groupName + how many live channels are in it. Powers the Categories column (PHASE_1.md #1.4). */
+data class GroupCount(val groupName: String, val count: Int)
+
 @Dao
 interface ChannelDao {
+    // Kept for other DAO consumers (favorites, hide) - NOT used for rendering Live TV. Loading
+    // every channel into memory is exactly the pattern PHASE_1.md #1.2/#2 replaces; see
+    // getLiveGroupCounts and getLiveChannelsInGroup below for the paged, per-group equivalents.
     @Query("SELECT * FROM channels WHERE isHidden = 0 ORDER BY num, name")
     fun getAllChannels(): Flow<List<ChannelEntity>>
 
     @Query("SELECT * FROM channels WHERE groupId = :groupId AND isHidden = 0 ORDER BY num, name")
     fun getChannelsByGroup(groupId: String): Flow<List<ChannelEntity>>
+
+    @Query(
+        "SELECT groupName, COUNT(*) AS count FROM channels " +
+            "WHERE playlistId = :playlistId AND streamType = 'live' AND isHidden = 0 " +
+            "GROUP BY groupName ORDER BY groupName"
+    )
+    fun getLiveGroupCounts(playlistId: String): Flow<List<GroupCount>>
+
+    @Query(
+        "SELECT * FROM channels WHERE playlistId = :playlistId AND streamType = 'live' " +
+            "AND groupName = :groupName AND isHidden = 0 ORDER BY num, name"
+    )
+    fun getLiveChannelsInGroup(playlistId: String, groupName: String): PagingSource<Int, ChannelEntity>
 
     @Query("SELECT * FROM channels WHERE isFavorite = 1 ORDER BY num, name")
     fun getFavorites(): Flow<List<ChannelEntity>>
@@ -60,7 +80,9 @@ interface PlaylistDao {
     EpgProgramEntity::class,
     PlaylistEntity::class,
     ChannelGroupEntity::class
-], version = 5, exportSchema = false) // Bumped version to 5 for contentType schema change
+], version = 6, exportSchema = false)
+// v6: added the (playlistId, streamType, groupName) index (PHASE_1.md #2b). Destructive
+// migration is acceptable - no user data exists yet to preserve.
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao
