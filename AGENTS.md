@@ -26,20 +26,51 @@ model, per-group paged Room queries, one-player-per-screen, Coil, no nav library
 Sonnet-lane; Opus reviews at the two screenshot checkpoints. Read the brief's "Decisions already
 made" section before touching anything — those are settled.
 
-**1.1–1.5 done (2026-09-11).** 1.1–1.4 device-verified on the Chromecast (group counts matched the
-source M3U exactly; two-state focus model confirmed with both states true simultaneously on
-different elements). 1.5 (real fullscreen playback via new `player/PlayerHost.kt`) plus a visual
-polish pass (group-name formatting, spacing/rounding) are build-verified but not yet watched
-playing on the device — see `PHASE_1.md`'s Checkpoint B for what the user is checking.
+**1.1–1.5 done and device-confirmed (2026-09-11).** Playback works end to end on the real TV with
+a real playlist: Mobile Phone pairing → playlist loads → 3-pane Live TV screen renders → a channel
+plays. Checkpoint B is now 5 rounds of user-reports-a-bug → root-cause-on-device → fix, all logged
+in `PHASE_1.md` — read its "Checkpoint B, round N" entries for the full history, and its latest
+"what to check on the real TV" list for what's still open and awaiting the user's next test pass.
 
-**Workflow change, from user feedback:** stop doing per-task ADB screenshot round-trips — too
-expensive. Build + verify with compile/tests only, batch several changes together, hand off a
-build for the user to test on the real TV via OTA instead. Standing permission to merge to `main`
-freely is granted (no live users) — don't ask before merging.
+As of round 5, fixed: accent color (was reading pink, not red — corrected by pixel-sampling the
+project's own mockups, not by eye), QR code on the Mobile Phone pairing screen, one-step channel
+playback, Back preserving Live TV state across the fullscreen toggle (root cause was a genuine
+Compose pitfall — `AppShell` composed `LiveTvScreen` from two different structural call sites
+depending on fullscreen state, which are different composition groups and silently wipe all
+`remember`ed state on every toggle; see `AppShell.kt`'s doc comment before touching that file),
+Back stopping at a Home destination before exiting the app instead of exiting outright, and OTA
+now checking on every resume plus a 4h periodic background check plus a manual Settings button.
 
-One real bug found live in 1.1–1.4, not fixed (out of scope): the M3U/Xtream onboarding forms use
-a non-TV-aware text field that traps D-pad focus — a real remote user would get stuck unable to
-submit. Documented in `PHASE_1.md` for a later pass.
+**Next up, not yet started:** a real visual/spacing pass — the user's own assessment is it's still
+far from target despite one prior polish attempt. References given:
+`docs/vision/references/streamvault/LiveTV.png` for proportions,
+`docs/vision/references/tivimate/RedThemedEPGLiveTVScreen.jpg` (note: TiviMate has no separate
+EPG/Guide screen — Live TV does that job directly). Explicit preference: StreamVault's **top nav**
+over TiviMate's **left rail** — `NavStrip` already does this, no change needed there. The user
+floated getting Opus's design judgment on this pass specifically (not the rest of Phase 1) —
+undecided as of this writing; ask if it's still unstated when you pick this up.
+
+**Also still open:** one unresolved report of the app returning to Onboarding with no sign of the
+previously-loaded playlist after an update — checked, not a Room schema bump (version's been 6,
+unchanged, since before v0.19.1), no confirmed cause yet; and OTA reported "erratic, might be good
+enough for now" with no reproducible specifics — don't chase either without new detail from the
+user (which version → which version, force-closed or not, etc).
+
+**Workflow, from user feedback this session:** stop doing per-task ADB screenshot round-trips — too
+expensive. Build + verify with compile/tests + a signed `assembleRelease` only, batch several
+changes together, hand off a build for the user to test on the real TV via OTA instead. Targeted
+ADB debugging of one specific reported bug is fine when the user says so explicitly (happened twice
+this phase, both times solved a real bug) — that's different from routine verification loops.
+**Never install an ad-hoc-versioned local build to the test device** — an early local build with
+default versionName `v1.0.0` once out-ranked every real release by semver, permanently blocking OTA
+until manually fixed; always verify a local `assembleRelease` with an explicit low/obviously-fake
+version like `-PversionName=v0.0.0-local-verify`, check its signature, then delete it rather than
+`adb install` it. Standing permission to merge to `main` freely is granted (no live users) — don't
+ask before merging.
+
+One real bug found live in 1.1–1.4, still not fixed (disclosed, out of scope): the M3U/Xtream
+onboarding forms use a non-TV-aware text field that traps D-pad focus — a real remote user would
+get stuck unable to submit. Documented in `PHASE_1.md` for a later pass.
 
 ## Product decisions on record
 
@@ -93,6 +124,13 @@ cd tv-native
 
 Toolchain: Temurin JDK 17, Gradle 8.7 (wrapper committed), AGP 8.2.2, Kotlin 1.9.22,
 compileSdk 34, minSdk 23. SDK footprint is deliberately minimal — no Studio, no emulator.
+
+If your shell tool runs each command in a fresh process (true for Claude Code's `Bash` tool),
+`export JAVA_HOME=...` does not persist between calls — re-export it in the *same* call as every
+`gradlew`/`apksigner` invocation, or it fails with "Unable to locate a Java Runtime" even though
+you exported it moments ago. `apksigner` lives at
+`~/Library/Android/sdk/build-tools/34.0.0/apksigner` on this machine (`$ANDROID_HOME` may be
+unset in your shell — use the absolute path if so).
 
 **Test device** (only when it's powered on — don't assume it is):
 ```bash
