@@ -15,6 +15,7 @@ import com.redsurf.tv.vod.XtreamApi
 import com.redsurf.tv.server.PairingServer
 import com.redsurf.tv.updater.UpdateManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,14 +65,41 @@ class MainViewModel : ViewModel() {
     private var pairingServer: PairingServer? = null
 
     private val _updateStatus = MutableStateFlow<UpdateCheckStatus>(UpdateCheckStatus.Idle)
-    /** Owned here, not in MainActivity's Composable, so both the launch-time auto-check and the
-     * Settings screen's manual "Check for updates" button (user request, 2026-09-11 - a fallback
-     * for whenever the silent check doesn't surface a prompt) share one source of truth. */
+    /** Owned here, not in MainActivity's Composable, so every trigger - the resume-time
+     * auto-check, the periodic background check, and Settings' manual "Check for updates" button
+     * (all user request, 2026-09-11) - shares one source of truth and one in-flight request. */
     val updateStatus: StateFlow<UpdateCheckStatus> = _updateStatus.asStateFlow()
 
-    /** Safe to call repeatedly - a check already in flight is a no-op, not a stacked request. */
-    fun checkForUpdates() {
+    private var lastUpdateCheckAtMillis = 0L
+
+    init {
+        // "Auto check every few hours if people aren't watching" (user request, 2026-09-11) -
+        // covers a session left open for a long stretch without ever backgrounding, which the
+        // resume-triggered check in MainActivity can't reach since no resume ever fires. Dies
+        // with the ViewModel (viewModelScope), same as everything else here - by design, this
+        // can't reach the app while its process isn't running; that case is covered by checking
+        // on every resume instead (MainActivity), which force-close + relaunch always triggers.
+        viewModelScope.launch {
+            while (true) {
+                delay(PERIODIC_UPDATE_CHECK_INTERVAL_MS)
+                checkForUpdates()
+            }
+        }
+    }
+
+    /**
+     * Safe to call from anywhere, anytime - a check already in flight is a no-op, not a stacked
+     * request, and [force]-less calls (every trigger except the Settings button) are throttled to
+     * at most once per [MIN_UPDATE_CHECK_INTERVAL_MS] so resuming the app repeatedly in quick
+     * succession doesn't hammer the GitHub API. A fresh process (force-close, or first launch)
+     * always checks regardless - [lastUpdateCheckAtMillis] resets to 0 with the process, which is
+     * exactly the case the user needs to be reliable.
+     */
+    fun checkForUpdates(force: Boolean = false) {
         if (_updateStatus.value is UpdateCheckStatus.Checking) return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastUpdateCheckAtMillis < MIN_UPDATE_CHECK_INTERVAL_MS) return
+        lastUpdateCheckAtMillis = now
         viewModelScope.launch {
             _updateStatus.value = UpdateCheckStatus.Checking
             val info = UpdateManager.checkForUpdates()
@@ -85,6 +113,11 @@ class MainViewModel : ViewModel() {
 
     fun dismissUpdatePrompt() {
         _updateStatus.value = UpdateCheckStatus.Idle
+    }
+
+    companion object {
+        private const val MIN_UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000L
+        private const val PERIODIC_UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000L
     }
 
     fun setDatabase(db: RedSurfDatabase, context: Context) {

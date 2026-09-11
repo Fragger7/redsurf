@@ -65,7 +65,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 val updateStatus by viewModel.updateStatus.collectAsState()
                 SettingsScreen(
                     updateStatus = updateStatus,
-                    onCheckForUpdates = { viewModel.checkForUpdates() },
+                    onCheckForUpdates = { viewModel.checkForUpdates(force = true) },
                     onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
                 )
             }

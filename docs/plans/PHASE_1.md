@@ -194,6 +194,36 @@ OTA one, as before):
 above for why that matters). **Not yet verified:** the resume-retry install flow and the new Back
 behavior on the device - next round of user testing.
 
+## Checkpoint B, round 4 — making the OTA check actually consistent (2026-09-11)
+
+Round 3 worked - the user confirmed the install prompt appeared and completed once the stuck
+system screen was cleared - but that check only ever ran once, in a `LaunchedEffect(Unit)` tied
+to the Activity's Compose composition: a genuine cold start (new process - force-close, or first
+launch) always re-triggers it, but simply returning to a RedSurf task that was already running in
+the background (no process kill) would not, since the composition - and the already-fired
+`LaunchedEffect(Unit)` - is still alive. The user asked for the check to fire "no matter where
+launched from," and for a periodic recheck for a session left running for hours.
+
+Fixed both in `MainViewModel`:
+- The check now fires on every `ON_RESUME` (`MainActivity`'s `DisposableEffect` lifecycle
+  observer, not a once-only `LaunchedEffect`) - this covers a fresh process same as before
+  (`ON_RESUME` always fires once right after `onCreate` too) *and* every subsequent return to an
+  already-running RedSurf task, satisfying "no matter where launched from."
+- A resume-triggered (or periodic) check is throttled to at most once per 15 minutes
+  (`lastUpdateCheckAtMillis`) so switching tabs or quickly backgrounding/foregrounding doesn't
+  hammer the GitHub API - a fresh process always bypasses this (the timestamp resets to 0 with
+  it), so force-close + relaunch is never throttled away.
+- A periodic self-rescheduling check every 4 hours (`viewModelScope`, dies with the process by
+  design - reaching a fully backgrounded/killed process needs WorkManager + a notification, a
+  bigger build not attempted here) covers a session left open and idle for a long stretch without
+  ever backgrounding.
+- Settings' "Check for updates" button now passes `force = true`, always bypassing the throttle
+  since it's an explicit user action.
+
+**Verified:** clean build, 13/13 tests, `assembleRelease` succeeds with the real signing config,
+no ad-hoc local build installed to the device. **Not yet verified:** actual resume-triggered and
+periodic behavior on the device - next round of user testing.
+
 ## Checkpoint B — what to check on the real TV
 
 1. Opening a channel — does it play in one step now, not two?
@@ -204,6 +234,8 @@ behavior on the device - next round of user testing.
 6. Does Back still work - to exit fullscreen, and from other tabs back to Home?
 7. Settings → "Check for updates" — does it show a result (up to date / update found)?
 8. Settings → "Reset & add a different playlist" → confirm → does it return to Onboarding cleanly?
+9. With a newer release published, does backgrounding RedSurf (Home button, not force-close) and
+   returning to it - without ever force-closing - surface the update prompt?
 
 That's the whole ask.
 

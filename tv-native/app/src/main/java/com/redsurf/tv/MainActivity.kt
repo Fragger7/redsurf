@@ -65,10 +65,12 @@ class MainActivity : ComponentActivity() {
             RedSurfTheme {
                 val state by viewModel.state.collectAsState()
 
-                // OTA update: check once per launch, but never install without the user's
-                // consent, and never attempt the install if the OS will just block it. State
-                // lives in MainViewModel (not locally here) so Settings' manual "Check for
-                // updates" button shares the same result - see MainViewModel.updateStatus.
+                // OTA update: never install without the user's consent, and never attempt the
+                // install if the OS will just block it. State lives in MainViewModel (not
+                // locally here) so every trigger - resume, the periodic background check, and
+                // Settings' manual "Check for updates" button - shares the same result. See
+                // MainViewModel.updateStatus and MainViewModel.checkForUpdates for the throttle
+                // that keeps this cheap.
                 val updateStatus by viewModel.updateStatus.collectAsState()
                 var showInstallPermissionPrompt by remember { mutableStateOf(false) }
                 // Set right before sending the user to system Settings to grant the install
@@ -78,13 +80,17 @@ class MainActivity : ComponentActivity() {
                 // no indication the permission had actually been granted).
                 var retryInstallOnResume by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
 
-                LaunchedEffect(Unit) {
-                    viewModel.checkForUpdates()
-                }
-
+                // ON_RESUME, not a once-only LaunchedEffect(Unit): the ask (user, 2026-09-11) is
+                // to check "no matter where launched from," not just a cold process start.
+                // ON_RESUME fires on the very first launch too (right after onCreate, before the
+                // first frame is normally seen), so this alone covers both a fresh process
+                // (force-close + relaunch - MainViewModel.lastUpdateCheckAtMillis resets to 0
+                // with the process, so this is never throttled away) and simply returning to a
+                // RedSurf task that was already running in the background.
                 DisposableEffect(Unit) {
                     val observer = LifecycleEventObserver { _, event ->
                         if (event == Lifecycle.Event.ON_RESUME) {
+                            viewModel.checkForUpdates()
                             retryInstallOnResume?.let { info ->
                                 if (UpdateManager.canInstallUnknownApps(this@MainActivity)) {
                                     retryInstallOnResume = null
