@@ -19,8 +19,10 @@ class RegressionTestSuite {
     
     @Test
     fun testDoHConfiguration() {
-        // Mock DoH tests to ensure no regressions in UserAgent spoofing
-        assertEquals("VLC/3.0.18 LibVLC/3.0.18", com.redsurf.tv.network.IptvNetworkModule.globalUserAgent)
+        // Mock DoH tests to ensure no regressions in UserAgent spoofing.
+        // IPTVSmartersPro/1.1.1, not VLC - see PHASE_1.md #2c: the VLC identifier drew a 38s
+        // anti-bot throttle from the user's real provider, this one didn't.
+        assertEquals("IPTVSmartersPro/1.1.1", com.redsurf.tv.network.IptvNetworkModule.globalUserAgent)
         assertEquals(com.redsurf.tv.network.IptvNetworkModule.DnsProvider.SYSTEM, com.redsurf.tv.network.IptvNetworkModule.currentDnsProvider)
     }
 }

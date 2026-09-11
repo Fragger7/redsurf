@@ -84,8 +84,16 @@ dependencies {
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
+    implementation("androidx.room:room-paging:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
-    
+
+    // Paging for per-group channel lists - never load a whole playlist into memory (PHASE_1.md #2).
+    implementation("androidx.paging:paging-compose:3.2.1")
+
+    // Channel logos, bounded to a 24 MB memory cache (PHASE_1.md #1.5). The phase's one new
+    // non-paging dependency.
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")

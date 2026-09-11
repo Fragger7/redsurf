@@ -37,8 +37,15 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.redsurf.tv.updater.UpdateManager
-import com.redsurf.tv.ui.TiViMateLayout
 import com.redsurf.tv.ui.onboarding.OnboardingScreen
+import com.redsurf.tv.ui.shell.AppShell
+import com.redsurf.tv.ui.theme.Accent
+import com.redsurf.tv.ui.theme.Background
+import com.redsurf.tv.ui.theme.RedSurfTheme
+import com.redsurf.tv.ui.theme.Surface
+import com.redsurf.tv.ui.theme.SurfaceRaised
+import com.redsurf.tv.ui.theme.TextPrimary
+import com.redsurf.tv.ui.theme.TextSecondary
 import com.redsurf.tv.db.RedSurfDatabase
 
 class MainActivity : ComponentActivity() {
@@ -52,7 +59,7 @@ class MainActivity : ComponentActivity() {
         viewModel.setDatabase(db, this)
 
         setContent {
-            MaterialTheme {
+            RedSurfTheme {
                 val state by viewModel.state.collectAsState()
 
                 // OTA update: check once per launch, but never install without the user's
@@ -76,15 +83,15 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Box(
-                    modifier = Modifier.fillMaxSize().background(Color(0xFF09090B)),
+                    modifier = Modifier.fillMaxSize().background(Background),
                     contentAlignment = Alignment.Center
                 ) {
                     when (val s = state) {
                         is AppState.Loading -> {
                             androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                androidx.compose.material3.CircularProgressIndicator(color = Color(0xFFE11D48))
+                                androidx.compose.material3.CircularProgressIndicator(color = Accent)
                                 androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(16.dp))
-                                Text(s.message, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                                Text(s.message, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
                             }
                         }
                         is AppState.Onboarding -> {
@@ -100,12 +107,9 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         is AppState.Loaded -> {
-                            TiViMateLayout(
-                                groups = s.groups,
-                                playlists = s.playlists,
-                                activePlaylistId = s.activePlaylistId,
+                            AppShell(
                                 viewModel = viewModel,
-                                activity = this@MainActivity
+                                activePlaylistId = s.activePlaylistId,
                             )
                         }
                         is AppState.Error -> {
@@ -162,11 +166,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun UpdateAvailableDialog(versionName: String, onInstall: () -> Unit, onDismiss: () -> Unit) {
     ModalCard(onDismissRequest = onDismiss) { installButtonFocus ->
-        Text("Update available", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+        Text("Update available", style = MaterialTheme.typography.headlineSmall, color = TextPrimary)
         Spacer(modifier = Modifier.height(12.dp))
         Text(
             "RedSurf $versionName is ready to install.",
-            color = Color(0xFFA1A1AA),
+            color = TextSecondary,
             style = MaterialTheme.typography.bodyLarge
         )
         Spacer(modifier = Modifier.height(24.dp))
@@ -174,14 +178,14 @@ private fun UpdateAvailableDialog(versionName: String, onInstall: () -> Unit, on
             Button(
                 onClick = onInstall,
                 modifier = Modifier.focusRequester(installButtonFocus),
-                colors = ButtonDefaults.colors(containerColor = Color(0xFFE11D48))
+                colors = ButtonDefaults.colors(containerColor = Accent)
             ) {
                 Text("Install now")
             }
             Spacer(modifier = Modifier.width(16.dp))
             Button(
                 onClick = onDismiss,
-                colors = ButtonDefaults.colors(containerColor = Color.DarkGray)
+                colors = ButtonDefaults.colors(containerColor = SurfaceRaised)
             ) {
                 Text("Later")
             }
@@ -197,12 +201,12 @@ private fun UpdateAvailableDialog(versionName: String, onInstall: () -> Unit, on
 @Composable
 private fun InstallPermissionDialog(onGoToSettings: () -> Unit, onDismiss: () -> Unit) {
     ModalCard(onDismissRequest = onDismiss) { settingsButtonFocus ->
-        Text("Permission needed", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+        Text("Permission needed", style = MaterialTheme.typography.headlineSmall, color = TextPrimary)
         Spacer(modifier = Modifier.height(12.dp))
         Text(
             "To install updates, RedSurf needs permission to install unknown apps. " +
                 "You'll be taken to Settings - enable it there, then reopen RedSurf to install the update.",
-            color = Color(0xFFA1A1AA),
+            color = TextSecondary,
             style = MaterialTheme.typography.bodyLarge
         )
         Spacer(modifier = Modifier.height(24.dp))
@@ -210,14 +214,14 @@ private fun InstallPermissionDialog(onGoToSettings: () -> Unit, onDismiss: () ->
             Button(
                 onClick = onGoToSettings,
                 modifier = Modifier.focusRequester(settingsButtonFocus),
-                colors = ButtonDefaults.colors(containerColor = Color(0xFFE11D48))
+                colors = ButtonDefaults.colors(containerColor = Accent)
             ) {
                 Text("Open settings")
             }
             Spacer(modifier = Modifier.width(16.dp))
             Button(
                 onClick = onDismiss,
-                colors = ButtonDefaults.colors(containerColor = Color.DarkGray)
+                colors = ButtonDefaults.colors(containerColor = SurfaceRaised)
             ) {
                 Text("Cancel")
             }
@@ -246,7 +250,7 @@ private fun ModalCard(onDismissRequest: () -> Unit, content: @Composable (primar
             Box(
                 modifier = Modifier
                     .widthIn(max = 520.dp)
-                    .background(Color(0xFF18181B), RoundedCornerShape(16.dp))
+                    .background(Surface, RoundedCornerShape(16.dp))
                     .padding(32.dp)
             ) {
                 Column {

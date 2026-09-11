@@ -1,6 +1,7 @@
 package com.redsurf.tv.db
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "playlists")
@@ -31,7 +32,9 @@ data class ChannelGroupEntity(
     val groupType: String // "live", "vod", "series"
 )
 
-@Entity(tableName = "channels")
+// Indexed for the per-group Live TV queries (PHASE_1.md #2b) - a GROUP BY over tens of
+// thousands of rows without this index is a full table scan and a visible stall.
+@Entity(tableName = "channels", indices = [Index(value = ["playlistId", "streamType", "groupName"])])
 data class ChannelEntity(
     @PrimaryKey val streamId: String,
     val playlistId: String,
