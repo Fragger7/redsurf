@@ -95,6 +95,8 @@ on this class of device, rather than assuming 4.
 
 ## 8. Overscan and text
 
-- Keep all content within a 48dp safe margin — TVs crop edges.
+- Keep all content within the overscan safe margin — TVs crop edges. Android TV's rule is 5% per
+  edge, which on this 960×540dp canvas (1080p at density 2) is **48dp horizontal, 27dp vertical**;
+  the app uses 48 / 32. (The earlier 48dp-all-round spent 96 of only 540 vertical dp on margin.)
 - Minimum body text 18sp; TV viewing distance is ~3m. Nothing below 14sp anywhere.
 - The user's own mockups are correctly sized; match their proportions.

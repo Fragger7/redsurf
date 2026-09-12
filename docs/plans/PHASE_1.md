@@ -270,6 +270,48 @@ more deliberate design pass than a quick edit and deserves its own focused round
 no ad-hoc local build installed to the device. **Not yet verified:** the state-preservation fix on
 the actual device - next round of user testing.
 
+## Checkpoint B, round 6 — the visual pass (2026-09-11, Opus)
+
+Before/after: `docs/vision/screenshots/before_visual_pass.png` → `after_visual_pass.png`. The
+pass was done against a device screenshot and references/streamvault/LiveTV.png measured at this
+device's actual dp canvas - 960×540dp (1080p at density 2.0) - not by eye.
+
+**The single biggest cause of "unprofessional" was a layout bug, not taste.** The nav strip's
+content (wordmark + seven pills) was wider than the 864dp safe area. A `Row` measures its last
+child with whatever width is left, so "Settings" got near-zero width, its label soft-wrapped to
+one character per line, and that tall, clipped, *invisible* pill set the height of the whole
+strip at ~225dp (should be ~52). The content below got the leftover third of the screen - two or
+three rows visible, everything looking squeezed. This has been there since 1.3; the earlier
+"better sized 3-pane screen" the user saw after the old fullscreen-branch remount was simply the
+same screen without the nav strip. Fixed by sizing the strip to fit (`NavStrip.kt`) with every
+label `maxLines = 1, softWrap = false` so overflow can only ever clip horizontally, never inflate.
+
+**Everything else was ~1.75× too big for the canvas.** StreamVault's category rows measure ~34dp
+and channel rows ~48dp at our scale; ours were 60 and 84. Now: nav 52dp; category rows 36dp
+(14sp) inside a panel card; channel rows 48dp with 36dp square logo tiles; preview as a panel
+card with accent header, 16:9 thumbnail, LIVE badge, hero title, accent hint. Column split
+28/34/30 with 20dp gutters. Safe area 48dp horizontal / 32dp vertical (UI_SPEC.md §8 updated -
+Android TV's 5% rule is 27dp vertical at 540dp; 48 all round was spending 96 of 540 on margin).
+Result: 9 groups and 7 channels visible instead of 3 and 2.
+
+**Hierarchy of red, deliberately reduced.** The selected category was a full accent block, the
+loudest thing on screen for the least important state. Now: active nav pill = filled red (the
+one bold element); selected category = raised fill + 3dp accent left bar; focus = red ring +
+glow + 1.04 scale on whatever it sits on; preview header, LIVE badge and hint = accent text.
+`RedSurfFocus.rowColors()` added for list rows (transparent at rest inside a card);
+`RedSurfFocus.colors()` unchanged for standalone pills. New `ui/theme/Type.kt` names the five
+text roles the app uses (sectionTitle, rowTitle, rowSecondary, label, heroTitle, badge) so every
+screen picks the same tier for the same job - weight only, never sp, per Theme.kt.
+
+**Initial focus** now lands on the selected category on launch (`GroupsColumn`, one-shot
+FocusRequester, runCatching-guarded) - a TV screen with no visible ring wastes the first press.
+
+**Device-verified** (Opus, three screenshots, one same-version release-signed reinstall - not an
+ad-hoc version, so OTA ordering is untouched): layout, focus ring/glow/scale unclipped, D-pad
+navigation across all three columns, preview populating, initial focus. Unit tests 13/13.
+**Not touched:** Onboarding, Settings, placeholder screens, fullscreen player - none are on the
+reference; their turn comes with their own phases.
+
 ## Checkpoint B — what to check on the real TV
 
 1. Opening a channel — does it play in one step now, not two?
@@ -277,8 +319,8 @@ the actual device - next round of user testing.
    first group with nothing focused?
 3. Does the accent color still read as red, not pink? (already confirmed once - re-check with a
    fresh eye alongside the state fix)
-4. Overall spacing/sizing on the Live TV screen — next major pass, not yet attempted; see the
-   references logged above.
+4. Overall spacing/sizing on the Live TV screen — round 6 pass shipped; does it read as the same
+   product family as StreamVault's LiveTV.png now? What's still off?
 5. Mobile Phone pairing screen — does the QR code render and actually scan to the pairing URL?
 6. Back on the root Live TV screen — does it now go to Home first, then exit on a second press?
 7. Does Back still work - to exit fullscreen, and from other tabs back to Home?

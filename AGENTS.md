@@ -41,14 +41,15 @@ depending on fullscreen state, which are different composition groups and silent
 Back stopping at a Home destination before exiting the app instead of exiting outright, and OTA
 now checking on every resume plus a 4h periodic background check plus a manual Settings button.
 
-**Next up, not yet started:** a real visual/spacing pass — the user's own assessment is it's still
-far from target despite one prior polish attempt. References given:
-`docs/vision/references/streamvault/LiveTV.png` for proportions,
-`docs/vision/references/tivimate/RedThemedEPGLiveTVScreen.jpg` (note: TiviMate has no separate
-EPG/Guide screen — Live TV does that job directly). Explicit preference: StreamVault's **top nav**
-over TiviMate's **left rail** — `NavStrip` already does this, no change needed there. The user
-floated getting Opus's design judgment on this pass specifically (not the rest of Phase 1) —
-undecided as of this writing; ask if it's still unstated when you pick this up.
+**Visual pass done (round 6, Opus, 2026-09-11)** - see `PHASE_1.md` round 6 and
+`docs/vision/screenshots/before_visual_pass.png` → `after_visual_pass.png`. The root cause of
+"unprofessional" was a nav-strip overflow bug inflating it to ~225dp, plus everything sized ~1.75×
+too big for the actual 960×540dp canvas (1080p at density 2 - measure against *that*, not px).
+`ui/theme/Type.kt` now names the text roles; `RedSurfFocus.rowColors()` vs `colors()` is the
+list-row vs pill distinction. Awaiting the user's verdict; Onboarding/Settings/placeholders were
+deliberately not touched.
+
+**Next up:** 1.6 (memory measurement + acceptance sweep) to close Phase 1 - Sonnet-lane.
 
 **Also still open:** one unresolved report of the app returning to Onboarding with no sign of the
 previously-loaded playlist after an update — checked, not a Room schema bump (version's been 6,

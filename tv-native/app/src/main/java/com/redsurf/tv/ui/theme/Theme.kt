@@ -30,5 +30,10 @@ fun RedSurfTheme(content: @Composable () -> Unit) {
     )
 }
 
-/** The 48dp overscan safe margin (UI_SPEC.md #8), applied once at each screen root. */
-fun Modifier.tvSafeArea(): Modifier = this.padding(48.dp)
+/**
+ * Overscan safe margin (UI_SPEC.md #8), applied once at each screen root. Android TV's rule is
+ * 5% per edge: on this 960x540dp canvas that's 48dp horizontally and 27dp vertically. The
+ * earlier 48dp-all-round version spent 96 of only 540 vertical dp on margin, which is a large
+ * part of why so few rows fit; 32dp vertical keeps a little headroom over the 27dp minimum.
+ */
+fun Modifier.tvSafeArea(): Modifier = this.padding(horizontal = 48.dp, vertical = 32.dp)

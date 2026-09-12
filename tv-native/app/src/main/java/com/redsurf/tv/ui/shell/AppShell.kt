@@ -66,7 +66,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     Column(modifier = rootModifier) {
         if (!liveTvFullscreen) {
             NavStrip(current = destination, onSelect = { destination = it })
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(20.dp))
         }
 
         // One call site, always reached when destination == LiveTv, regardless of

@@ -2,16 +2,22 @@ package com.redsurf.tv.ui.livetv
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -22,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import androidx.paging.cachedIn
@@ -32,6 +39,8 @@ import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.player.PlayerHost
 import com.redsurf.tv.ui.theme.Accent
+import com.redsurf.tv.ui.theme.RedSurfType
+import com.redsurf.tv.ui.theme.Surface
 import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
@@ -87,7 +96,10 @@ fun LiveTvScreen(viewModel: MainViewModel, playlistId: String, onFullscreenChang
         return
     }
 
-    Row(modifier = Modifier.fillMaxSize()) {
+    // Column proportions from references/streamvault/LiveTV.png: ~28 / 34 / 30 with 20dp
+    // gutters. Gutters live here, not as trailing padding inside each column, so every column's
+    // own card/background spans exactly its slot.
+    Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
         GroupsColumn(
             groups = groups,
             selectedGroup = selectedGroup,
@@ -125,65 +137,84 @@ fun LiveTvScreen(viewModel: MainViewModel, playlistId: String, onFullscreenChang
                     isFullscreen = true
                     onFullscreenChanged(true)
                 },
-                modifier = Modifier.weight(1.4f),
+                modifier = Modifier.weight(1.2f),
             )
         }
 
-        PreviewStub(channel = focusedChannel, modifier = Modifier.weight(1.2f))
+        PreviewStub(channel = focusedChannel, modifier = Modifier.weight(1.05f))
     }
 }
 
 /**
- * Right column: a real preview card (references/streamvault/LiveTV.png), not bare text - a 16:9
- * thumbnail area (the channel's initial until embedded live preview lands, see the scope note
- * above), title, metadata, and an accent-colored action hint so the column reads as an actual
- * part of the product rather than a debug stub.
+ * Right column: the preview card (references/streamvault/LiveTV.png) - a 16:9 thumbnail area
+ * (the channel's initial until embedded live preview lands, see the scope note above), title,
+ * programme line, and an accent-coloured action hint, all inside one panel card. The header is
+ * accent-coloured like the reference's, which is what visually ties this column to the focus
+ * ring and the LIVE badge - the three places the brand red appears on this screen besides the
+ * active nav pill.
  */
 @Composable
 private fun PreviewStub(channel: ChannelEntity?, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.padding(start = 8.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .background(Surface, RoundedCornerShape(16.dp))
+            .padding(16.dp),
+    ) {
         Text(
             "Channel Preview",
-            style = MaterialTheme.typography.titleLarge,
-            color = TextPrimary,
-            modifier = Modifier.padding(bottom = 20.dp),
+            style = RedSurfType.sectionTitle,
+            color = Accent,
+            modifier = Modifier.padding(bottom = 12.dp),
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(SurfaceRaised),
             contentAlignment = Alignment.Center,
         ) {
             if (channel != null) {
                 Text(
                     channel.name.take(1).uppercase(),
-                    style = MaterialTheme.typography.displayLarge,
-                    color = TextSecondary,
+                    style = MaterialTheme.typography.displayMedium,
+                    color = TextSecondary.copy(alpha = 0.5f),
                 )
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(12.dp)
+                        .padding(10.dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(Accent)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
                 ) {
-                    Text("LIVE", style = MaterialTheme.typography.labelSmall, color = TextPrimary)
+                    Text("LIVE", style = RedSurfType.badge, color = TextPrimary)
                 }
+            } else {
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = TextSecondary.copy(alpha = 0.35f),
+                    modifier = Modifier.size(40.dp),
+                )
             }
         }
 
+        Spacer(modifier = Modifier.height(14.dp))
         if (channel != null) {
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(channel.name, style = MaterialTheme.typography.headlineSmall, color = TextPrimary, maxLines = 2)
-            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                channel.name,
+                style = RedSurfType.heroTitle,
+                color = TextPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
             Text("No schedule information", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Press OK again to open this channel", style = MaterialTheme.typography.bodyMedium, color = Accent)
+            Text("Press OK again to open this channel", style = RedSurfType.rowSecondary, color = Accent)
         } else {
-            Spacer(modifier = Modifier.height(20.dp))
             Text("Focus a channel to preview it here", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
     }
