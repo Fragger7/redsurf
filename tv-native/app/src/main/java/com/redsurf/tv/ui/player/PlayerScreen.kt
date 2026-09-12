@@ -4,18 +4,28 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -27,12 +37,21 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.SubcomposeAsyncImage
+import com.redsurf.tv.data.ChannelRepository
+import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.player.PlayerHost
+import com.redsurf.tv.player.StreamInfo
 import com.redsurf.tv.ui.theme.Background
 import com.redsurf.tv.ui.theme.RedSurfType
+import com.redsurf.tv.ui.theme.Surface
+import com.redsurf.tv.ui.theme.SurfaceRaised
+import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -59,30 +78,44 @@ sealed class PlayerOverlay {
 enum class PickerKind { Audio, Subtitles, Info, History }
 
 /**
- * Owns the fullscreen surface and, as of this task, the overlay state machine and key router
- * (PHASE_2.md #2.1b) - still no visual chrome beyond the opaque background: the info block, tile
- * row, action row, scrim and breadcrumb/clock are #2.1's remaining slice and #2.3. This is
- * deliberately a smaller step than the full #2.1 task (user request, 2026-09-12 - bite-sized
- * chunks against the rate-limit window): state machine + router + Back-peeling + timeouts, all
- * verifiable from `logcat` alone, no device visual check needed yet.
+ * Owns the fullscreen surface, the overlay state machine, the key router, and real zap
+ * (PHASE_2.md #2.1-#2.2). Built in bite-sized slices against the user's rate-limit window
+ * (2026-09-12): #2.1a extracted this from `LiveTvScreen`'s inline `Box`; #2.1b added the state
+ * machine/router/Back-peeling/timeouts; #2.1's close added the scrim/breadcrumb/clock; #2.2's
+ * first slice added the DB queries and player tuning this now calls. Still not built: the tile
+ * row and action row content (#2.3), LEFT's real channel-list overlay and RIGHT's real
+ * last-channel zap (#2.4).
  *
  * [onExitFullscreen] is called only when Back is pressed with nothing showing ([PlayerOverlay.None])
  * - every other state peels inward first (decision 4). This replaced `LiveTvScreen`'s own
  * `BackHandler`, which only ever knew "exit fullscreen" - now that there's real overlay state to
  * peel through, one `BackHandler` needs to own both behaviors, and it has to live where the state
  * does.
+ *
+ * Zapping needs to update `focusedChannel`/`previewUrl`, which live in `LiveTvScreen`, not here -
+ * [currentChannel] and [onChannelChanged] are that bridge (state/focus discipline, `AGENTS.md`:
+ * Back after zapping must land on the channel actually being watched, not the one fullscreen was
+ * originally opened on). [onChannelChanged] is expected to update `previewUrl` immediately, the
+ * same way `onChannelOpen` already bypasses the browse-debounce - zapping is a deliberate action,
+ * not a fly-by, and waiting on that debounce would reintroduce the "duplicate 2-step" bug this
+ * exact pattern already fixed once.
  */
 @Composable
 fun PlayerScreen(
     streamUrl: String?,
     focusRequester: FocusRequester,
     onExitFullscreen: () -> Unit,
+    currentChannel: ChannelEntity?,
+    repository: ChannelRepository,
+    onChannelChanged: (ChannelEntity) -> Unit,
     // "PlaylistName › GroupName" for whatever's playing - blank hides the breadcrumb (e.g. the
     // very first frame before a channel is known). Computed by the caller (LiveTvScreen already
     // has the group/playlist context) rather than re-derived here.
     breadcrumb: String = "",
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
+    var streamInfo by remember { mutableStateOf(StreamInfo()) }
     var overlay by remember { mutableStateOf<PlayerOverlay>(PlayerOverlay.None) }
 
     // Long-press OK (decision 3) is tracked across a held key: isLongPress flips true on a
@@ -187,9 +220,24 @@ fun PlayerScreen(
                                 else -> {}
                             }
                             Key.DirectionUp, Key.DirectionDown ->
-                                // Real zap (neighbour lookup, tune, badges) is #2.2 - this only
-                                // proves the state transition for now.
-                                if (isFirstDown) overlay = PlayerOverlay.ZapBanner
+                                // UP -> previous, DOWN -> next (decision 3). One zap per press,
+                                // not per repeat tick (isFirstDown) - a held key must not
+                                // machine-gun through channels.
+                                if (isFirstDown) {
+                                    overlay = PlayerOverlay.ZapBanner
+                                    val channel = currentChannel
+                                    if (channel != null) {
+                                        val goingUp = event.key == Key.DirectionUp
+                                        scope.launch {
+                                            val next = if (goingUp) {
+                                                repository.prevChannel(channel.playlistId, channel.groupName, channel.num)
+                                            } else {
+                                                repository.nextChannel(channel.playlistId, channel.groupName, channel.num)
+                                            }
+                                            next?.let(onChannelChanged)
+                                        }
+                                    }
+                                }
                             Key.DirectionLeft -> if (isFirstDown) overlay = PlayerOverlay.ChannelList
                             Key.DirectionRight ->
                                 // Last-channel zap is #2.4 - state transition only for now.
@@ -202,7 +250,12 @@ fun PlayerScreen(
                 true
             },
     ) {
-        PlayerHost(streamUrl = streamUrl, fullscreen = true, modifier = Modifier.fillMaxSize())
+        PlayerHost(
+            streamUrl = streamUrl,
+            fullscreen = true,
+            modifier = Modifier.fillMaxSize(),
+            onStreamInfo = { streamInfo = it },
+        )
 
         // Scrim + breadcrumb/clock (decision 7's chrome, not its info-block content - that's
         // #2.3). Shown whenever any overlay is up; Level 0 (nothing showing) stays pure video,
@@ -247,6 +300,86 @@ fun PlayerScreen(
                 color = TextSecondary,
                 modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
             )
+
+            // The info block itself (decision 7's content, not just its chrome) - real now for
+            // both the zap banner and Controls, since the tile/action row that would otherwise
+            // sit below it on the Controls floor doesn't exist yet (#2.3) to differentiate the
+            // two positions the brief describes.
+            if (overlay == PlayerOverlay.ZapBanner || overlay is PlayerOverlay.Controls) {
+                PlayerInfoBlock(
+                    channel = currentChannel,
+                    streamInfo = streamInfo,
+                    modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Level 1 / zap-banner content (decision 7) - logo, channel line, badges. Programme title and
+ * the next-programme line are EPG-only and omitted entirely until Phase 3, not shown empty; same
+ * honesty as the browse screen's "No schedule information." Badges are individually omitted
+ * (never a placeholder) when [StreamInfo] hasn't reported that field yet.
+ */
+@Composable
+private fun PlayerInfoBlock(channel: ChannelEntity?, streamInfo: StreamInfo, modifier: Modifier = Modifier) {
+    if (channel == null) return
+    Row(
+        modifier = modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)).background(SurfaceRaised),
+            contentAlignment = Alignment.Center,
+        ) {
+            val icon = channel.streamIcon
+            if (icon.isNullOrBlank()) {
+                Text(channel.name.take(1).uppercase(), style = RedSurfType.heroTitle, color = TextPrimary)
+            } else {
+                SubcomposeAsyncImage(
+                    model = icon,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    error = { Text(channel.name.take(1).uppercase(), style = RedSurfType.heroTitle, color = TextPrimary) },
+                    loading = {},
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text("No schedule information", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    channel.num.toString(),
+                    style = RedSurfType.heroTitle,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(end = 10.dp),
+                )
+                Text(channel.name, style = RedSurfType.heroTitle, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            val badges = listOfNotNull(
+                streamInfo.resolutionClass,
+                streamInfo.frameRate?.let { "$it FPS" },
+                streamInfo.audioChannels,
+                streamInfo.audioCodec,
+            )
+            if (badges.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    badges.forEach { label ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Surface)
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        ) {
+                            Text(label, style = RedSurfType.badge, color = TextSecondary)
+                        }
+                    }
+                }
+            }
         }
     }
 }

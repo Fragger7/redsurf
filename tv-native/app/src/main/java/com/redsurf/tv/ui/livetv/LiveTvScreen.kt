@@ -217,6 +217,15 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
                     isFullscreen = false
                     onFullscreenChanged(false)
                 },
+                currentChannel = focusedChannel,
+                repository = viewModel.repository,
+                onChannelChanged = { channel ->
+                    focusedChannel = channel
+                    // Bypass the browse-debounce, same reason as onChannelOpen above: zapping is
+                    // a deliberate action, not a D-pad fly-by, and waiting on it would reintroduce
+                    // the "duplicate 2-step" bug that debounce-bypass already fixed once.
+                    previewUrl = channel.streamId
+                },
                 breadcrumb = breadcrumb,
                 modifier = Modifier.fillMaxSize(),
             )

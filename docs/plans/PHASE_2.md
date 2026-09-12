@@ -319,15 +319,28 @@ key router yet:**
   pattern - noted per the brief's own instruction to say so when a decision needs adjusting in
   practice. Nothing calls `onStreamInfo` yet since `PlayerScreen` doesn't pass it - next slice.
 
-**Not done yet (next slice):** UP/DOWN in `PlayerScreen`'s key router actually calling
-`nextChannel`/`prevChannel` and retuning the player; the real `PlayerInfoBlock` content (decision
-7) replacing the still-empty `ZapBanner`/`Controls` states; wiring `onStreamInfo` through to it.
+**Second slice - the real thing, done.** `PlayerScreen` now:
+- Calls `repository.prevChannel`/`nextChannel` from the UP/DOWN branch of the key router (a
+  `rememberCoroutineScope` launch, since the key handler itself isn't suspend), and on a result
+  calls the new `onChannelChanged` callback - the bridge to `LiveTvScreen`'s `focusedChannel`/
+  `previewUrl` (state/focus discipline: zapping has to update the same state fullscreen-exit
+  already restores focus to, or Back-after-zapping would land you back on the channel you
+  *opened*, not the one you're *watching*). `onChannelChanged` sets `previewUrl` immediately,
+  bypassing the browse-debounce, same reasoning as `onChannelOpen`.
+- Passes `onStreamInfo = { streamInfo = it }` to `PlayerHost`, so the listener built in the first
+  slice now actually reaches something.
+- Renders the real `PlayerInfoBlock` (decision 7's content: 64dp logo, channel num+name, the
+  badges - each individually omitted when unknown, never a placeholder) at the bottom whenever
+  `ZapBanner` or `Controls` is showing. Both states use the same position for now, since the
+  tile/action row that would differentiate them doesn't exist until #2.3.
+
+**Not done:** LEFT's real channel-list overlay and RIGHT's real last-channel zap (both still just
+flip `overlay` state, no actual channel change) - #2.4. The tile/action row content - #2.3.
 
 **Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
 (`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** on the
-actual TV - correctly so, nothing in this slice is reachable from the UI yet (no new key handling,
-no new callers of `onStreamInfo`), so there's nothing a device check could show that build/test
-verification doesn't already cover.
+actual TV - this is the first genuinely user-visible slice since the scrim/breadcrumb/clock (real
+zapping, real badges) - worth an actual test pass rather than trusting build/tests alone.
 
 **Acceptance:** 20 consecutive zaps on the real list with no black frame between channels
 (video holds until the next first frame); banner shows and hides; badges match what the stream
