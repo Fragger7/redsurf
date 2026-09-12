@@ -236,21 +236,37 @@ fun PlayerScreen(
                 when (val current = overlay) {
                     is PlayerOverlay.Controls -> {
                         // The elevator (decision 5): DOWN/UP swap floors in the same slot instead
-                        // of opening/closing a new overlay. Everything else - LEFT/RIGHT between
-                        // tiles, OK to activate one - is deliberately left unconsumed (false) so
-                        // Compose's own focus traversal and the focused Surface's built-in
-                        // click-on-OK handling act on it normally; this router owns Level 0 and
-                        // the floor swap, not navigation inside real overlay content.
-                        if (isFirstDown && event.key == Key.DirectionDown &&
-                            current.floor == PlayerOverlay.Controls.Floor.Tiles
-                        ) {
-                            overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)
+                        // of opening/closing a new overlay. LEFT/RIGHT between tiles and OK to
+                        // activate one are deliberately left unconsumed (false) so Compose's own
+                        // focus traversal and the focused Surface's built-in click-on-OK handling
+                        // act on it normally; this router owns Level 0 and the floor swap, not
+                        // navigation inside real overlay content.
+                        //
+                        // DOWN/UP are always consumed here, though - even DOWN on the bottom floor
+                        // (Actions) and UP on the top one (Tiles), which have no floor to swap to.
+                        // Found live, 2026-09-12, reported as "focus is lost without recovery...
+                        // tiles disappear": leaving those two cases unconsumed (an earlier version
+                        // did, matching the swap conditions exactly) let the key fall through to
+                        // Compose's default focus search, which had nowhere to go from a
+                        // horizontal Row's edge and left the tile row with no focused descendant
+                        // at all - and unlike the None/ZapBanner case above, `overlay` never
+                        // changes here, so the LaunchedEffect that reclaims focus onto this
+                        // screen's root never fires either. Swallowing the dead-end presses as a
+                        // no-op keeps focus exactly where it already was.
+                        // Consumed on every DOWN event for these two keys, not just isFirstDown -
+                        // a held key's repeat-count ticks need to stay dead ends too, the same
+                        // reasoning as the comment above, just covering the repeat stream as well
+                        // as the initial press.
+                        if (isDown && event.key == Key.DirectionDown) {
+                            if (isFirstDown && current.floor == PlayerOverlay.Controls.Floor.Tiles) {
+                                overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)
+                            }
                             return@onKeyEvent true
                         }
-                        if (isFirstDown && event.key == Key.DirectionUp &&
-                            current.floor == PlayerOverlay.Controls.Floor.Actions
-                        ) {
-                            overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)
+                        if (isDown && event.key == Key.DirectionUp) {
+                            if (isFirstDown && current.floor == PlayerOverlay.Controls.Floor.Actions) {
+                                overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)
+                            }
                             return@onKeyEvent true
                         }
                         return@onKeyEvent false

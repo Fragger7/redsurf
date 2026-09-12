@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
 import androidx.tv.foundation.lazy.list.TvLazyColumn
+import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
@@ -77,6 +79,23 @@ fun ChannelsColumn(
     // up/down movement within it - so this never fights normal in-column navigation.
     var hadFocus by remember { mutableStateOf(false) }
 
+    // Keeps the list scrolled to whatever channel is focused even while real D-pad focus lives
+    // elsewhere (fullscreen zapping) - found live, 2026-09-12, reported as Back "not landing on
+    // the current channel... defaults back to Channel Category" after enough zaps. TvLazyColumn
+    // only composes rows near its current scroll position; zapping updates focusedChannelId many
+    // times without ever scrolling this (invisible, but still-composed) column, so the row
+    // returnFocusRequester targets below can end up outside the composed window entirely. Calling
+    // requestFocus() on a node that doesn't exist throws (swallowed by the runCatching at both
+    // call sites), leaving Compose to fall back to its own default focus target - the NavStrip's
+    // first pill, which read as "Channel Category" to the user. Uses peek(), not the indexing
+    // operator, so this search never itself triggers a page load.
+    val listState = rememberTvLazyListState()
+    LaunchedEffect(focusedChannelId, channels.itemCount) {
+        val id = focusedChannelId ?: return@LaunchedEffect
+        val index = (0 until channels.itemCount).firstOrNull { channels.peek(it)?.streamId == id }
+        if (index != null) runCatching { listState.scrollToItem(index) }
+    }
+
     // 14dp top padding matches the inner padding of the two panel cards either side, so all three
     // column headers sit on one baseline. groupTitle arrives pre-formatted (";" -> "›", and
     // playlist-name-prefixed when more than one playlist is loaded - GroupsColumn.kt) so both
@@ -105,7 +124,7 @@ fun ChannelsColumn(
             color = TextSecondary,
             modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
         )
-        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        TvLazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(count = channels.itemCount, key = channels.itemKey { it.streamId }) { index ->
                 val channel = channels[index]
                 if (channel != null) {
