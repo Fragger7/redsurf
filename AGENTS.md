@@ -83,17 +83,25 @@ get stuck unable to submit. Documented in `PHASE_1.md` for a later pass.
   data + this merged-screen redesign + the auto-hide nav together as one phase, not the visual
   layout before the data exists. Not urgent - the user is in no rush.
 
-## State and focus discipline (user directive, 2026-09-12)
+## State and focus discipline (user directive, 2026-09-12 - binding, not a suggestion)
 
-Explicit standing rule, from a pattern of real bugs (fullscreen-exit focus landing on the NavStrip
-instead of the channel just watched; a debounce gap letting fast D-pad key-repeat rebuild an
-expensive Pager once per row flown over): **be mindful of state on every screen you build** -
-which destination/menu item the user was on, which control they used to navigate away, and where
-D-pad focus was, left-right and up-down, not just whatever app-level data state looks correct.
+The user was explicit that losing continuity while testing is actively frustrating and named this
+a standing rule, not a one-off fix: **every new screen, navigation path, and control must
+preserve where the user was and what had focus, by default - check this before calling any
+navigation feature done, the same way "builds clean" and "tests pass" are checked.** This
+followed a pattern of real bugs: fullscreen-exit focus landing on the NavStrip instead of the
+channel just watched; a debounce gap letting fast D-pad key-repeat rebuild an expensive Pager once
+per row flown over. The scope is broad on purpose - which destination/menu item the user was on,
+which control they used to navigate away, and where D-pad focus was, left-right and up-down, not
+just whatever app-level data state happens to look correct.
+
 Surviving `remember`ed data (per the Compose conditional-composition trap documented in
 `AppShell.kt`/`LiveTvScreen.kt`) is necessary but not sufficient - Compose's focus system still
 needs something to explicitly claim focus when a focused subtree is torn down, or it picks
-whatever's nearest in the tree, which is rarely what the user actually wants.
+whatever's nearest in the tree, which is rarely what the user actually wants. When building any
+screen with more than one focusable region or a modal/fullscreen state, ask explicitly: "when the
+user leaves this and comes back, where does focus land, and is that actually where they were?" -
+don't assume the answer is yes without a `FocusRequester` actually wired to prove it.
 
 **Known, not yet fixed:** moving focus away from a column (e.g. Categories) and back (e.g. into
 Channels) via LEFT/RIGHT doesn't restore the exact row you left - it lands wherever directional
