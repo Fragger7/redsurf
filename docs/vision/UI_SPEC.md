@@ -66,6 +66,16 @@ it makes browsing cheap and is a large part of why this layout feels good.
 
 Cards: ~16dp radius, generous padding, `surface` on `background`.
 
+## 4b. Live TV / Guide merge (planned, not built - see AGENTS.md's "Product decisions on record")
+
+Current Live TV (§4) and the separate Guide destination are StreamVault's structure: a channel
+list with "No schedule information" instead of a real EPG. The planned direction, once EPG data
+exists, is TiviMate's instead (`references/tivimate/RedThemedEPGLiveTVScreen.jpg`): categories
+left, a real timeline grid replacing the channel-list column, a live preview strip on top. Keep
+the top-pill nav from §3 (not TiviMate's left drawer) - the merge is about the Live TV screen's
+own layout, not the main navigation. The top nav auto-hides after an idle timeout on this screen
+specifically, to give the preview strip the room TiviMate's collapsed rail gives it.
+
 ## 5. Player overlays
 
 From `TiviMate/Channelplayeroverlay.webp` and `GuideOverlayWhileChannelPlaying.png`. Video keeps

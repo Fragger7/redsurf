@@ -81,6 +81,19 @@ get stuck unable to submit. Documented in `PHASE_1.md` for a later pass.
   currently write to a dead end. Decision: keep them; the TV-side Firestore listener gets built in
   the cloud phase. Until then, don't delete anything cloud-related, and don't build on it either.
 
+- **Live TV/Guide merge, deferred to its own phase** (user, 2026-09-11). Vision: keep
+  StreamVault's top-pill nav (not TiviMate's left drawer - "modern Google TV style" per the user),
+  but redesign the Live TV screen itself on TiviMate's proven layout instead of StreamVault's:
+  categories left, a real EPG timeline grid on the right (not the current simple channel-list
+  column), a live preview strip up top. Bonus, same request: the top nav auto-hides (slides up,
+  disappears after an idle timeout - configurable) to give the preview strip more room, exactly
+  how TiviMate's left rail behaves. References: `references/tivimate/RedThemedEPGLiveTVScreen.jpg`
+  (the target layout), `references/streamvault/Home.png` (the nav style to keep).
+  **Why not now:** the grid needs real EPG programme data to not be an empty fake grid, and EPG
+  isn't populated yet (no sync worker scheduled - a Non-goal of Phase 1, see `PHASE_1.md`). Do EPG
+  data + this merged-screen redesign + the auto-hide nav together as one phase, not the visual
+  layout before the data exists. Not urgent - the user is in no rush.
+
 ## The one rule that matters
 
 **Never claim something works because you wrote plausible code for it.**
