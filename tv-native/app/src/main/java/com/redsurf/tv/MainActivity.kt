@@ -129,11 +129,11 @@ class MainActivity : ComponentActivity() {
                             OnboardingScreen(
                                 localIp = s.localIp,
                                 port = s.port,
-                                onXtreamSubmit = { server, user, pass ->
-                                    viewModel.loadXtreamCodes(server, user, pass)
+                                onXtreamSubmit = { name, server, user, pass ->
+                                    viewModel.loadXtreamCodes(server, user, pass, name.ifBlank { "Xtream Playlist" })
                                 },
-                                onM3uSubmit = { url ->
-                                    viewModel.loadPlaylist(url, "M3U Playlist", url, "", "m3u")
+                                onM3uSubmit = { name, url ->
+                                    viewModel.loadPlaylist(url, name.ifBlank { "M3U Playlist" }, url, "", "m3u")
                                 },
                                 onCancel = if (s.isAddingPlaylist) viewModel::cancelAddPlaylist else null,
                             )

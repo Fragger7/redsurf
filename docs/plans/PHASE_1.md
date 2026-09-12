@@ -899,6 +899,34 @@ categories in the meantime, same as Home/Movies/Series today.
 (`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** either fix
 on the actual TV - next test round.
 
+## Post-Phase-1 quick fixes, round 6 (2026-09-12, Sonnet)
+
+Round 5 confirmed the onboarding text-field fix and LEFT/RIGHT column focus memory both work.
+Testing that surfaced three more items, two fixed now, one logged:
+
+1. **Fixed: 4:3 (and any non-16:9) channels showed the browsing menu bleeding through the
+   letterbox bars instead of solid black.** Root cause: the fullscreen overlay `Box` (round 4) has
+   no explicit background, and round 4 also made the browsing Row *stay composed* underneath it
+   (deliberately, for state preservation) - before that, nothing existed behind fullscreen to leak
+   through; after it, a transparent letterbox gap shows exactly what's still sitting there. Fixed
+   with an explicit `.background(Color.Black)` on the overlay, painted before the player - the
+   same solid-black-bars approach every other player uses, not anything TiviMate-specific to
+   research. This is a direct, disclosed side effect of round 4's own fix.
+2. **Fixed: Playlist Name field added to the on-screen Xtream/M3U forms** - parity with the Mobile
+   Phone pairing form, which has always had this. `XtreamInputForm`/`M3uInputForm` and
+   `OnboardingScreen`'s submit callbacks now carry a `name` param; blank falls back to the generic
+   label, same spirit as the pairing-server path (round 2).
+3. **Logged, not fixed:** the content-type (Live/VOD/Both) selector is still on-screen-form-only
+   missing - deliberately deferred since it's functionally inert everywhere in Phase 1 right now
+   (confirmed by reading the code: VOD isn't stored regardless of this choice), so it's UI that
+   wouldn't change behavior yet. Bundle it with the VOD phase instead. Also logged: Back should
+   arguably retrace the same path LEFT would inside Live TV (Channels → Categories → Home) rather
+   than always jumping straight to Home - good idea, scoped-down version recorded in `AGENTS.md`.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** either fix
+on the actual TV - next test round.
+
 ## Non-goals — do not drift into these
 
 - EPG data of any kind. The worker is unscheduled; "No schedule information" is correct.

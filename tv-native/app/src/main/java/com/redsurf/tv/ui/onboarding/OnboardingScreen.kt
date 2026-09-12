@@ -42,8 +42,8 @@ import com.redsurf.tv.ui.theme.TextSecondary
 fun OnboardingScreen(
     localIp: String,
     port: Int,
-    onXtreamSubmit: (String, String, String) -> Unit,
-    onM3uSubmit: (String) -> Unit,
+    onXtreamSubmit: (name: String, server: String, user: String, pass: String) -> Unit,
+    onM3uSubmit: (name: String, url: String) -> Unit,
     // Non-null only when reached via Settings -> "Add another playlist" (user request,
     // 2026-09-12) rather than true first-run onboarding, which has nowhere to cancel back to.
     onCancel: (() -> Unit)? = null,
@@ -182,7 +182,8 @@ fun OnboardingCard(title: String, subtitle: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun XtreamInputForm(onSubmit: (String, String, String) -> Unit, onBack: () -> Unit) {
+fun XtreamInputForm(onSubmit: (String, String, String, String) -> Unit, onBack: () -> Unit) {
+    var name by remember { mutableStateOf("") }
     var serverUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -192,13 +193,17 @@ fun XtreamInputForm(onSubmit: (String, String, String) -> Unit, onBack: () -> Un
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("Xtream Codes Details", color = Color.White, style = MaterialTheme.typography.headlineLarge)
-        
+
+        // Parity with the Mobile Phone pairing form (user request, 2026-09-12): that form has
+        // always had a name field, this one didn't - every on-screen Xtream playlist showed up
+        // as the same generic "Xtream Playlist" with no way to tell two apart.
+        TvTextField(value = name, onValueChange = { name = it }, label = "Playlist Name (optional)")
         TvTextField(value = serverUrl, onValueChange = { serverUrl = it }, label = "Server URL (http://...)")
         TvTextField(value = username, onValueChange = { username = it }, label = "Username")
         TvTextField(value = password, onValueChange = { password = it }, label = "Password", isPassword = true)
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 16.dp)) {
-            androidx.tv.material3.Button(onClick = { onSubmit(serverUrl, username, password) }) {
+            androidx.tv.material3.Button(onClick = { onSubmit(name, serverUrl, username, password) }) {
                 Text("Connect")
             }
             androidx.tv.material3.Button(
@@ -212,7 +217,8 @@ fun XtreamInputForm(onSubmit: (String, String, String) -> Unit, onBack: () -> Un
 }
 
 @Composable
-fun M3uInputForm(onSubmit: (String) -> Unit, onBack: () -> Unit) {
+fun M3uInputForm(onSubmit: (String, String) -> Unit, onBack: () -> Unit) {
+    var name by remember { mutableStateOf("") }
     var m3uUrl by remember { mutableStateOf("") }
 
     Column(
@@ -220,11 +226,12 @@ fun M3uInputForm(onSubmit: (String) -> Unit, onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("M3U Playlist URL", color = Color.White, style = MaterialTheme.typography.headlineLarge)
-        
+
+        TvTextField(value = name, onValueChange = { name = it }, label = "Playlist Name (optional)")
         TvTextField(value = m3uUrl, onValueChange = { m3uUrl = it }, label = "http://...")
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 16.dp)) {
-            androidx.tv.material3.Button(onClick = { onSubmit(m3uUrl) }) {
+            androidx.tv.material3.Button(onClick = { onSubmit(name, m3uUrl) }) {
                 Text("Connect")
             }
             androidx.tv.material3.Button(

@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
@@ -210,6 +211,15 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    // Opaque black, painted before anything else in this Box (found live,
+                    // 2026-09-12): a 4:3 channel letterboxed inside this 16:9 overlay leaves the
+                    // side bars transparent, and since the browsing Row below is deliberately
+                    // still composed underneath (state preservation, above) - not absent the way
+                    // it was before that fix - those bars let it show through instead of the
+                    // solid black every other player uses. Painting black here, not relying on
+                    // PlayerView's own background, is the safe fix regardless of whichever view
+                    // type ExoPlayer's surface ends up being.
+                    .background(Color.Black)
                     .focusRequester(fullscreenFocus)
                     .focusable()
                     // Swallow every key except Back, which must keep bubbling to the BackHandler

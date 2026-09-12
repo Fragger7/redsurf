@@ -120,6 +120,22 @@ next screen with more than one focusable column.
 - **TiviMate-style categorized Settings screen** (user idea, 2026-09-12): group settings under
   named sections the way TiviMate does, once Settings has more than the 3 actions it has today
   (Check for updates, Add another playlist, Reset). Premature while Settings is this small.
+  **Design settled** (2026-09-12): StreamVault's left-icon-rail + right-detail-list shell (reusing
+  the `GroupsColumn`/`ChannelsColumn` pattern), with TiviMate's category names as the content plan
+  (Playlists, EPG, Playback, Appearance, About, etc.). User explicitly OK with placeholder/dummy
+  categories in the shell until real settings exist to fill them, same as Home/Movies/Series today.
+- **Content-type selector (Live/VOD/Both) missing from the on-screen Xtream/M3U forms** (user
+  found, 2026-09-12) - the Mobile Phone pairing form has always had this, the on-screen forms
+  never did. Deliberately not added yet: the selector is functionally inert everywhere in Phase 1
+  right now (VOD isn't stored regardless of this choice - confirmed by reading the code, not
+  assumed), so it would be UI that doesn't change behavior. Add it when the VOD phase makes the
+  choice actually matter, not before - **the Playlist Name field sibling gap was different (real
+  effect right now) and was fixed immediately instead**, see the round below.
+- **Back should retrace the same path as LEFT instead of one flat hop to Home** (user idea,
+  2026-09-12): e.g. inside Live TV, Back from Channels could step to Categories first, then Home,
+  rather than jumping straight to Home from anywhere. Good idea, not built - scope it first to
+  Live TV's own columns (which have a real spatial relationship) rather than a fully general
+  breadcrumb stack across every destination (Settings, Search, etc. aren't spatial the same way).
 
 ## The one rule that matters
 
