@@ -866,6 +866,39 @@ plus three backlog items came with that confirmation:
 (`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** either fix
 on the actual TV, and #2 specifically has no confirmed repro either way yet - next test round.
 
+## Post-Phase-1 quick fixes, round 5 (2026-09-12, Sonnet) - the last two backlog items
+
+1. **Onboarding text-field D-pad trap, fixed** (disclosed since 1.1, decision #9 - finally
+   addressed). Root cause confirmed: Material3's `OutlinedTextField` wraps a `BasicTextField`
+   whose internal key handling swallows `DPAD_DOWN`/`DPAD_UP` before Compose's own focus-traversal
+   ever sees the key press - `Modifier.focusProperties` wouldn't have been enough on its own,
+   since that only redirects a focus-move request that was actually initiated, and this key press
+   never got that far. Fixed with `Modifier.onPreviewKeyEvent` on `TvTextField` - it intercepts on
+   the way down to the focused node, before the field's internal handling, and hands `DOWN`/`UP`
+   to `FocusManager.moveFocus` explicitly. `LEFT`/`RIGHT` are deliberately untouched - those
+   correctly still move the text cursor while editing.
+2. **LEFT/RIGHT column re-entry now restores focus, same fix pattern as the fullscreen case.**
+   `GroupsColumn` and `ChannelsColumn` each track their own subtree's `hasFocus` and redirect to
+   the actually-selected/focused row only on the `false→true` transition - i.e. only when focus
+   arrives from *outside* the column (a lateral move from its sibling), never during ordinary
+   up/down movement within it, so it can't fight normal in-column navigation. This is the general
+   mechanism the round-4 "known, not yet fixed" note in `AGENTS.md` asked for.
+
+**User directive, recorded verbatim in spirit in `AGENTS.md`:** state/focus preservation is now a
+binding rule for every future screen and navigation path, checked before calling any such feature
+done - not a one-off fix for this screen.
+
+**Settings screen decision, recorded not built:** StreamVault's left-icon-rail + right-detail-list
+structure (reusing the same pattern as `GroupsColumn`/`ChannelsColumn`) is the agreed shell, with
+TiviMate's category groupings (Playlists, EPG, Playback, Appearance, About, etc.) as the content
+plan for whenever Settings has enough real content to organize - explicitly deferred, not
+forgotten, and the user has explicitly accepted that the shell will show placeholder/dummy
+categories in the meantime, same as Home/Movies/Series today.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** either fix
+on the actual TV - next test round.
+
 ## Non-goals — do not drift into these
 
 - EPG data of any kind. The worker is unscheduled; "No schedule information" is correct.

@@ -11,10 +11,17 @@ import androidx.compose.runtime.*
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -308,7 +315,8 @@ fun TvTextField(
     isPassword: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    
+    val focusManager = LocalFocusManager.current
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -316,7 +324,31 @@ fun TvTextField(
         visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged { isFocused = it.isFocused }
+            // Real bug, disclosed since 1.1 (docs/plans/PHASE_1.md): Material3's OutlinedTextField
+            // is a touch-oriented component whose internal BasicTextField swallows DPAD_DOWN/UP
+            // before Compose's own focus-traversal ever sees the key press, stranding a D-pad user
+            // in the field with no way to reach Connect/Back. onPreviewKeyEvent intercepts on the
+            // way down to the focused node - before that internal handling - so it can hand
+            // UP/DOWN off to FocusManager.moveFocus explicitly. LEFT/RIGHT are left alone; those
+            // still mean "move the text cursor" while editing, correctly.
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.DirectionDown -> {
+                            focusManager.moveFocus(FocusDirection.Down)
+                            true
+                        }
+                        Key.DirectionUp -> {
+                            focusManager.moveFocus(FocusDirection.Up)
+                            true
+                        }
+                        else -> false
+                    }
+                } else {
+                    false
+                }
+            },
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Accent,
             unfocusedBorderColor = Color.DarkGray,

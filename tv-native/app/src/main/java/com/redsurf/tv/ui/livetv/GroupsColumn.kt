@@ -125,11 +125,27 @@ fun GroupsColumn(
         }
     }
 
+    // State/focus discipline (AGENTS.md, user directive 2026-09-12): pressing RIGHT from here
+    // into Channels and then LEFT back used to land on whatever row directional search resolved
+    // to, not the one actually selected - the same class of bug as the fullscreen-exit case, just
+    // sideways. `hasFocus` is true for this whole subtree while any row in it is focused and only
+    // flips false->true when focus arrives from *outside* it (e.g. RIGHT from Channels back to
+    // here) - never during ordinary up/down movement within the column, since hasFocus never
+    // leaves true for that. That transition is exactly "just re-entered from a sibling," and is
+    // the only time this redirects - it never fights normal in-column navigation afterward.
+    var hadFocus by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxHeight()
             .background(SurfaceColor, RoundedCornerShape(16.dp))
-            .padding(horizontal = 12.dp, vertical = 14.dp),
+            .padding(horizontal = 12.dp, vertical = 14.dp)
+            .onFocusChanged { state ->
+                if (state.hasFocus && !hadFocus) {
+                    runCatching { initialFocus.requestFocus() }
+                }
+                hadFocus = state.hasFocus
+            },
     ) {
         Text(
             "Categories",

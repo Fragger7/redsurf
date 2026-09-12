@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,11 +69,29 @@ fun ChannelsColumn(
     returnFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
+    // State/focus discipline (AGENTS.md, user directive 2026-09-12): pressing LEFT into
+    // Categories and back RIGHT used to land on whatever row directional search resolved to, not
+    // the channel actually focused - same fix as returnFocusRequester's fullscreen case, applied
+    // to lateral column re-entry too. hasFocus flips false->true only when focus arrives from
+    // *outside* this column (e.g. LEFT-then-RIGHT from Categories) - never during ordinary
+    // up/down movement within it - so this never fights normal in-column navigation.
+    var hadFocus by remember { mutableStateOf(false) }
+
     // 14dp top padding matches the inner padding of the two panel cards either side, so all three
     // column headers sit on one baseline. groupTitle arrives pre-formatted (";" -> "›", and
     // playlist-name-prefixed when more than one playlist is loaded - GroupsColumn.kt) so both
     // columns format group names identically without duplicating that logic here.
-    Column(modifier = modifier.fillMaxHeight().padding(top = 14.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .padding(top = 14.dp)
+            .onFocusChanged { state ->
+                if (state.hasFocus && !hadFocus && focusedChannelId != null) {
+                    runCatching { returnFocusRequester.requestFocus() }
+                }
+                hadFocus = state.hasFocus
+            },
+    ) {
         Text(
             groupTitle,
             style = RedSurfType.sectionTitle,
