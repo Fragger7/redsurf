@@ -4,7 +4,7 @@
 
 | # | Task | State |
 |---|---|---|
-| 2.1 | `PlayerScreen`: key router, overlay state machine, Back peeling, scrim | ⬜ not started |
+| 2.1 | `PlayerScreen`: key router, overlay state machine, Back peeling, scrim | 🟡 2.1a (extraction) done, 2.1b (logic) not started |
 | 2.2 | Zap: neighbour queries, UP/DOWN, zap banner, stream badges, no-black-screen | ⬜ not started |
 | **A** | **Checkpoint — user tests entry, zap, OK overlay skeleton, Back** | ⬜ |
 | 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | ⬜ not started |
@@ -227,7 +227,27 @@ if wrong. Build to the decision as written.
 
 ---
 
-## 2.1 — `PlayerScreen`: router, state machine, Back, scrim
+## 2.1 — what actually happened so far (2.1a, 2026-09-12, Sonnet)
+
+Split into two sessions at the user's request (rate-limit-conscious, wanted small verifiable
+steps): **2.1a - pure extraction, done.** `ui/player/PlayerScreen.kt` created, owning exactly what
+the inline `Box` in `LiveTvScreen.kt` used to (opaque black background, focus capture, Back-key
+passthrough, `PlayerHost`) - zero behavior change, confirmed by inspection (same modifiers, same
+order, same comments carried over explaining *why* each one exists). `PlayerOverlay` (decision 2's
+sealed class) and `PickerKind` are declared in the new file but not wired to anything yet - next
+session (2.1b) is the actual key router, Back-peeling, timeouts, scrim, breadcrumb/clock.
+
+`LiveTvScreen.kt` lost four now-unused imports (`focusable`, `Color`, `Key`/`key`/`onKeyEvent`) and
+the direct `PlayerHost` import, gained `PlayerScreen`. Everything else in that file - the browse
+Row, `channelReturnFocus`, the fullscreen `BackHandler`, the debounce effects - untouched.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** on the
+actual TV - this step has no new behavior to check, so it's being trusted to the build/test
+verification alone rather than spending a device round-trip on a no-op change. 2.1b's checkpoint
+is Checkpoint A, where real behavior exists to check.
+
+## 2.1 — router, state machine, Back, scrim
 
 Create `ui/player/PlayerScreen.kt`; move the fullscreen `Box` out of `LiveTvScreen.kt` into it.
 Implement `PlayerOverlay`, the single key router (decision 3), Back peeling (decision 4), the

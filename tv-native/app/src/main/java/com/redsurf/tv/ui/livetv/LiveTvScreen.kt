@@ -2,7 +2,6 @@ package com.redsurf.tv.ui.livetv
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,11 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
@@ -44,7 +38,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.db.ChannelEntity
-import com.redsurf.tv.player.PlayerHost
+import com.redsurf.tv.ui.player.PlayerScreen
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.RedSurfType
 import com.redsurf.tv.ui.theme.Surface
@@ -208,30 +202,13 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
         }
 
         if (isFullscreen) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    // Opaque black, painted before anything else in this Box (found live,
-                    // 2026-09-12): a 4:3 channel letterboxed inside this 16:9 overlay leaves the
-                    // side bars transparent, and since the browsing Row below is deliberately
-                    // still composed underneath (state preservation, above) - not absent the way
-                    // it was before that fix - those bars let it show through instead of the
-                    // solid black every other player uses. Painting black here, not relying on
-                    // PlayerView's own background, is the safe fix regardless of whichever view
-                    // type ExoPlayer's surface ends up being.
-                    .background(Color.Black)
-                    .focusRequester(fullscreenFocus)
-                    .focusable()
-                    // Swallow every key except Back, which must keep bubbling to the BackHandler
-                    // above (its OnBackPressedDispatcher registration is a separate mechanism
-                    // from this modifier, but a raw KEYCODE_BACK is still an ordinary key event
-                    // first - consuming it here unconditionally, as the first version of this fix
-                    // did, silently ate Back and made it do nothing while fullscreen. Found live,
-                    // 2026-09-12.
-                    .onKeyEvent { it.key != Key.Back },
-            ) {
-                PlayerHost(streamUrl = previewUrl, fullscreen = true, modifier = Modifier.fillMaxSize())
-            }
+            // Extracted to ui/player/PlayerScreen.kt (PHASE_2.md #2.1a) - same behavior, now the
+            // home for the overlay state machine (#2.1b onward) instead of living inline here.
+            PlayerScreen(
+                streamUrl = previewUrl,
+                focusRequester = fullscreenFocus,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
