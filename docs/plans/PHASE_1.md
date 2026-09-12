@@ -830,6 +830,42 @@ understood Android issues fixed in `PlayerHost.kt`:
 (`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** either fix
 on the actual TV - next test round, bundled with round 2's four items above.
 
+## Post-Phase-1 quick fixes, round 4 (2026-09-12, Sonnet)
+
+Round 2 confirmed fixed: Back preserves position "generally," playlist naming works, the
+accordion hierarchy renders correctly, category names are more legible. Two real follow-on bugs
+plus three backlog items came with that confirmation:
+
+1. **Fullscreen exit landed D-pad focus on the NavStrip, not the channel just watched.** Root
+   cause: the state-preservation fix (round 2) kept `selectedGroup`/`focusedChannel` correct, but
+   never told Compose's focus system to actually *focus* anything when the fullscreen overlay
+   (which held real focus) was removed - so it picked the nearest focusable node from the top of
+   the tree (NavStrip's first pill), and a D-pad press from there landed in whatever category
+   happened to be geometrically closest, not the one being watched. Fixed:
+   `ChannelsColumn` takes a `returnFocusRequester` attached to the row matching
+   `focusedChannelId`; `LiveTvScreen` calls `.requestFocus()` on it when `isFullscreen` goes
+   false→true→false with a channel still focused. Logged the general principle this points at -
+   see AGENTS.md's new "State and focus discipline" section - including the known, not-yet-fixed
+   sibling case (LEFT/RIGHT between columns doesn't restore your exact row either).
+2. **Likely fix for "choppy," "loss of scrolling," "random behavior" holding UP/DOWN through
+   Categories with many groups** - not device-reproduced this round (no ADB, per the standing
+   workflow change), but a real, plausible, well-understood cause found by inspection: every
+   category focus change immediately rebuilt the middle column's `Pager` and reset its
+   `TvLazyColumn` - real work (a fresh query, an initial page load), fired once per row a fast
+   key-repeat flew over, exactly the same class of problem the channel-preview debounce already
+   exists to prevent. Fixed the same way: `selectedGroup` (drives the instant visual highlight)
+   is now separate from a new debounced `queriedGroup` (drives the actual Pager/`ChannelsColumn`)
+   - only the group the user rests on for 200ms triggers the expensive rebuild. State plainly:
+   this is a confident diagnosis and a standard fix, not a confirmed-on-device result - flag it
+   again if the choppiness persists after this build.
+3. **Backlog, not fixed this round** (all recorded in `AGENTS.md`, none forgotten): the LEFT/RIGHT
+   column re-entry focus case above; a tooltip for category names that stay truncated even now;
+   a TiviMate-style categorized Settings screen, premature while Settings has only 3 actions.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** either fix
+on the actual TV, and #2 specifically has no confirmed repro either way yet - next test round.
+
 ## Non-goals — do not drift into these
 
 - EPG data of any kind. The worker is unscheduled; "No schedule information" is correct.

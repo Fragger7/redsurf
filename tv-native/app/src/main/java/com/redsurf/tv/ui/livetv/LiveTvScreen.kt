@@ -81,7 +81,13 @@ import kotlinx.coroutines.delay
  * after selectedGroup/focusedChannel themselves were confirmed surviving. Found live, 2026-09-12.
  * The fullscreen overlay grabs real focus and swallows all key events (no player HUD exists yet -
  * PHASE_1.md Non-goals) so D-pad input can't leak through to the still-composed, now-invisible
- * list underneath.
+ * list underneath. Exiting fullscreen explicitly re-requests focus onto the channel that was
+ * playing ([channelReturnFocus]) - the state above surviving isn't enough on its own: when the
+ * fullscreen overlay (which held real focus) is removed, Compose's focus system still has to pick
+ * *something* to focus next, and with nothing claiming it explicitly it picked the NavStrip's
+ * first pill (the nearest focusable node from the top of the tree) - confusing, since a D-pad
+ * press from there landed in an arbitrary category, not the one being watched. Found live,
+ * 2026-09-12.
  */
 @Composable
 fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Unit) {
@@ -109,14 +115,38 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
         }
     }
 
+    // Debounced the same way, and for the same reason (found live, 2026-09-12 - reported as
+    // "choppy," "loss of scrolling," "random behavior" holding UP/DOWN through Categories):
+    // GroupsColumn's own highlight tracks selectedGroup instantly so the UI still feels
+    // responsive, but actually rebuilding the paged channel list - a new Pager, a new initial
+    // page load, ChannelsColumn's whole TvLazyColumn resetting - is real work that a fast D-pad
+    // key-repeat was triggering once per row flown over. queriedGroup is what actually drives
+    // the middle column; only the group the user settles on for 200ms gets a real query.
+    var queriedGroup by remember { mutableStateOf<GroupKey?>(null) }
+    LaunchedEffect(selectedGroup) {
+        val group = selectedGroup
+        if (group == null) {
+            queriedGroup = null
+        } else {
+            delay(200)
+            queriedGroup = group
+        }
+    }
+
     BackHandler(enabled = isFullscreen) {
         isFullscreen = false
         onFullscreenChanged(false)
     }
 
     val fullscreenFocus = remember { FocusRequester() }
+    val channelReturnFocus = remember { FocusRequester() }
     LaunchedEffect(isFullscreen) {
-        if (isFullscreen) fullscreenFocus.requestFocus()
+        if (isFullscreen) {
+            fullscreenFocus.requestFocus()
+        } else if (focusedChannel != null) {
+            delay(100)
+            runCatching { channelReturnFocus.requestFocus() }
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -137,7 +167,7 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
                 modifier = Modifier.weight(1f),
             )
 
-            val currentGroup = selectedGroup
+            val currentGroup = queriedGroup
             if (currentGroup != null) {
                 val channelsFlow = remember(currentGroup) {
                     viewModel.repository.liveChannels(currentGroup.playlistId, currentGroup.groupName)
@@ -157,6 +187,7 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
                     channels = pagedChannels,
                     focusedChannelId = focusedChannel?.streamId,
                     onChannelFocused = { focusedChannel = it },
+                    returnFocusRequester = channelReturnFocus,
                     onChannelOpen = { channel ->
                         focusedChannel = channel
                         // Bypass the 500ms browse-debounce above: opening is a deliberate action,

@@ -18,6 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,6 +58,11 @@ fun ChannelsColumn(
     focusedChannelId: String?,
     onChannelFocused: (ChannelEntity) -> Unit,
     onChannelOpen: (ChannelEntity) -> Unit,
+    // Attached to the row matching focusedChannelId - LiveTvScreen calls .requestFocus() on this
+    // when returning from fullscreen (user request, 2026-09-12: exiting a channel landed D-pad
+    // focus on the NavStrip's "Live TV" pill instead of back on the channel just watched, since
+    // nothing claims focus explicitly once the fullscreen overlay that held it is torn down).
+    returnFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     // 14dp top padding matches the inner padding of the two panel cards either side, so all three
@@ -80,11 +87,13 @@ fun ChannelsColumn(
             items(count = channels.itemCount, key = channels.itemKey { it.streamId }) { index ->
                 val channel = channels[index]
                 if (channel != null) {
+                    val selected = channel.streamId == focusedChannelId
                     ChannelRow(
                         channel = channel,
-                        selected = channel.streamId == focusedChannelId,
+                        selected = selected,
                         onFocused = { onChannelFocused(channel) },
                         onOpen = { onChannelOpen(channel) },
+                        modifier = if (selected) Modifier.focusRequester(returnFocusRequester) else Modifier,
                     )
                 } else {
                     ChannelRowPlaceholder()
@@ -98,10 +107,16 @@ private val RowHeight = 48.dp
 private val LogoSize = 36.dp
 
 @Composable
-private fun ChannelRow(channel: ChannelEntity, selected: Boolean, onFocused: () -> Unit, onOpen: () -> Unit) {
+private fun ChannelRow(
+    channel: ChannelEntity,
+    selected: Boolean,
+    onFocused: () -> Unit,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         onClick = onOpen,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .onFocusChanged { if (it.isFocused) onFocused() },
         shape = RedSurfFocus.shape(12.dp),

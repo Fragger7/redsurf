@@ -83,6 +83,36 @@ get stuck unable to submit. Documented in `PHASE_1.md` for a later pass.
   data + this merged-screen redesign + the auto-hide nav together as one phase, not the visual
   layout before the data exists. Not urgent - the user is in no rush.
 
+## State and focus discipline (user directive, 2026-09-12)
+
+Explicit standing rule, from a pattern of real bugs (fullscreen-exit focus landing on the NavStrip
+instead of the channel just watched; a debounce gap letting fast D-pad key-repeat rebuild an
+expensive Pager once per row flown over): **be mindful of state on every screen you build** -
+which destination/menu item the user was on, which control they used to navigate away, and where
+D-pad focus was, left-right and up-down, not just whatever app-level data state looks correct.
+Surviving `remember`ed data (per the Compose conditional-composition trap documented in
+`AppShell.kt`/`LiveTvScreen.kt`) is necessary but not sufficient - Compose's focus system still
+needs something to explicitly claim focus when a focused subtree is torn down, or it picks
+whatever's nearest in the tree, which is rarely what the user actually wants.
+
+**Known, not yet fixed:** moving focus away from a column (e.g. Categories) and back (e.g. into
+Channels) via LEFT/RIGHT doesn't restore the exact row you left - it lands wherever directional
+search resolves to from the new focus position, not "the same one as before." Needs a real
+"remember focus per column, restore on re-entry" mechanism (an `onFocusChanged` at the column
+level detecting entry-from-outside vs. movement-within, redirecting carefully to avoid focus-
+loop bugs) - deliberately not rushed alongside the fullscreen-specific fix that inspired this
+rule, since a hasty version risks new focus bugs of its own. Backlog item for whoever builds the
+next screen with more than one focusable column.
+
+## Backlog - explicitly logged, not forgotten
+
+- **Tooltip on long-focus for truncated category names** (user idea, 2026-09-12): categories long
+  enough to always ellipsis, even after the visual pass, could show their full name after the
+  D-pad rests on them briefly - not built, needs a design pass on timing/placement first.
+- **TiviMate-style categorized Settings screen** (user idea, 2026-09-12): group settings under
+  named sections the way TiviMate does, once Settings has more than the 3 actions it has today
+  (Check for updates, Add another playlist, Reset). Premature while Settings is this small.
+
 ## The one rule that matters
 
 **Never claim something works because you wrote plausible code for it.**
