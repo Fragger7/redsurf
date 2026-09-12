@@ -40,13 +40,11 @@ reliability, Back navigation, the accent color, the QR code, a full visual pass 
 StreamVault/TiviMate references) - full history in `PHASE_1.md`'s "Checkpoint B, round N" entries
 if you need it; you shouldn't need to re-derive any of it.
 
-Two backlog items from Phase 1 remain, both already recorded with rationale - read the entries
-rather than re-deciding from scratch:
-- The onboarding M3U/Xtream text-field D-pad focus trap (a real bug, disclosed, deferred since
-  1.1 - see "One real bug" note below).
-- The Live TV/Guide merge - StreamVault's top-pill nav kept, but TiviMate's merged
-  live+EPG-grid layout instead of the current simple channel list, plus an auto-hiding nav. Real
-  idea, not urgent, blocked on EPG data existing first - see "Product decisions on record" below.
+Phase 1's own backlog is fully closed - six post-phase quick-fix rounds (see `PHASE_1.md`) fixed
+the onboarding text-field D-pad trap, LEFT/RIGHT column focus memory, the 4:3 letterbox
+bleed-through, playlist naming and multi-playlist accordion, screen-on and background-pause. What
+remains is deliberately deferred with reasons, in "Backlog" below. The Live TV/Guide merge is
+Phase 3 territory (needs EPG data) - see "Product decisions on record".
 
 **Still open, not chased further without new detail:** one report of the app returning to
 Onboarding with no sign of the previously-loaded playlist after an update — checked, not a Room
@@ -64,10 +62,6 @@ until manually fixed; always verify a local `assembleRelease` with an explicit l
 version like `-PversionName=v0.0.0-local-verify`, check its signature, then delete it rather than
 `adb install` it. Standing permission to merge to `main` freely is granted (no live users) — don't
 ask before merging.
-
-One real bug found live in 1.1–1.4, still not fixed (disclosed, out of scope): the M3U/Xtream
-onboarding forms use a non-TV-aware text field that traps D-pad focus — a real remote user would
-get stuck unable to submit. Documented in `PHASE_1.md` for a later pass.
 
 ## Product decisions on record
 
