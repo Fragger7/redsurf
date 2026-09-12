@@ -68,6 +68,13 @@ verified against the actually running system, not just reviewed or built:
 Item 7 was the real gate; the rest were how you get there. A green CI badge alone would not have
 satisfied it — every item above has a corresponding live observation on record in `PHASE_0.md`.
 
+### Gate: Phase 1 → Phase 2
+
+**Satisfied as of 2026-09-12. Phase 2 may begin.** `PHASE_1.md` 1.6: memory flat across playlist
+size (large real list 112.8 MB vs small 145.7 MB PSS - paging works), all seven acceptance lines
+observed, real end-to-end playback confirmed on the Chromecast by the user, six rounds of
+device-found bugs fixed. Phase 2 brief: `PHASE_2.md`, written by Opus; execution Sonnet.
+
 ## Why Phase 1 is an Opus phase
 
 Phase 1 is the design system — palette tokens, the two-state focus model, the top nav strip, the

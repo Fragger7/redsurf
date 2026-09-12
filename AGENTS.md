@@ -19,7 +19,16 @@ a Next.js web portal at the repo root.
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which
 were false. It is kept for provenance only.
 
-## Phase 1 — done. No Phase 2 brief written yet.
+## Current phase: Phase 2 — the Player — `docs/plans/PHASE_2.md`
+
+**Brief written by Opus 2026-09-12, execution is Sonnet-lane.** Every decision is made in the
+brief's "Decisions already made" section - including the ones no screenshot could settle,
+marked *(confirm at A/B)*. Build to them as written; the user corrects at the checkpoints.
+Read the brief's reference table first - the user walked TiviMate on their own TV and described
+the three overlay levels precisely; the screenshots in `docs/vision/references/tivimate/` anchor
+each one. Why the Player and not VOD/Series: `PRODUCT_VISION.md` §1, "The Player IS The App."
+
+## Phase 1 — done.
 
 `docs/plans/PHASE_1.md` (design system + Live TV screen) **closed 2026-09-11** at 1.6: memory
 verified flat across playlist size (large real list used *less* PSS than the small one - 112.8 MB
@@ -31,15 +40,13 @@ reliability, Back navigation, the accent color, the QR code, a full visual pass 
 StreamVault/TiviMate references) - full history in `PHASE_1.md`'s "Checkpoint B, round N" entries
 if you need it; you shouldn't need to re-derive any of it.
 
-**No next phase is written.** Two backlog candidates exist, both already recorded with rationale -
-read the entries rather than re-deciding from scratch:
+Two backlog items from Phase 1 remain, both already recorded with rationale - read the entries
+rather than re-deciding from scratch:
 - The onboarding M3U/Xtream text-field D-pad focus trap (a real bug, disclosed, deferred since
   1.1 - see "One real bug" note below).
 - The Live TV/Guide merge - StreamVault's top-pill nav kept, but TiviMate's merged
   live+EPG-grid layout instead of the current simple channel list, plus an auto-hiding nav. Real
   idea, not urgent, blocked on EPG data existing first - see "Product decisions on record" below.
-
-Ask the user which (or something else) becomes Phase 2, rather than assuming.
 
 **Still open, not chased further without new detail:** one report of the app returning to
 Onboarding with no sign of the previously-loaded playlist after an update — checked, not a Room
