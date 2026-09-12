@@ -4,7 +4,7 @@
 
 | # | Task | State |
 |---|---|---|
-| 2.1 | `PlayerScreen`: key router, overlay state machine, Back peeling, scrim | 🟡 state machine/router/Back/timeouts done, scrim+breadcrumb/clock remain |
+| 2.1 | `PlayerScreen`: key router, overlay state machine, Back peeling, scrim | ✅ done & build-verified |
 | 2.2 | Zap: neighbour queries, UP/DOWN, zap banner, stream badges, no-black-screen | ⬜ not started |
 | **A** | **Checkpoint — user tests entry, zap, OK overlay skeleton, Back** | ⬜ |
 | 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | ⬜ not started |
@@ -277,18 +277,28 @@ actual TV - real behavior exists now (state transitions, Back-peeling, timeouts)
 good point for a `logcat`-only device check if there's time; otherwise it waits for the scrim/
 breadcrumb slice to bundle into one real Checkpoint A round.
 
-## 2.1 — remaining: scrim, breadcrumb/clock
+## 2.1 — closed out: scrim, breadcrumb, clock (2026-09-12, Sonnet)
 
-Create `ui/player/PlayerScreen.kt`; move the fullscreen `Box` out of `LiveTvScreen.kt` into it.
-Implement `PlayerOverlay`, the single key router (decision 3), Back peeling (decision 4), the
-timeout coroutines (decision 6), the scrim and the breadcrumb/clock (decision 7) - with the info
-block and rows as *empty placeholders* only for this task. Wire `onKeyEvent` so OK/UP/DOWN/LEFT/
-RIGHT/long-press each set the right `overlay` value; log each transition with
-`Log.d("PlayerScreen", …)` so 2.6 and the checkpoints can read the state machine off `logcat`.
+Third small slice this session. `PlayerScreen` gained a `breadcrumb: String` param (computed by
+`LiveTvScreen`, which already has the group/playlist context, as `"PlaylistName › GroupName"` for
+whatever channel is playing - found by matching `focusedChannel`'s `playlistId`/`groupName`
+against `groups`). Inside `PlayerScreen`: the scrim (`Brush.verticalGradient`, transparent to 0.55,
+fading to `Background` at 85% alpha at the bottom, decision 7's exact stops), the breadcrumb
+top-left, and a clock top-right (`EEE, MMM d, h:mm a`, ticking every 60s via a `LaunchedEffect`
+loop) - all three shown only when `overlay != PlayerOverlay.None`, matching the reference
+screenshots: Level 0 (nothing pressed) stays pure video, no transient chrome on entry.
 
-**Acceptance:** entering fullscreen shows only video (no chrome). Each key changes `overlay` as
-decision 3 says, visible in logcat. Back from every state lands one layer down. Timers hide
-`ZapBanner`/`Controls` and reset on any key. Build + 13/13 tests + signed release.
+This closes **all** of #2.1: `PlayerScreen` exists, owns the fullscreen surface, the overlay state
+machine, the key router, Back-peeling, timeouts, and now the scrim/breadcrumb/clock. The info
+block's actual content (logo, programme text, badges) and the tile/action rows remain #2.3 - this
+task's chrome is deliberately just the frame around where those will sit.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** on the
+actual TV - this is real visible UI now (the scrim + breadcrumb + clock actually render), so it's
+a good candidate for the user's next real screenshot, even ahead of Checkpoint A's full list.
+
+## 2.2 — Zap
 
 ## 2.2 — Zap
 

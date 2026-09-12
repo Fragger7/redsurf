@@ -6,27 +6,40 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Text
 import com.redsurf.tv.player.PlayerHost
+import com.redsurf.tv.ui.theme.Background
+import com.redsurf.tv.ui.theme.RedSurfType
+import com.redsurf.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 private const val TAG = "PlayerScreen"
 private const val ZAP_BANNER_TIMEOUT_MS = 4_000L
 private const val CONTROLS_TIMEOUT_MS = 8_000L
+private const val CLOCK_TICK_MS = 60_000L
 
 /**
  * The overlay chrome shown while a channel plays fullscreen (PHASE_2.md - "The Player"). See
@@ -64,6 +77,10 @@ fun PlayerScreen(
     streamUrl: String?,
     focusRequester: FocusRequester,
     onExitFullscreen: () -> Unit,
+    // "PlaylistName › GroupName" for whatever's playing - blank hides the breadcrumb (e.g. the
+    // very first frame before a channel is known). Computed by the caller (LiveTvScreen already
+    // has the group/playlist context) rather than re-derived here.
+    breadcrumb: String = "",
     modifier: Modifier = Modifier,
 ) {
     var overlay by remember { mutableStateOf<PlayerOverlay>(PlayerOverlay.None) }
@@ -186,5 +203,50 @@ fun PlayerScreen(
             },
     ) {
         PlayerHost(streamUrl = streamUrl, fullscreen = true, modifier = Modifier.fillMaxSize())
+
+        // Scrim + breadcrumb/clock (decision 7's chrome, not its info-block content - that's
+        // #2.3). Shown whenever any overlay is up; Level 0 (nothing showing) stays pure video,
+        // per the reference screenshots - there's no transient chrome on entry.
+        if (overlay != PlayerOverlay.None) {
+            var now by remember { mutableStateOf(System.currentTimeMillis()) }
+            LaunchedEffect(Unit) {
+                while (true) {
+                    delay(CLOCK_TICK_MS)
+                    now = System.currentTimeMillis()
+                }
+            }
+            val clockText = remember(now) {
+                SimpleDateFormat("EEE, MMM d, h:mm a", Locale.getDefault()).format(now)
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.55f to Color.Transparent,
+                            1f to Background.copy(alpha = 0.85f),
+                        ),
+                    ),
+            )
+
+            if (breadcrumb.isNotBlank()) {
+                Text(
+                    breadcrumb,
+                    style = RedSurfType.rowSecondary,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.TopStart).padding(24.dp).fillMaxWidth(0.5f),
+                )
+            }
+            Text(
+                clockText,
+                style = RedSurfType.rowSecondary,
+                color = TextSecondary,
+                modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
+            )
+        }
     }
 }

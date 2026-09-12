@@ -203,6 +203,13 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
             // Extracted to ui/player/PlayerScreen.kt (PHASE_2.md #2.1) - it now owns the overlay
             // state machine and all Back handling while fullscreen, calling onExitFullscreen only
             // once there's nothing left to peel (decision 4).
+            val breadcrumb = remember(focusedChannel, groups) {
+                val channel = focusedChannel
+                val info = channel?.let { c ->
+                    groups.firstOrNull { it.playlistId == c.playlistId && it.groupName == c.groupName }
+                }
+                if (info != null) "${info.playlistName} › ${formatGroupName(info.groupName)}" else ""
+            }
             PlayerScreen(
                 streamUrl = previewUrl,
                 focusRequester = fullscreenFocus,
@@ -210,6 +217,7 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
                     isFullscreen = false
                     onFullscreenChanged(false)
                 },
+                breadcrumb = breadcrumb,
                 modifier = Modifier.fillMaxSize(),
             )
         }
