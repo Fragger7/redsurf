@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -179,7 +181,13 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
                     .fillMaxSize()
                     .focusRequester(fullscreenFocus)
                     .focusable()
-                    .onKeyEvent { true },
+                    // Swallow every key except Back, which must keep bubbling to the BackHandler
+                    // above (its OnBackPressedDispatcher registration is a separate mechanism
+                    // from this modifier, but a raw KEYCODE_BACK is still an ordinary key event
+                    // first - consuming it here unconditionally, as the first version of this fix
+                    // did, silently ate Back and made it do nothing while fullscreen. Found live,
+                    // 2026-09-12.
+                    .onKeyEvent { it.key != Key.Back },
             ) {
                 PlayerHost(streamUrl = previewUrl, fullscreen = true, modifier = Modifier.fillMaxSize())
             }

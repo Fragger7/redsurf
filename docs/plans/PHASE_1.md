@@ -761,6 +761,51 @@ before (used three times so far this project, each time it found the real root c
 (`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** either fix
 on the actual TV - see the test list below.
 
+## Post-Phase-1 quick fixes, round 2 (2026-09-12, Sonnet)
+
+User test of round 1 found a real regression and real UX gaps:
+
+1. **Regression: Back did nothing at all while fullscreen.** I introduced this myself fixing list-
+   position preservation - the fullscreen overlay's `.onKeyEvent { true }` (meant to stop D-pad
+   input leaking to the now-invisible list underneath) also swallowed the Back key before it could
+   reach `BackHandler`'s dispatcher, since a raw KEYCODE_BACK is an ordinary key event before
+   anything translates it into a back-navigation call. Fixed: `.onKeyEvent { it.key != Key.Back }`
+   - consume everything except Back, let Back keep bubbling. This is exactly the kind of thing the
+   "verify with compile+tests, no ADB" workflow change cannot catch on its own - a Compose input-
+   handling regression has no unit-test signature; it needs a device to surface at all. Logged as
+   a known cost of the tradeoff, not a reason to reverse it.
+2. **Playlist naming.** Round 1's multi-playlist support had no way to name a playlist - every
+   Xtream source showed as the literal string "Xtream Playlist," indistinguishable from any other.
+   Added a "Playlist Name" field to the Mobile Phone pairing web form (`PairingServer.kt` - the
+   reliable entry point, unaffected by the known onboarding text-field D-pad trap) and threaded a
+   `name` param through the pairing callback in `MainViewModel`. Left blank, it falls back to
+   `"<type> (<host>)"` (e.g. "Xtream Playlist (infinitytv-mgm.online)") rather than the bare
+   generic label, so even two un-named playlists don't collide. **Disclosed scope trim:** the
+   on-screen Xtream/M3U forms (`OnboardingScreen.kt`) did not get a name field - they're the
+   already-broken D-pad-trap path (decision #9), and the pairing form covers the case that
+   actually matters.
+3. **Accordion hierarchy, replacing the "PlaylistName › GroupName" prefix.** The prefix approach
+   was found to eat most of the Categories column's width, hiding the actual group name behind an
+   ellipsis - exactly the complaint. Replaced with a TiviMate-style accordion (`GroupsColumn.kt`):
+   each playlist is a distinctly-styled header row (bold, raised background, chevron, its total
+   channel count) that OK collapses/expands; groups render beneath their playlist, unprefixed, at
+   full column width. The single-playlist case (still the common one) renders with no header at
+   all - pixel-identical to before this round. The middle column's title (`ChannelsColumn.kt`)
+   keeps its playlist-name prefix, unaffected - that column is wider and wasn't the complaint.
+4. **"Cancel add playlist" confirmed working** - no change needed.
+5. **"Had to OTA twice to reach the latest release" - investigated, not a bug.** Checked release
+   timestamps: `v0.20.2` published 2026-09-12T02:28:46Z, `v0.20.3` at 02:53:58Z - 25 minutes apart,
+   both from this session's own commits. `UpdateManager` always calls GitHub's `/releases/latest`,
+   which is always the true latest at the moment of the call - there is no version-skipping logic
+   to fix. This reads as a real newer release publishing while the user's first OTA was still in
+   flight, not a stale-check bug. Will stop being visible once releases aren't landing minutes
+   apart within the same test session; revisit only if it recurs with two release tags that were
+   NOT both freshly published around the same test window.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** any of the
+four fixes on the actual TV - next test round.
+
 ## Non-goals — do not drift into these
 
 - EPG data of any kind. The worker is unscheduled; "No schedule information" is correct.

@@ -7,7 +7,9 @@ import kotlinx.coroutines.launch
 
 class PairingServer(
     port: Int,
-    private val onCredentialsReceived: (method: String, server: String, user: String, pass: String, m3u: String, contentType: String) -> Unit
+    // name added (user request, 2026-09-12): with two-or-more playlists now able to coexist,
+    // every one showing up as "Xtream Playlist" made them indistinguishable in the UI.
+    private val onCredentialsReceived: (method: String, name: String, server: String, user: String, pass: String, m3u: String, contentType: String) -> Unit
 ) : NanoHTTPD(port) {
 
     override fun serve(session: IHTTPSession): Response {
@@ -38,6 +40,8 @@ class PairingServer(
                         <h3>Xtream Codes / Stalker</h3>
                         <form action="/submit" method="POST">
                             <input type="hidden" name="type" value="xtream">
+                            <label>Playlist Name</label>
+                            <input type="text" name="name" placeholder="e.g. My Provider" maxlength="60">
                             <label>Server URL</label>
                             <input type="text" name="server" placeholder="http://..." required>
                             <label>Username</label>
@@ -58,6 +62,8 @@ class PairingServer(
                         <h3>M3U Playlist</h3>
                         <form action="/submit" method="POST">
                             <input type="hidden" name="type" value="m3u">
+                            <label>Playlist Name</label>
+                            <input type="text" name="name" placeholder="e.g. My Provider" maxlength="60">
                             <label>M3U URL</label>
                             <input type="text" name="m3u" placeholder="http://..." required>
                             <label>Content Type</label>
@@ -78,6 +84,7 @@ class PairingServer(
                 session.parseBody(HashMap())
                 val params = session.parameters
                 val type = params["type"]?.firstOrNull() ?: ""
+                val name = params["name"]?.firstOrNull()?.trim() ?: ""
                 val server = params["server"]?.firstOrNull() ?: ""
                 val user = params["user"]?.firstOrNull() ?: ""
                 val pass = params["pass"]?.firstOrNull() ?: ""
@@ -85,7 +92,7 @@ class PairingServer(
                 val contentType = params["contentType"]?.firstOrNull() ?: "both"
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    onCredentialsReceived(type, server, user, pass, m3u, contentType)
+                    onCredentialsReceived(type, name, server, user, pass, m3u, contentType)
                 }
 
                 val html = """

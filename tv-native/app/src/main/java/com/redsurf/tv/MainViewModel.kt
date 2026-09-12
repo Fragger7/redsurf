@@ -165,17 +165,17 @@ class MainViewModel : ViewModel() {
 
         if (pairingServer == null) {
             try {
-                pairingServer = PairingServer(8080) { method, server, user, pass, m3u, contentType ->
+                pairingServer = PairingServer(8080) { method, name, server, user, pass, m3u, contentType ->
                     viewModelScope.launch {
                         if (method == "xtream") {
                             // If user is empty, assume Stalker
                             if (user.isEmpty()) {
-                                loadStalkerPortal(server, "", "Stalker Portal", null, 0f, contentType)
+                                loadStalkerPortal(server, "", name.ifBlank { fallbackPlaylistName("Stalker Portal", server) }, null, 0f, contentType)
                             } else {
-                                loadXtreamCodes(server, user, pass, "Xtream Playlist", null, 0f, contentType)
+                                loadXtreamCodes(server, user, pass, name.ifBlank { fallbackPlaylistName("Xtream Playlist", server) }, null, 0f, contentType)
                             }
                         } else if (method == "m3u") {
-                            loadPlaylist(m3u, "M3U Playlist", m3u, "", "m3u", null, 0f, null, contentType)
+                            loadPlaylist(m3u, name.ifBlank { fallbackPlaylistName("M3U Playlist", m3u) }, m3u, "", "m3u", null, 0f, null, contentType)
                         }
                     }
                 }
@@ -208,6 +208,17 @@ class MainViewModel : ViewModel() {
     fun cancelAddPlaylist() {
         stateBeforeAddingPlaylist?.let { _state.value = it }
         stateBeforeAddingPlaylist = null
+    }
+
+    /**
+     * When the user leaves the name field blank (user request, 2026-09-12: name playlists so two
+     * loaded together are distinguishable), fall back to a label + the URL's host rather than the
+     * bare generic label - two un-named Xtream playlists both showing as plain "Xtream Playlist"
+     * would be exactly the collision this whole feature exists to avoid.
+     */
+    private fun fallbackPlaylistName(label: String, url: String): String {
+        val host = runCatching { java.net.URI(url).host }.getOrNull()
+        return if (host.isNullOrBlank()) label else "$label ($host)"
     }
 
     fun switchPlaylist(playlistId: String) {
