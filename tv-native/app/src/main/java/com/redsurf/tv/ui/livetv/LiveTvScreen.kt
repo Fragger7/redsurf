@@ -1,6 +1,5 @@
 package com.redsurf.tv.ui.livetv
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -128,10 +127,9 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
         }
     }
 
-    BackHandler(enabled = isFullscreen) {
-        isFullscreen = false
-        onFullscreenChanged(false)
-    }
+    // Back-while-fullscreen moved into PlayerScreen itself (PHASE_2.md #2.1b) - it now owns real
+    // overlay state to peel through first (decision 4), not just "exit fullscreen" in one step.
+    // onExitFullscreen below is what PlayerScreen calls once nothing is left to peel.
 
     val fullscreenFocus = remember { FocusRequester() }
     val channelReturnFocus = remember { FocusRequester() }
@@ -202,11 +200,16 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
         }
 
         if (isFullscreen) {
-            // Extracted to ui/player/PlayerScreen.kt (PHASE_2.md #2.1a) - same behavior, now the
-            // home for the overlay state machine (#2.1b onward) instead of living inline here.
+            // Extracted to ui/player/PlayerScreen.kt (PHASE_2.md #2.1) - it now owns the overlay
+            // state machine and all Back handling while fullscreen, calling onExitFullscreen only
+            // once there's nothing left to peel (decision 4).
             PlayerScreen(
                 streamUrl = previewUrl,
                 focusRequester = fullscreenFocus,
+                onExitFullscreen = {
+                    isFullscreen = false
+                    onFullscreenChanged(false)
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }

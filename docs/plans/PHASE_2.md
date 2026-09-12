@@ -4,7 +4,7 @@
 
 | # | Task | State |
 |---|---|---|
-| 2.1 | `PlayerScreen`: key router, overlay state machine, Back peeling, scrim | 🟡 2.1a (extraction) done, 2.1b (logic) not started |
+| 2.1 | `PlayerScreen`: key router, overlay state machine, Back peeling, scrim | 🟡 state machine/router/Back/timeouts done, scrim+breadcrumb/clock remain |
 | 2.2 | Zap: neighbour queries, UP/DOWN, zap banner, stream badges, no-black-screen | ⬜ not started |
 | **A** | **Checkpoint — user tests entry, zap, OK overlay skeleton, Back** | ⬜ |
 | 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | ⬜ not started |
@@ -244,10 +244,40 @@ Row, `channelReturnFocus`, the fullscreen `BackHandler`, the debounce effects - 
 **Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
 (`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** on the
 actual TV - this step has no new behavior to check, so it's being trusted to the build/test
-verification alone rather than spending a device round-trip on a no-op change. 2.1b's checkpoint
-is Checkpoint A, where real behavior exists to check.
+verification alone rather than spending a device round-trip on a no-op change.
 
-## 2.1 — router, state machine, Back, scrim
+**2.1b - state machine, key router, Back-peeling, timeouts. Done; scrim/breadcrumb/clock still
+pending.** Same session, one more small slice (still rate-limit-conscious - deliberately stopped
+short of the full #2.1 task). `PlayerScreen` now owns:
+- The overlay state machine and Level-0 key router (decisions 2-3): OK short-press → `Controls
+  (Tiles)`, long-press (`nativeKeyEvent.isLongPress`, tracked across the held-key stream since
+  it's only known true on a later repeat event, not the initial down) → `ContextMenu`, UP/DOWN →
+  `ZapBanner` (no real zap yet - #2.2), LEFT → `ChannelList`, RIGHT → `ZapBanner` (real
+  last-channel zap is #2.4). All act on first-down only (`repeatCount == 0`), not every repeat
+  tick.
+- The elevator (decision 5): DOWN/UP inside `Controls` swap `Tiles`/`Actions` in place rather than
+  opening a new overlay.
+- Back-peeling (decision 4) - moved out of `LiveTvScreen` entirely into a `BackHandler` inside
+  `PlayerScreen`, since peeling needs to inspect `overlay` state that now lives here.
+  `onExitFullscreen` is the one case (`overlay == None`) where it still delegates up.
+- Timeouts (decision 6): 4s/8s, `LaunchedEffect(overlay, activityTick)` - `activityTick` exists
+  because reassigning the same `PlayerOverlay` value (e.g. zapping again while the banner is
+  already up) is a no-op to Compose and wouldn't otherwise restart the delay, which decision 6's
+  "any key resets the timer" requires.
+- `Log.d("PlayerScreen", "overlay -> $overlay")` on every transition (readable in `logcat`).
+
+**Not done, still #2.1's remaining slice:** the scrim and breadcrumb/clock (decision 7 UI only -
+the info block content itself is #2.3). No visual change exists yet; `overlay` state is only
+observable in `logcat`, matching Checkpoint A's own emphasis that this much is checkable without
+a screen recording.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** on the
+actual TV - real behavior exists now (state transitions, Back-peeling, timeouts), so this is a
+good point for a `logcat`-only device check if there's time; otherwise it waits for the scrim/
+breadcrumb slice to bundle into one real Checkpoint A round.
+
+## 2.1 — remaining: scrim, breadcrumb/clock
 
 Create `ui/player/PlayerScreen.kt`; move the fullscreen `Box` out of `LiveTvScreen.kt` into it.
 Implement `PlayerOverlay`, the single key router (decision 3), Back peeling (decision 4), the
