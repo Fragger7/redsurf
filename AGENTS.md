@@ -104,6 +104,18 @@ screen with more than one focusable region or a modal/fullscreen state, ask expl
 user leaves this and comes back, where does focus land, and is that actually where they were?" -
 don't assume the answer is yes without a `FocusRequester` actually wired to prove it.
 
+**A worse variant found in `PlayerScreen.kt` (2026-09-12), worth naming explicitly:** it's not
+enough to restore focus when *leaving* a whole screen (the fullscreen-exit case above) - a screen
+with its *own* internal overlay states needs the same discipline for transitions *within* itself.
+Picking a tile from `PlayerScreen`'s Controls floor tore down the tile row that held real D-pad
+focus, and with nothing reclaiming focus onto the screen's own root, Compose's fallback landed
+unpredictably - sometimes nowhere at all, which doesn't just misplace focus, it silently breaks
+all further key routing on a screen whose input handling depends on that root staying focused
+("the whole button engine seems to crash," in the user's words - a correct description; Back kept
+working only because its dispatcher doesn't need focus). Every overlay/modal state a screen owns
+internally needs the same explicit reclaim-on-close this rule already asks for at the screen
+level - not just once, at the door.
+
 **Known, not yet fixed:** moving focus away from a column (e.g. Categories) and back (e.g. into
 Channels) via LEFT/RIGHT doesn't restore the exact row you left - it lands wherever directional
 search resolves to from the new focus position, not "the same one as before." Needs a real
@@ -115,6 +127,20 @@ next screen with more than one focusable column.
 
 ## Backlog - explicitly logged, not forgotten
 
+- **Optional black-screen between channel zaps** (user idea, 2026-09-12): the "no black screen"
+  zap behavior (PHASE_2.md decision 13, `PRODUCT_VISION.md` §3's "black screen minimizer") is
+  deliberately the opposite of old cable-box channel changing - the user specifically likes that
+  old behavior and wants it as a toggle, not a replacement for the default. A "Playback" Settings
+  category item once the categorized shell exists (pairs with the resolution-display toggle
+  below).
+- **Real pixel resolution as an alternative to the SD/HD/FHD/4K badge class** (user idea,
+  2026-09-12) - a Settings toggle between the derived class and the literal `WxH` (e.g.
+  "1920x1080"). `StreamInfo.rawResolution` already captures the raw value (`PlayerHost.kt`,
+  2026-09-12) - only the Settings toggle to switch the badge display is outstanding.
+- **"Clear history" button on the player's History picker** (user idea, 2026-09-12, "copy
+  TiviMate behavior") - makes more sense once #2.5's real `recent_channels` table exists; the
+  current in-memory stand-in already clears itself every process restart, so a manual clear
+  button for it would be low-value. Build alongside #2.5, not before.
 - **Tooltip on long-focus for truncated category names** (user idea, 2026-09-12): categories long
   enough to always ellipsis, even after the visual pass, could show their full name after the
   D-pad rests on them briefly - not built, needs a design pass on timing/placement first.

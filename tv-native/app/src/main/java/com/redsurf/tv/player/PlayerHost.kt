@@ -51,6 +51,10 @@ fun Context.findActivity(): Activity? = when (this) {
  */
 data class StreamInfo(
     val resolutionClass: String? = null, // "SD" | "HD" | "FHD" | "4K"
+    val rawResolution: String? = null, // "1920x1080" - user request, 2026-09-12: a badge showing
+    // the actual detected pixel resolution as an alternative to the SD/HD/FHD/4K class, toggled
+    // in Settings. Captured now since it's free alongside resolutionClass; the toggle itself
+    // waits on Settings having a real place to put it (AGENTS.md backlog).
     val frameRate: Int? = null,
     val audioChannels: String? = null, // "STEREO" | "5.1" | "N ch"
     val audioCodec: String? = null, // "AAC" | "AC3" | "EAC3" | "MP3"
@@ -190,6 +194,7 @@ fun PlayerHost(
             onStreamInfo(
                 StreamInfo(
                     resolutionClass = video?.height?.let(::resolutionClassOf),
+                    rawResolution = video?.takeIf { it.width > 0 && it.height > 0 }?.let { "${it.width}x${it.height}" },
                     frameRate = video?.frameRate?.takeIf { it > 0f }?.roundToInt(),
                     audioChannels = audio?.channelCount?.let(::audioChannelsLabelOf),
                     audioCodec = audioCodecOf(audio?.sampleMimeType),

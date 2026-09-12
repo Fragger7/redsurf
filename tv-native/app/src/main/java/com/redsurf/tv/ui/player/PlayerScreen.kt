@@ -140,6 +140,21 @@ fun PlayerScreen(
         }
     }
 
+    // Reclaim focus onto this composable's own root whenever `overlay` collapses back to
+    // "nothing with real descendant content" (None/ZapBanner) - found live, 2026-09-12,
+    // reported as "the whole button engine seems to crash": tuning a tile from the Controls
+    // floor tears down the tile row that held real D-pad focus, and without this, Compose's
+    // fallback focus-picking after a torn-down focused descendant is unpredictable - sometimes
+    // landing nowhere, silently breaking all further key routing (this screen's onKeyEvent needs
+    // real focus to receive anything) until Back is pressed, since Back's dispatcher is a
+    // separate mechanism that doesn't require focus at all - exactly why it was the only way out.
+    LaunchedEffect(overlay) {
+        if (overlay == PlayerOverlay.None || overlay == PlayerOverlay.ZapBanner) {
+            delay(50)
+            runCatching { focusRequester.requestFocus() }
+        }
+    }
+
     // Long-press OK (decision 3) is tracked across a held key: isLongPress flips true on a
     // repeat KeyDown once Android's own long-press timeout elapses, not on a single event, so
     // whether it fired has to be remembered across the DOWN stream and checked on UP.
@@ -243,7 +258,13 @@ fun PlayerScreen(
                     // Picker rows (History, built this round) navigate and select normally too -
                     // same reasoning as Controls above.
                     is PlayerOverlay.Picker -> return@onKeyEvent false
-                    PlayerOverlay.None -> {
+                    // ZapBanner included here, not just None (found live, 2026-09-12, reported
+                    // as "repeatedly fails... have to wait for the banner to disappear"): the
+                    // banner is a transient decoration on top of Level 0, not a distinct modal
+                    // state - every Level-0 key must keep working while it's showing, including
+                    // zapping again immediately, or the D-pad goes dead for up to 4 seconds after
+                    // every single zap.
+                    PlayerOverlay.None, PlayerOverlay.ZapBanner -> {
                         // The Level 0 control matrix (decision 3). LEFT/RIGHT/UP/DOWN act once
                         // per press (isFirstDown), not once per repeat tick, so a held button
                         // doesn't machine-gun through channels.
@@ -284,7 +305,7 @@ fun PlayerScreen(
                             else -> {}
                         }
                     }
-                    else -> {} // ZapBanner, ChannelList, ContextMenu: no real content yet (#2.4) - only Back acts.
+                    else -> {} // ChannelList, ContextMenu: no real content yet (#2.4) - only Back acts.
                 }
                 true
             },

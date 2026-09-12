@@ -402,11 +402,42 @@ action row in the brief - held until that lands, not deleted early and separatel
 actual TV - this slice specifically needs a device check (D-pad focus moving between real tiles
 is new Compose usage in this file, per the router-change note above), not just build/test trust.
 
-## 2.4 — LEFT overlay, RIGHT last-channel, context menu
+## Real bugs found in device testing (2026-09-12, Sonnet), fixed same round
 
-Decisions 11, 3 (RIGHT), 12.
+The device test above found two real bugs from the tile-row slice - both traced by reading the
+code, not guessed at:
 
-**Acceptance:** LEFT opens the panel with focus on the current channel; OK on another tunes and
+1. **Zapping repeatedly failed - one zap worked, then nothing until the banner disappeared.**
+   Root cause: the key router only handled the full Level-0 matrix (OK/UP/DOWN/LEFT/RIGHT) inside
+   `PlayerOverlay.None ->`. The moment any zap fired, `overlay` became `ZapBanner`, and every key
+   after that fell into the router's generic no-op catch-all until the banner's 4s timeout expired
+   and reset `overlay` back to `None`. This also explained part of "OK failed for no reason" -
+   the same silent dead zone applied to OK, not just UP/DOWN. Fixed by merging `None` and
+   `ZapBanner` into one `when` branch - the banner is a transient decoration on Level 0, not a
+   distinct modal state, and every Level-0 key needs to keep working while it's showing.
+2. **"The whole button engine seems to crash" after picking a tile - fixed until Back was
+   pressed, then focus landed inconsistently (channel group one time, the right channel another).**
+   Root cause: picking a tile collapses `overlay` back to `ZapBanner`, tearing down the tile row
+   that held real D-pad focus - and nothing explicitly reclaimed focus onto `PlayerScreen`'s own
+   root. Compose's fallback focus-picking after a torn-down focused descendant is unpredictable,
+   sometimes landing nowhere at all - which silently breaks this screen's key routing entirely,
+   since `onKeyEvent` needs real focus to receive anything. Back kept working throughout because
+   `OnBackPressedDispatcher` is a separate mechanism that doesn't need focus - exactly why it was
+   the only way out, and why the resulting focus was inconsistent (a race, not deterministic).
+   Fixed with a `LaunchedEffect(overlay)` that explicitly reclaims `focusRequester.requestFocus()`
+   whenever `overlay` collapses back to `None`/`ZapBanner` - the exact same defensive pattern
+   already used for fullscreen-entry and the Phase 1 column-reentry fix, just not yet applied to
+   this screen's own *internal* overlay transitions. This is precisely the class of bug
+   `AGENTS.md`'s "State and focus discipline" rule exists to catch - noted there too.
+
+Also this round: `StreamInfo.rawResolution` (literal `WxH`) captured alongside `resolutionClass`
+for the user's requested resolution-display toggle - the toggle itself waits on Settings
+(`AGENTS.md` backlog); "optional black-screen zap" and "clear history" ideas also logged there.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** on the
+actual TV - both fixes address precisely what was reported; a repeat of the same test sequence
+(zap repeatedly without waiting, pick a tile then try to zap again) is what would confirm them.
 
 ## 2.4 — LEFT overlay, RIGHT last-channel, context menu
 
