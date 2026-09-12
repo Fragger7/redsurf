@@ -806,6 +806,30 @@ User test of round 1 found a real regression and real UX gaps:
 (`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** any of the
 four fixes on the actual TV - next test round.
 
+## Post-Phase-1 quick fixes, round 3 (2026-09-12, Sonnet)
+
+Two platform-lifecycle bugs the user logged while round 2 was mid-test, both standard, well-
+understood Android issues fixed in `PlayerHost.kt`:
+
+1. **Screensaver/screen-off during active playback.** Decoding and rendering video isn't "user
+   activity" as far as Android's idle timer is concerned, so the OS had no reason not to sleep the
+   screen mid-channel. Fixed with `PlayerView.keepScreenOn = true` - the standard fix (same
+   pattern as ExoPlayer's own demo app), tied to the View so it's automatically undone when the
+   View is torn down on exiting fullscreen. No separate cleanup path needed.
+2. **Audio kept playing after Home was pressed, until force-close.** Compose composition doesn't
+   track the Activity going to the background on its own - `PlayerHost`'s ExoPlayer instance is
+   scoped to Compose's composition lifecycle (torn down on exiting fullscreen), which is a
+   different thing from the Activity's lifecycle (paused/stopped on Home, but not destroyed) - so
+   nothing told the player to stop when the user left. Fixed with a `LifecycleEventObserver` on
+   `LocalLifecycleOwner`: `ON_PAUSE` pauses the player, `ON_RESUME` resumes it from wherever the
+   buffer left off (`pause()`, unlike `release()`, doesn't drop position). This app has no
+   background-playback feature (no `MediaSession`, no foreground service) - pausing on backgrounding
+   is the correct, conservative behavior here, not a workaround for a missing feature.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** either fix
+on the actual TV - next test round, bundled with round 2's four items above.
+
 ## Non-goals — do not drift into these
 
 - EPG data of any kind. The worker is unscheduled; "No schedule information" is correct.

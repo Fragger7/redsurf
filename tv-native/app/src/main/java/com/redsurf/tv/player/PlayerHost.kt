@@ -14,7 +14,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -81,6 +84,25 @@ fun PlayerHost(streamUrl: String?, fullscreen: Boolean, modifier: Modifier = Mod
         }
     }
 
+    // Home button during playback left audio running until the app was force-closed (found
+    // live, 2026-09-12) - Compose composition doesn't track the Activity going to the
+    // background on its own, so nothing told ExoPlayer to stop. This app has no background-
+    // playback feature (no MediaSession, no foreground service) - pause is the correct,
+    // conservative behavior here, not a workaround. Resumes automatically on return, from
+    // wherever the buffer left off, since pause() (unlike release()) doesn't drop position.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> exoPlayer.pause()
+                Lifecycle.Event.ON_RESUME -> exoPlayer.play()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             afrManager.restoreOriginalMode()
@@ -98,6 +120,13 @@ fun PlayerHost(streamUrl: String?, fullscreen: Boolean, modifier: Modifier = Mod
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
+                // Screensaver/screen-off kicking in mid-playback (found live, 2026-09-12) -
+                // decoding/rendering video isn't "user activity" as far as Android's idle timer
+                // is concerned, so the OS has no reason not to sleep the screen. This is the
+                // standard fix (same as ExoPlayer's own demo app): tied to the View, so it goes
+                // away on its own when this View is torn down on exiting fullscreen - no
+                // separate cleanup needed, unlike a Window-level flag.
+                keepScreenOn = true
             }
         },
         modifier = modifier.fillMaxSize(),
