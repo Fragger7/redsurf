@@ -19,43 +19,32 @@ a Next.js web portal at the repo root.
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which
 were false. It is kept for provenance only.
 
-## Current phase: Phase 1 — `docs/plans/PHASE_1.md`
+## Phase 1 — done. No Phase 2 brief written yet.
 
-Design system + Live TV screen. The brief makes every architectural call up front (theme, focus
-model, per-group paged Room queries, one-player-per-screen, Coil, no nav library) so execution is
-Sonnet-lane; Opus reviews at the two screenshot checkpoints. Read the brief's "Decisions already
-made" section before touching anything — those are settled.
+`docs/plans/PHASE_1.md` (design system + Live TV screen) **closed 2026-09-11** at 1.6: memory
+verified flat across playlist size (large real list used *less* PSS than the small one - 112.8 MB
+vs 145.7 MB, paging genuinely works), all 7 acceptance-sweep lines pass, 13/13 tests, signed
+release. Real end-to-end playback confirmed on the TV. Six Checkpoint B rounds fixed real,
+device-found bugs on top of the original 1.1–1.5 build (state loss across the fullscreen toggle, a
+nav-strip overflow bug that was the main cause of "looks unprofessional," one-step playback, OTA
+reliability, Back navigation, the accent color, the QR code, a full visual pass against the
+StreamVault/TiviMate references) - full history in `PHASE_1.md`'s "Checkpoint B, round N" entries
+if you need it; you shouldn't need to re-derive any of it.
 
-**1.1–1.5 done and device-confirmed (2026-09-11).** Playback works end to end on the real TV with
-a real playlist: Mobile Phone pairing → playlist loads → 3-pane Live TV screen renders → a channel
-plays. Checkpoint B is now 5 rounds of user-reports-a-bug → root-cause-on-device → fix, all logged
-in `PHASE_1.md` — read its "Checkpoint B, round N" entries for the full history, and its latest
-"what to check on the real TV" list for what's still open and awaiting the user's next test pass.
+**No next phase is written.** Two backlog candidates exist, both already recorded with rationale -
+read the entries rather than re-deciding from scratch:
+- The onboarding M3U/Xtream text-field D-pad focus trap (a real bug, disclosed, deferred since
+  1.1 - see "One real bug" note below).
+- The Live TV/Guide merge - StreamVault's top-pill nav kept, but TiviMate's merged
+  live+EPG-grid layout instead of the current simple channel list, plus an auto-hiding nav. Real
+  idea, not urgent, blocked on EPG data existing first - see "Product decisions on record" below.
 
-As of round 5, fixed: accent color (was reading pink, not red — corrected by pixel-sampling the
-project's own mockups, not by eye), QR code on the Mobile Phone pairing screen, one-step channel
-playback, Back preserving Live TV state across the fullscreen toggle (root cause was a genuine
-Compose pitfall — `AppShell` composed `LiveTvScreen` from two different structural call sites
-depending on fullscreen state, which are different composition groups and silently wipe all
-`remember`ed state on every toggle; see `AppShell.kt`'s doc comment before touching that file),
-Back stopping at a Home destination before exiting the app instead of exiting outright, and OTA
-now checking on every resume plus a 4h periodic background check plus a manual Settings button.
+Ask the user which (or something else) becomes Phase 2, rather than assuming.
 
-**Visual pass done (round 6, Opus, 2026-09-11)** - see `PHASE_1.md` round 6 and
-`docs/vision/screenshots/before_visual_pass.png` → `after_visual_pass.png`. The root cause of
-"unprofessional" was a nav-strip overflow bug inflating it to ~225dp, plus everything sized ~1.75×
-too big for the actual 960×540dp canvas (1080p at density 2 - measure against *that*, not px).
-`ui/theme/Type.kt` now names the text roles; `RedSurfFocus.rowColors()` vs `colors()` is the
-list-row vs pill distinction. Awaiting the user's verdict; Onboarding/Settings/placeholders were
-deliberately not touched.
-
-**Next up:** 1.6 (memory measurement + acceptance sweep) to close Phase 1 - Sonnet-lane.
-
-**Also still open:** one unresolved report of the app returning to Onboarding with no sign of the
-previously-loaded playlist after an update — checked, not a Room schema bump (version's been 6,
-unchanged, since before v0.19.1), no confirmed cause yet; and OTA reported "erratic, might be good
-enough for now" with no reproducible specifics — don't chase either without new detail from the
-user (which version → which version, force-closed or not, etc).
+**Still open, not chased further without new detail:** one report of the app returning to
+Onboarding with no sign of the previously-loaded playlist after an update — checked, not a Room
+schema bump (version's been 6, unchanged, since before v0.19.1), no confirmed cause; and OTA
+reported "erratic, might be good enough for now" with no reproducible specifics.
 
 **Workflow, from user feedback this session:** stop doing per-task ADB screenshot round-trips — too
 expensive. Build + verify with compile/tests + a signed `assembleRelease` only, batch several

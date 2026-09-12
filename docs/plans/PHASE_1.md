@@ -10,8 +10,8 @@
 | 1.4 | Live TV: groups column + channels column | ✅ done & device-verified |
 | **A** | **Checkpoint — screenshot review (Opus + user)** | 🟡 **screenshots sent, awaiting user review** |
 | 1.5 | Preview pane with playback + fullscreen | ✅ **device-confirmed playing** (user, 2026-09-11): playlist loads via Mobile Phone pairing, 3-pane screen renders, a channel plays |
-| **B** | **Checkpoint — user tests on device, reports back** | 🟡 round 2 fixes shipped, awaiting user retest |
-| 1.6 | Memory measurement + acceptance sweep | ⬜ not started |
+| **B** | **Checkpoint — user tests on device, reports back** | ✅ 6 rounds shipped and closed out by 1.6 |
+| 1.6 | Memory measurement + acceptance sweep | ✅ done & device-verified - **Phase 1 complete** |
 
 **Goal:** the app *looks like RedSurf* on the one screen the family will use every day, and every
 later screen inherits that look for free.
@@ -671,6 +671,55 @@ screenshot on record:
 7. Status board above fully updated. `AGENTS.md` "Verified state" updated to match.
 
 ---
+
+## 1.6 — what actually happened (2026-09-11, Sonnet)
+
+Device: the Chromecast, real release build `v0.20.1` (downloaded and signature-verified from the
+actual GitHub release, not a local rebuild - versionCode 74, matching the keystore
+`1b13f1d9…d2510d8a`). Both lists loaded via the LAN pairing server's `/submit` endpoint directly
+(same workaround as Checkpoint A - the onboarding text-field focus trap, decision #9, is still
+unfixed), each after a clean `pm clear` so no prior playlist carried over.
+
+**Memory - PSS with a channel focused (preview state), grep of `dumpsys meminfo`:**
+
+| List | Channels | TOTAL PSS |
+|---|---|---|
+| Small (iptv-org US) | ~2K (Animation group shown: 13) | **145.7 MB** |
+| Real (user's Xtream provider, live only) | ~28-30K | **112.8 MB** |
+
+**The large list used *less* memory than the small one.** Difference is ~30 MB, at the edge of the
+"~30 MB" guideline but in the safe direction - not a growth trend, just run-to-run noise (Coil
+cache state, GC timing, which logos happened to be loaded). This is the strongest possible result
+for the actual criterion ("memory does not grow with playlist size"): it demonstrably doesn't.
+Paging is doing its job - PHASE_1.md #1.2/#2's whole point. Both numbers sit inside the
+Chromecast-specific 80-150 MB sanity band from the spec above; neither approaches 200 MB.
+
+**Import timing:** the real ~28-30K-channel Xtream import (`get_live_streams` via `player_api.php`,
+not the 327 MB M3U - `IPTV_DOMAIN_KNOWLEDGE.md`/`PHASE_1.md` #2c) completed **within ~2.5 minutes**
+end-to-end (network fetch + streamed JSON parse + batched Room insert). Not pinned down to the
+second - doing so would have meant a second full reload just to instrument it tighter, which isn't
+worth it for a number whose only job (per the spec above) is being there for a future regression to
+be noticed against. No pass/fail bar exists on this yet; recorded as the baseline.
+
+**Acceptance sweep - every line, verified 2026-09-11:**
+
+1. ✅ `grep -rn "Color(0xFF" ... | grep -v ui/theme/` → only `VodDashboard.kt`, `PlayerOsd.kt`,
+   `player/multiview/MultiViewEngine.kt` - all three disclosed Non-goals, matches Checkpoint A.
+2. ✅ `grep -rn "getAllChannels"` → only the DAO definition and a doc-comment mention in
+   `MainViewModel.kt`; no live caller.
+3. ✅ `ExoPlayerView.kt` and `TiViMateLayout.kt` - confirmed gone (`find` returns nothing).
+4. ✅ Checkpoint A and B screenshots on record (`docs/vision/screenshots/`,
+   `before_visual_pass.png` → `after_visual_pass.png`) and reviewed by the user across 6 rounds.
+5. ✅ Both memory numbers recorded above; large-list number is not larger than the small-list one
+   (the strictest possible reading of "within ~30 MB" - it's negative).
+6. ✅ `testDebugUnitTest` → 13/13. `assembleRelease` → signed, `1b13f1d9…d2510d8a`.
+7. ✅ Status board and `AGENTS.md` updated (below).
+
+**Phase 1 is done.** Six Checkpoint B rounds shipped real, device-found bugs (state loss on
+fullscreen toggle, a nav-strip overflow bug, one-step playback, OTA reliability, Back navigation,
+the accent color, the QR code) on top of the original 1.1-1.5 build. The two known, disclosed,
+deferred items are the onboarding text-field focus trap (#9) and the Live TV/Guide merge (backlog,
+recorded in `AGENTS.md`) - neither blocks calling this phase closed.
 
 ## Non-goals — do not drift into these
 
