@@ -298,14 +298,36 @@ task's chrome is deliberately just the frame around where those will sit.
 actual TV - this is real visible UI now (the scrim + breadcrumb + clock actually render), so it's
 a good candidate for the user's next real screenshot, even ahead of Checkpoint A's full list.
 
-## 2.2 — Zap
+## 2.2 — what actually happened so far (backend slice, 2026-09-12, Sonnet)
 
-## 2.2 — Zap
+First of two slices (same bite-sizing as #2.1). **Done, backend only, nothing wired to the UI or
+key router yet:**
+- `ChannelDao.nextInGroup`/`prevInGroup`/`firstInGroup`/`lastInGroup` (decision 13) - two O(1)
+  indexed neighbour lookups plus the two wrap-around fallbacks, each intentionally a separate
+  simple query. `ChannelRepository.nextChannel`/`prevChannel` apply the wrap-around (fall back to
+  first/last when a neighbour query returns null at either end of the group).
+- `PlayerHost` buffer tuning: `DefaultLoadControl` with decision 13's exact numbers
+  (min 2.5s / max 15s / 500ms to start / 1.5s after a rebuffer), `setKeepContentOnPlayerReset(true)`
+  + `setShutterBackgroundColor(BLACK)` so a channel switch holds the last frame instead of
+  flashing to a blank surface.
+- `StreamInfo` (resolution class, frame rate, audio channels, audio + video codec) computed from
+  `exoPlayer.videoFormat`/`audioFormat` on a `Player.Listener`, delivered via a new
+  `PlayerHost(onStreamInfo: (StreamInfo) -> Unit = {})` callback param. **Deviation from the
+  brief's literal wording** (which suggested exposing a `StateFlow<StreamInfo>`): a callback
+  matches how every other composable in this codebase already reports upward
+  (`onFullscreenChanged`, `onChannelFocused`, …), so it was used instead of introducing a second
+  pattern - noted per the brief's own instruction to say so when a decision needs adjusting in
+  practice. Nothing calls `onStreamInfo` yet since `PlayerScreen` doesn't pass it - next slice.
 
-`ChannelDao.nextInGroup`/`prevInGroup` (decision 13) via `ChannelRepository`. UP/DOWN at Level 0
-zap and show `PlayerInfoBlock` at the bottom (decision 7, EPG lines omitted). Stream badges from a
-`Player.Listener` in `PlayerHost` exposed as a `StateFlow<StreamInfo>` (resolution, frame rate,
-audio channels, codecs). `setKeepContentOnPlayerReset`, shutter colour, `LoadControl`.
+**Not done yet (next slice):** UP/DOWN in `PlayerScreen`'s key router actually calling
+`nextChannel`/`prevChannel` and retuning the player; the real `PlayerInfoBlock` content (decision
+7) replacing the still-empty `ZapBanner`/`Controls` states; wiring `onStreamInfo` through to it.
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** on the
+actual TV - correctly so, nothing in this slice is reachable from the UI yet (no new key handling,
+no new callers of `onStreamInfo`), so there's nothing a device check could show that build/test
+verification doesn't already cover.
 
 **Acceptance:** 20 consecutive zaps on the real list with no black frame between channels
 (video holds until the next first frame); banner shows and hides; badges match what the stream

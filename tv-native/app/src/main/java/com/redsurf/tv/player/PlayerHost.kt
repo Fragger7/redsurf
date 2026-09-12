@@ -19,7 +19,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.Player
+import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -27,10 +32,59 @@ import androidx.media3.ui.PlayerView
 import com.redsurf.tv.network.IptvNetworkModule
 import com.redsurf.tv.player.tracks.TrackManager
 import com.redsurf.tv.player.tuning.AfrManager
+import kotlin.math.roundToInt
 
 fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+/**
+ * The live stream's current characteristics, for the zap-banner/info-block badges
+ * (PHASE_2.md #2.2, decision 7). A field is null - never a placeholder value - whenever ExoPlayer
+ * hasn't reported it yet; decision 7 is explicit that an unknown badge is omitted, not shown
+ * empty. Delivered via [PlayerHost]'s `onStreamInfo` callback rather than a caller-owned
+ * `StateFlow` (the brief's literal suggestion) - every other composable in this codebase reports
+ * upward the same way (`onFullscreenChanged`, `onChannelFocused`, …), and matching that idiom
+ * beats introducing a second pattern for one composable.
+ */
+data class StreamInfo(
+    val resolutionClass: String? = null, // "SD" | "HD" | "FHD" | "4K"
+    val frameRate: Int? = null,
+    val audioChannels: String? = null, // "STEREO" | "5.1" | "N ch"
+    val audioCodec: String? = null, // "AAC" | "AC3" | "EAC3" | "MP3"
+    val videoCodec: String? = null, // "H.264" | "H.265" | "VP9" - not in decision 7's badge list,
+    // captured anyway since it's free here and decision 9's "Video info" picker wants it later.
+)
+
+private fun resolutionClassOf(height: Int): String? = when {
+    height <= 0 -> null
+    height < 720 -> "SD"
+    height < 1080 -> "HD"
+    height < 2160 -> "FHD"
+    else -> "4K"
+}
+
+private fun audioChannelsLabelOf(channelCount: Int): String? = when {
+    channelCount <= 0 -> null
+    channelCount == 2 -> "STEREO"
+    channelCount == 6 -> "5.1"
+    else -> "$channelCount ch"
+}
+
+private fun audioCodecOf(mimeType: String?): String? = when (mimeType) {
+    MimeTypes.AUDIO_AAC -> "AAC"
+    MimeTypes.AUDIO_AC3 -> "AC3"
+    MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "EAC3"
+    MimeTypes.AUDIO_MPEG, MimeTypes.AUDIO_MPEG_L1, MimeTypes.AUDIO_MPEG_L2 -> "MP3"
+    else -> null
+}
+
+private fun videoCodecOf(mimeType: String?): String? = when (mimeType) {
+    MimeTypes.VIDEO_H264 -> "H.264"
+    MimeTypes.VIDEO_H265 -> "H.265"
+    MimeTypes.VIDEO_VP9 -> "VP9"
     else -> null
 }
 
@@ -42,19 +96,35 @@ fun Context.findActivity(): Activity? = when (this) {
  * instead of recreating it.
  *
  * [fullscreen] enables AFR (Decisions #6 - never mid-scroll, only when actually watching).
+ * [onStreamInfo] fires whenever the current track's characteristics become known or change - see
+ * [StreamInfo].
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun PlayerHost(streamUrl: String?, fullscreen: Boolean, modifier: Modifier = Modifier) {
+fun PlayerHost(
+    streamUrl: String?,
+    fullscreen: Boolean,
+    modifier: Modifier = Modifier,
+    onStreamInfo: (StreamInfo) -> Unit = {},
+) {
     val context = LocalContext.current
 
     val exoPlayer = remember {
         val dataSourceFactory = IptvNetworkModule.getDataSourceFactory()
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
         val trackManager = TrackManager(context)
+        // Fast-zap buffering (PHASE_2.md #2.2, decision 13, PRODUCT_VISION.md #4): start playback
+        // the moment there's 500ms of buffer rather than ExoPlayer's much larger default, while
+        // still building a real cushion (up to 15s) in the background to survive jitter. These
+        // are a starting point - #2.6 measures actual key-press-to-first-frame latency on the
+        // real list and they're only retuned from that measurement, not guessed again.
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(2_500, 15_000, 500, 1_500)
+            .build()
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackManager.trackSelector)
+            .setLoadControl(loadControl)
             .build()
             .apply { playWhenReady = true }
     }
@@ -110,6 +180,31 @@ fun PlayerHost(streamUrl: String?, fullscreen: Boolean, modifier: Modifier = Mod
         }
     }
 
+    // Stream badges (PHASE_2.md #2.2, decision 7) - recomputed from whatever ExoPlayer currently
+    // reports whenever a track or the video size changes, which covers both the very first
+    // format becoming known and a mid-stream change (e.g. the provider switching resolution).
+    DisposableEffect(exoPlayer) {
+        fun report() {
+            val video = exoPlayer.videoFormat
+            val audio = exoPlayer.audioFormat
+            onStreamInfo(
+                StreamInfo(
+                    resolutionClass = video?.height?.let(::resolutionClassOf),
+                    frameRate = video?.frameRate?.takeIf { it > 0f }?.roundToInt(),
+                    audioChannels = audio?.channelCount?.let(::audioChannelsLabelOf),
+                    audioCodec = audioCodecOf(audio?.sampleMimeType),
+                    videoCodec = videoCodecOf(video?.sampleMimeType),
+                ),
+            )
+        }
+        val listener = object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) = report()
+            override fun onVideoSizeChanged(videoSize: VideoSize) = report()
+        }
+        exoPlayer.addListener(listener)
+        onDispose { exoPlayer.removeListener(listener) }
+    }
+
     AndroidView(
         factory = {
             PlayerView(context).apply {
@@ -120,6 +215,13 @@ fun PlayerHost(streamUrl: String?, fullscreen: Boolean, modifier: Modifier = Mod
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
+                // No-black-screen zapping (PHASE_2.md #2.2, decision 13,
+                // PRODUCT_VISION.md #3's "black screen minimizer"): hold the outgoing channel's
+                // last frame - on a solid black shutter, never a stale video frame from whatever
+                // was on screen even earlier - until the next stream's first frame is ready,
+                // instead of clearing to a blank/default surface the instant media is reset.
+                setKeepContentOnPlayerReset(true)
+                setShutterBackgroundColor(android.graphics.Color.BLACK)
                 // Screensaver/screen-off kicking in mid-playback (found live, 2026-09-12) -
                 // decoding/rendering video isn't "user activity" as far as Android's idle timer
                 // is concerned, so the OS has no reason not to sleep the screen. This is the

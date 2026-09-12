@@ -35,4 +35,15 @@ class ChannelRepository(
             config = PagingConfig(pageSize = 60, prefetchDistance = 120, enablePlaceholders = false),
             pagingSourceFactory = { channelDao.getLiveChannelsInGroup(playlistId, groupName) },
         ).flow
+
+    /**
+     * Zap neighbours (PHASE_2.md #2.2, decision 13), wrapping at the ends - the DAO's
+     * `nextInGroup`/`prevInGroup` return null past either edge of the group, so this falls back
+     * to the first/last channel rather than leaving zap dead-ended at whichever end you reach.
+     */
+    suspend fun nextChannel(playlistId: String, groupName: String, num: Int): ChannelEntity? =
+        channelDao.nextInGroup(playlistId, groupName, num) ?: channelDao.firstInGroup(playlistId, groupName)
+
+    suspend fun prevChannel(playlistId: String, groupName: String, num: Int): ChannelEntity? =
+        channelDao.prevInGroup(playlistId, groupName, num) ?: channelDao.lastInGroup(playlistId, groupName)
 }

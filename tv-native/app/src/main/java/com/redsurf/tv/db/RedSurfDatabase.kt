@@ -44,6 +44,36 @@ interface ChannelDao {
     )
     fun getLiveChannelsInGroup(playlistId: String, groupName: String): PagingSource<Int, ChannelEntity>
 
+    /**
+     * Zap neighbours (PHASE_2.md #2.2, decision 13) - two O(1) indexed lookups, never the whole
+     * group loaded into memory. Each can return null at the end of the group; [firstInGroup]/
+     * [lastInGroup] are the wrap-around fallback, applied by the caller (`ChannelRepository`) so
+     * these stay simple single-purpose queries.
+     */
+    @Query(
+        "SELECT * FROM channels WHERE playlistId = :playlistId AND groupName = :groupName " +
+            "AND streamType = 'live' AND isHidden = 0 AND num > :num ORDER BY num, name LIMIT 1"
+    )
+    suspend fun nextInGroup(playlistId: String, groupName: String, num: Int): ChannelEntity?
+
+    @Query(
+        "SELECT * FROM channels WHERE playlistId = :playlistId AND groupName = :groupName " +
+            "AND streamType = 'live' AND isHidden = 0 AND num < :num ORDER BY num DESC, name DESC LIMIT 1"
+    )
+    suspend fun prevInGroup(playlistId: String, groupName: String, num: Int): ChannelEntity?
+
+    @Query(
+        "SELECT * FROM channels WHERE playlistId = :playlistId AND groupName = :groupName " +
+            "AND streamType = 'live' AND isHidden = 0 ORDER BY num, name LIMIT 1"
+    )
+    suspend fun firstInGroup(playlistId: String, groupName: String): ChannelEntity?
+
+    @Query(
+        "SELECT * FROM channels WHERE playlistId = :playlistId AND groupName = :groupName " +
+            "AND streamType = 'live' AND isHidden = 0 ORDER BY num DESC, name DESC LIMIT 1"
+    )
+    suspend fun lastInGroup(playlistId: String, groupName: String): ChannelEntity?
+
     @Query("SELECT * FROM channels WHERE isFavorite = 1 ORDER BY num, name")
     fun getFavorites(): Flow<List<ChannelEntity>>
 
