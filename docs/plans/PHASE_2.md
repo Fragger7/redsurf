@@ -7,7 +7,7 @@
 | 2.1 | `PlayerScreen`: key router, overlay state machine, Back peeling, scrim | ✅ done & build-verified |
 | 2.2 | Zap: neighbour queries, UP/DOWN, zap banner, stream badges, no-black-screen | ⬜ not started |
 | **A** | **Checkpoint — user tests entry, zap, OK overlay skeleton, Back** | ⬜ |
-| 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | ⬜ not started |
+| 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | 🟡 info block + tile row + History picker done; actions/other pickers remain |
 | 2.4 | LEFT channel-list overlay, RIGHT last-channel zap, long-press context menu | ⬜ not started |
 | 2.5 | Recents + last-channel: table, real migration 6→7, History tile, resume setting | ⬜ not started |
 | **B** | **Checkpoint — user tests the full matrix on the real list** | ⬜ |
@@ -355,15 +355,58 @@ actually is (check one known 1080p channel and one SD). Holding DOWN zaps once.
 4. Timeouts feel right (4 s banner, 8 s overlay)?
 5. LEFT / RIGHT / long-press do what decision 3 says (LEFT may still be a placeholder panel).
 
-## 2.3 — OK overlay: info block, tiles, elevator, actions, pickers
+## 2.3 — what actually happened so far (tile row slice, 2026-09-12, Sonnet)
 
-Decisions 7–10. `PlayerInfoBlock` real; tile row with TV guide / History / recents (recents from
-2.5's table - stub with the last 8 from an in-memory list until 2.5 lands, then swap); the
-elevator; the five actions; the pickers; `TrackManager` reuse; delete `PlayerOsd.kt`.
+First of two remaining slices - tile-row half done, action-row half deferred.
 
-**Acceptance:** OK on a recent-channel tile tunes. Audio picker lists the real tracks of a
-multi-language channel and switching is audible. Subtitles Off/On works on a channel that has
-them. Aspect cycles visibly on a 4:3 channel. Video info shows the same numbers as the badges.
+**Done:** `LiveTvScreen` gained an in-memory `recentChannels` stand-in for #2.5's real table
+(decision 8's exact shape: most-recent-first, capped at 8, deduped, recorded on every deliberate
+channel change - `onChannelOpen` and `PlayerScreen`'s `onChannelChanged`). `PlayerScreen` now
+renders, on the `Controls(Tiles)` floor: a real `TileRow` (TV guide, History, then the recent
+channels), all genuinely D-pad-focusable `TvSurface` tiles, with initial focus on the first recent
+channel if any else TV guide (decision 8). OK on a channel tile tunes to it via the same
+`onChannelChanged` bridge zap uses; OK on TV guide exits fullscreen; OK on History opens a real
+`HistoryPicker` (decision 10's bottom-right panel shape, applied early to this one picker kind).
+
+**A real fix to decision 4 along the way:** History is opened from the *Tiles* floor, not Actions
+- the brief's Back-peeling table sent every `Picker` back to `Controls(Actions)` regardless of
+kind, which would have landed History's Back on the wrong floor. Fixed to check `PickerKind` and
+peel History back to Tiles specifically, the other three kinds (opened from Actions, #2.3's next
+slice) to Actions as written. Noted per the brief's own instruction to say so and fix it rather
+than build the wrong thing silently.
+
+**A necessary router change:** once real focusable tiles/picker rows exist, the outer key router
+can no longer swallow every non-Back key while `Controls`/`Picker` is showing (that's what let
+LEFT/RIGHT/OK reach nothing before, harmlessly, since nothing was there) - it now returns `false`
+for anything but the elevator's own DOWN/UP floor-swap, so Compose's normal focus traversal and
+each tile's built-in click-on-OK handling can act on it instead. This is standard Compose usage
+but genuinely new to this file, and specifically the kind of thing that needs a device check, not
+just a compile, to be sure D-pad focus actually moves between tiles correctly.
+
+**No icon for History exists in this project's icon set** (`material-icons-core` only, no
+`-extended` dependency) - used `Icons.Filled.DateRange` as the closest available stand-in rather
+than add a new dependency for one icon.
+
+**Deliberately simplified:** no slide animation for the elevator yet (Tiles/Actions swap
+instantly) - the functional floor-swap from #2.1b already works; the slide is polish, kept out of
+this slice to keep it small. The Actions floor shows a plain "Actions - coming soon" placeholder.
+
+**Not done (next slice):** the five real actions (Channels/Audio/Subtitles/Aspect/Video info,
+decision 9) - needs `TrackManager` access inside `PlayerScreen` and a new command path into
+`PlayerHost` for aspect-ratio cycling, real architecture work, deliberately not pulled into this
+round. Their three picker kinds (Audio/Subtitles/Info). Deleting `PlayerOsd.kt` (paired with the
+action row in the brief - held until that lands, not deleted early and separately).
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** on the
+actual TV - this slice specifically needs a device check (D-pad focus moving between real tiles
+is new Compose usage in this file, per the router-change note above), not just build/test trust.
+
+## 2.4 — LEFT overlay, RIGHT last-channel, context menu
+
+Decisions 11, 3 (RIGHT), 12.
+
+**Acceptance:** LEFT opens the panel with focus on the current channel; OK on another tunes and
 
 ## 2.4 — LEFT overlay, RIGHT last-channel, context menu
 

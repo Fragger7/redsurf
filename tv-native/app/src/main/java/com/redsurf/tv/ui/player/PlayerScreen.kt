@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,6 +34,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -38,6 +43,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface as TvSurface
 import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.data.ChannelRepository
@@ -45,6 +51,7 @@ import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.player.PlayerHost
 import com.redsurf.tv.player.StreamInfo
 import com.redsurf.tv.ui.theme.Background
+import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
 import com.redsurf.tv.ui.theme.Surface
 import com.redsurf.tv.ui.theme.SurfaceRaised
@@ -112,11 +119,26 @@ fun PlayerScreen(
     // very first frame before a channel is known). Computed by the caller (LiveTvScreen already
     // has the group/playlist context) rather than re-derived here.
     breadcrumb: String = "",
+    // Most-recently-watched first, capped at 8 by the caller (decision 8) - an in-memory stub
+    // until #2.5's real `recent_channels` table lands; the tile row and History picker both read
+    // this same list. Excludes the channel currently playing - the caller's job, not this one's.
+    recentChannels: List<ChannelEntity> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     var streamInfo by remember { mutableStateOf(StreamInfo()) }
     var overlay by remember { mutableStateOf<PlayerOverlay>(PlayerOverlay.None) }
+    val tilesFloorFocus = remember { FocusRequester() }
+
+    // Opening the Tiles floor focuses the first recent channel if any, else TV guide (decision 8)
+    // - re-fires every genuine transition into Controls(Tiles), not just once ever, since the
+    // user can leave and re-open this floor repeatedly within one fullscreen session.
+    LaunchedEffect(overlay) {
+        if (overlay == PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)) {
+            delay(50)
+            runCatching { tilesFloorFocus.requestFocus() }
+        }
+    }
 
     // Long-press OK (decision 3) is tracked across a held key: isLongPress flips true on a
     // repeat KeyDown once Android's own long-press timeout elapses, not on a single event, so
@@ -151,7 +173,17 @@ fun PlayerScreen(
     // not just "exit fullscreen", now that there's overlay state to peel through first.
     BackHandler(enabled = true) {
         overlay = when (val current = overlay) {
-            is PlayerOverlay.Picker -> PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)
+            // History is opened from the Tiles floor (decision 8), not Actions - peeling back
+            // from it has to return there, not to Actions like the other three Picker kinds
+            // (decision 9, all opened from Actions). The brief's decision 4 didn't distinguish
+            // Picker kinds; fixing that here rather than silently sending History to the wrong
+            // floor, per the brief's own instruction to say so when a decision needs adjusting.
+            is PlayerOverlay.Picker ->
+                if (current.kind == PickerKind.History) {
+                    PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)
+                } else {
+                    PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)
+                }
             is PlayerOverlay.Controls ->
                 if (current.floor == PlayerOverlay.Controls.Floor.Actions) {
                     PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)
@@ -189,21 +221,28 @@ fun PlayerScreen(
                 when (val current = overlay) {
                     is PlayerOverlay.Controls -> {
                         // The elevator (decision 5): DOWN/UP swap floors in the same slot instead
-                        // of opening/closing a new overlay.
-                        if (isFirstDown) {
-                            when (event.key) {
-                                Key.DirectionDown ->
-                                    if (current.floor == PlayerOverlay.Controls.Floor.Tiles) {
-                                        overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)
-                                    }
-                                Key.DirectionUp ->
-                                    if (current.floor == PlayerOverlay.Controls.Floor.Actions) {
-                                        overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)
-                                    }
-                                else -> {}
-                            }
+                        // of opening/closing a new overlay. Everything else - LEFT/RIGHT between
+                        // tiles, OK to activate one - is deliberately left unconsumed (false) so
+                        // Compose's own focus traversal and the focused Surface's built-in
+                        // click-on-OK handling act on it normally; this router owns Level 0 and
+                        // the floor swap, not navigation inside real overlay content.
+                        if (isFirstDown && event.key == Key.DirectionDown &&
+                            current.floor == PlayerOverlay.Controls.Floor.Tiles
+                        ) {
+                            overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)
+                            return@onKeyEvent true
                         }
+                        if (isFirstDown && event.key == Key.DirectionUp &&
+                            current.floor == PlayerOverlay.Controls.Floor.Actions
+                        ) {
+                            overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)
+                            return@onKeyEvent true
+                        }
+                        return@onKeyEvent false
                     }
+                    // Picker rows (History, built this round) navigate and select normally too -
+                    // same reasoning as Controls above.
+                    is PlayerOverlay.Picker -> return@onKeyEvent false
                     PlayerOverlay.None -> {
                         // The Level 0 control matrix (decision 3). LEFT/RIGHT/UP/DOWN act once
                         // per press (isFirstDown), not once per repeat tick, so a held button
@@ -245,7 +284,7 @@ fun PlayerScreen(
                             else -> {}
                         }
                     }
-                    else -> {} // ZapBanner, ChannelList, ContextMenu, Picker: only Back acts (above).
+                    else -> {} // ZapBanner, ChannelList, ContextMenu: no real content yet (#2.4) - only Back acts.
                 }
                 true
             },
@@ -301,16 +340,208 @@ fun PlayerScreen(
                 modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
             )
 
-            // The info block itself (decision 7's content, not just its chrome) - real now for
-            // both the zap banner and Controls, since the tile/action row that would otherwise
-            // sit below it on the Controls floor doesn't exist yet (#2.3) to differentiate the
-            // two positions the brief describes.
+            // The info block itself (decision 7's content) plus, on the Controls state, the
+            // elevator row beneath it. Both floors sit at the same position for now - no slide
+            // animation between them yet (deliberately simplified this round to keep the slice
+            // small; the functional floor-swap from #2.1b already works, this is polish on top
+            // of it, not new behavior).
             if (overlay == PlayerOverlay.ZapBanner || overlay is PlayerOverlay.Controls) {
-                PlayerInfoBlock(
-                    channel = currentChannel,
-                    streamInfo = streamInfo,
-                    modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(),
-                )
+                Column(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
+                    PlayerInfoBlock(channel = currentChannel, streamInfo = streamInfo, modifier = Modifier.fillMaxWidth())
+                    val controlsOverlay = overlay as? PlayerOverlay.Controls
+                    if (controlsOverlay != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        when (controlsOverlay.floor) {
+                            PlayerOverlay.Controls.Floor.Tiles -> TileRow(
+                                recentChannels = recentChannels,
+                                initialFocus = tilesFloorFocus,
+                                onOpenGuide = onExitFullscreen,
+                                onOpenHistory = { overlay = PlayerOverlay.Picker(PickerKind.History) },
+                                onOpenChannel = { channel ->
+                                    onChannelChanged(channel)
+                                    overlay = PlayerOverlay.ZapBanner
+                                },
+                                modifier = Modifier.padding(horizontal = 24.dp),
+                            )
+                            // The five real actions (Channels/Audio/Subtitles/Aspect/Video info,
+                            // decision 9) are #2.3's next slice - needs TrackManager access and an
+                            // aspect-ratio command channel into PlayerHost, deliberately not
+                            // pulled into this round.
+                            PlayerOverlay.Controls.Floor.Actions -> Text(
+                                "Actions - coming soon",
+                                style = RedSurfType.rowSecondary,
+                                color = TextSecondary,
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (overlay is PlayerOverlay.Picker && (overlay as PlayerOverlay.Picker).kind == PickerKind.History) {
+            HistoryPicker(
+                channels = recentChannels,
+                onSelect = { channel ->
+                    onChannelChanged(channel)
+                    overlay = PlayerOverlay.ZapBanner
+                },
+                modifier = Modifier.align(Alignment.BottomEnd),
+            )
+        }
+    }
+}
+
+/**
+ * The tile row (decision 8, Tiles floor): TV guide, History, then up to 8 recent channels. OK on
+ * a channel tile tunes and shows the zap banner (stays fullscreen); OK on TV guide exits
+ * fullscreen to the browse screen (the merged guide is Phase 3); OK on History opens the picker.
+ */
+@Composable
+private fun TileRow(
+    recentChannels: List<ChannelEntity>,
+    initialFocus: FocusRequester,
+    onOpenGuide: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenChannel: (ChannelEntity) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val focusGuide = recentChannels.isEmpty()
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Tile(
+            icon = Icons.Filled.List,
+            label = "TV guide",
+            onClick = onOpenGuide,
+            modifier = if (focusGuide) Modifier.focusRequester(initialFocus) else Modifier,
+        )
+        Tile(
+            // Icons.Filled.History isn't in this project's icon set (material-icons-core only,
+            // no -extended dependency) - DateRange is the closest available stand-in.
+            icon = Icons.Filled.DateRange,
+            label = "History",
+            onClick = onOpenHistory,
+        )
+        recentChannels.forEachIndexed { index, channel ->
+            ChannelTile(
+                channel = channel,
+                onClick = { onOpenChannel(channel) },
+                modifier = if (!focusGuide && index == 0) Modifier.focusRequester(initialFocus) else Modifier,
+            )
+        }
+    }
+}
+
+private val TileWidth = 100.dp
+private val TileHeight = 72.dp
+
+@Composable
+private fun Tile(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    TvSurface(
+        onClick = onClick,
+        modifier = modifier.size(TileWidth, TileHeight),
+        shape = RedSurfFocus.shape(10.dp),
+        colors = RedSurfFocus.rowColors(resting = SurfaceRaised.copy(alpha = 0.85f)),
+        scale = RedSurfFocus.scale(),
+        border = RedSurfFocus.border(),
+        glow = RedSurfFocus.glow(),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(label, style = RedSurfType.rowSecondary, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun ChannelTile(channel: ChannelEntity, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    TvSurface(
+        onClick = onClick,
+        modifier = modifier.size(TileWidth, TileHeight),
+        shape = RedSurfFocus.shape(10.dp),
+        colors = RedSurfFocus.rowColors(resting = SurfaceRaised.copy(alpha = 0.85f)),
+        scale = RedSurfFocus.scale(),
+        border = RedSurfFocus.border(),
+        glow = RedSurfFocus.glow(),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(
+                modifier = Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)).background(Surface),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(channel.name.take(1).uppercase(), style = RedSurfType.badge, color = TextPrimary)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(channel.name, style = RedSurfType.rowSecondary, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/**
+ * Decision 10's narrow bottom-right panel, applied to History (decision 8) - the other three
+ * picker kinds (Audio/Subtitles/Info) are #2.3's next slice.
+ */
+@Composable
+private fun HistoryPicker(channels: List<ChannelEntity>, onSelect: (ChannelEntity) -> Unit, modifier: Modifier = Modifier) {
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(50)
+        runCatching { firstFocus.requestFocus() }
+    }
+    Column(
+        modifier = modifier
+            .padding(24.dp)
+            .width(280.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Surface)
+            .padding(12.dp),
+    ) {
+        Text(
+            "History",
+            style = RedSurfType.sectionTitle,
+            color = TextPrimary,
+            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
+        )
+        if (channels.isEmpty()) {
+            Text(
+                "Nothing watched yet this session",
+                style = RedSurfType.rowSecondary,
+                color = TextSecondary,
+                modifier = Modifier.padding(8.dp),
+            )
+        }
+        channels.forEachIndexed { index, channel ->
+            TvSurface(
+                onClick = { onSelect(channel) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .let { if (index == 0) it.focusRequester(firstFocus) else it },
+                shape = RedSurfFocus.shape(8.dp),
+                colors = RedSurfFocus.rowColors(),
+                scale = RedSurfFocus.scale(),
+                border = RedSurfFocus.border(),
+                glow = RedSurfFocus.glow(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(36.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        channel.name,
+                        style = RedSurfType.rowTitle,
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }

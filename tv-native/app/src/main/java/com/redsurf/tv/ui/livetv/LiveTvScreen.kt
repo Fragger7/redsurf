@@ -90,6 +90,15 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
     var focusedChannel by remember { mutableStateOf<ChannelEntity?>(null) }
     var isFullscreen by remember { mutableStateOf(false) }
 
+    // In-memory stand-in for PHASE_2.md #2.5's real recent_channels table (decision 8) - most
+    // recent first, capped at 8, deduped by streamId. Recorded on every deliberate channel change
+    // (open or zap) so the player's tile row and History picker have real content before the
+    // real table lands; lost on process death, which is fine for a stub.
+    var recentChannels by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
+    fun recordRecent(channel: ChannelEntity) {
+        recentChannels = (listOf(channel) + recentChannels.filter { it.streamId != channel.streamId }).take(8)
+    }
+
     LaunchedEffect(groups) {
         if ((selectedGroup == null || groups.none { it.key() == selectedGroup }) && groups.isNotEmpty()) {
             selectedGroup = groups.first().key()
@@ -189,6 +198,7 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
                         // PlayerHost actually plays) only catches up after the debounce delay,
                         // which read to the user as a "duplicate 2-step" to get a channel playing.
                         previewUrl = channel.streamId
+                        recordRecent(channel)
                         isFullscreen = true
                         onFullscreenChanged(true)
                     },
@@ -225,8 +235,10 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
                     // a deliberate action, not a D-pad fly-by, and waiting on it would reintroduce
                     // the "duplicate 2-step" bug that debounce-bypass already fixed once.
                     previewUrl = channel.streamId
+                    recordRecent(channel)
                 },
                 breadcrumb = breadcrumb,
+                recentChannels = recentChannels.filter { it.streamId != focusedChannel?.streamId },
                 modifier = Modifier.fillMaxSize(),
             )
         }
