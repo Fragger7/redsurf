@@ -27,8 +27,7 @@ import com.redsurf.tv.ui.theme.TextSecondary
 
 /**
  * A real minimal screen, not a placeholder (user request, 2026-09-11) - testing needs a way to
- * try a different playlist without reinstalling the app. Not multi-playlist management, just a
- * reset. Full Settings is a later phase.
+ * try a different playlist without reinstalling the app. Full Settings is a later phase.
  *
  * "Check for updates" (user request, 2026-09-11) is a fallback for the silent launch-time check:
  * that check can legitimately find nothing if a release publishes after the app already opened,
@@ -36,12 +35,18 @@ import com.redsurf.tv.ui.theme.TextSecondary
  * retry from inside the app. This button re-runs the exact same check on demand and shows the
  * result inline, sharing MainViewModel.updateStatus so a found update surfaces the same install
  * dialog MainActivity already shows on launch - not a second, separate update path.
+ *
+ * "Add another playlist" (user request, 2026-09-12) is the non-destructive sibling of "Reset":
+ * it re-opens the same onboarding flow (Mobile Phone / Xtream / M3U) without deleting anything
+ * already loaded - see MainViewModel.beginAddPlaylist. Both playlists then show up together
+ * under Live TV, grouped by playlist name (LiveTvScreen/GroupsColumn).
  */
 @Composable
 fun SettingsScreen(
     updateStatus: UpdateCheckStatus,
     onCheckForUpdates: () -> Unit,
     onResetPlaylist: () -> Unit,
+    onAddPlaylist: () -> Unit,
 ) {
     var confirming by remember { mutableStateOf(false) }
 
@@ -64,12 +69,21 @@ fun SettingsScreen(
             )
 
             Spacer(modifier = Modifier.height(32.dp))
+            ActionButton(label = "Add another playlist", onClick = onAddPlaylist)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Keeps everything already loaded - both show up under Live TV.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
 
             if (!confirming) {
                 ActionButton(label = "Reset & add a different playlist", onClick = { confirming = true })
             } else {
                 Text(
-                    "This deletes the current playlist and its channels. Press OK again to confirm.",
+                    "This deletes every loaded playlist and its channels. Press OK again to confirm.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                 )

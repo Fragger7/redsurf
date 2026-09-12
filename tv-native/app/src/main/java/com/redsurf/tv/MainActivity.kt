@@ -134,7 +134,8 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onM3uSubmit = { url ->
                                     viewModel.loadPlaylist(url, "M3U Playlist", url, "", "m3u")
-                                }
+                                },
+                                onCancel = if (s.isAddingPlaylist) viewModel::cancelAddPlaylist else null,
                             )
                         }
                         is AppState.Loaded -> {

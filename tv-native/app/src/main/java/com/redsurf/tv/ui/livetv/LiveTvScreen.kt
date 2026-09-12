@@ -2,6 +2,7 @@ package com.redsurf.tv.ui.livetv
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
@@ -59,17 +63,34 @@ import kotlinx.coroutines.delay
  * pass rather than rushed here. Fullscreen playback itself - the thing actually reported broken
  * (OK did nothing) - is fully real: PlayerHost is created once per fullscreen session and
  * released on exit, never duplicated.
+ *
+ * Aggregates every loaded playlist, not one "active" one (user request, 2026-09-12 - add a
+ * second playlist for testing without deleting the first, both showing up under Live TV). Groups
+ * are keyed by (playlistId, groupName) - see [GroupKey] - since the same group name can
+ * legitimately exist in two different providers' playlists.
+ *
+ * Browsing state survives entering/exiting fullscreen: the Row (groups/channels/preview) is
+ * always composed, as a sibling of the fullscreen overlay in one Box, never behind an
+ * if/early-return that would skip composing it. An earlier version used
+ * `if (isFullscreen) { PlayerHost(...); return }`, which - despite reading like a simple guard -
+ * is the same Compose conditional-composition trap as the one found in AppShell.kt: skipping a
+ * composable call for a frame disposes everything `remember`ed inside it, so every fullscreen
+ * toggle silently reset the channel list's scroll position and D-pad focus back to the top, even
+ * after selectedGroup/focusedChannel themselves were confirmed surviving. Found live, 2026-09-12.
+ * The fullscreen overlay grabs real focus and swallows all key events (no player HUD exists yet -
+ * PHASE_1.md Non-goals) so D-pad input can't leak through to the still-composed, now-invisible
+ * list underneath.
  */
 @Composable
-fun LiveTvScreen(viewModel: MainViewModel, playlistId: String, onFullscreenChanged: (Boolean) -> Unit) {
-    val groups by viewModel.repository.liveGroups(playlistId).collectAsState(initial = emptyList())
-    var selectedGroup by remember { mutableStateOf<String?>(null) }
+fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Unit) {
+    val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
+    var selectedGroup by remember { mutableStateOf<GroupKey?>(null) }
     var focusedChannel by remember { mutableStateOf<ChannelEntity?>(null) }
     var isFullscreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(groups) {
-        if (selectedGroup == null && groups.isNotEmpty()) {
-            selectedGroup = groups.first().groupName
+        if ((selectedGroup == null || groups.none { it.key() == selectedGroup }) && groups.isNotEmpty()) {
+            selectedGroup = groups.first().key()
         }
     }
 
@@ -91,57 +112,78 @@ fun LiveTvScreen(viewModel: MainViewModel, playlistId: String, onFullscreenChang
         onFullscreenChanged(false)
     }
 
-    if (isFullscreen) {
-        PlayerHost(streamUrl = previewUrl, fullscreen = true, modifier = Modifier.fillMaxSize())
-        return
+    val fullscreenFocus = remember { FocusRequester() }
+    LaunchedEffect(isFullscreen) {
+        if (isFullscreen) fullscreenFocus.requestFocus()
     }
 
-    // Column proportions from references/streamvault/LiveTV.png: ~28 / 34 / 30 with 20dp
-    // gutters. Gutters live here, not as trailing padding inside each column, so every column's
-    // own card/background spans exactly its slot.
-    Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-        GroupsColumn(
-            groups = groups,
-            selectedGroup = selectedGroup,
-            onGroupFocused = { group ->
-                if (group != selectedGroup) {
-                    selectedGroup = group
-                    focusedChannel = null
-                }
-            },
-            modifier = Modifier.weight(1f),
-        )
-
-        val currentGroup = selectedGroup
-        if (currentGroup != null) {
-            val channelsFlow = remember(playlistId, currentGroup) {
-                viewModel.repository.liveChannels(playlistId, currentGroup).cachedIn(viewModel.viewModelScope)
-            }
-            val pagedChannels = channelsFlow.collectAsLazyPagingItems()
-            val groupCount = groups.firstOrNull { it.groupName == currentGroup }?.count ?: 0
-
-            ChannelsColumn(
-                groupName = currentGroup,
-                groupCount = groupCount,
-                channels = pagedChannels,
-                focusedChannelId = focusedChannel?.streamId,
-                onChannelFocused = { focusedChannel = it },
-                onChannelOpen = { channel ->
-                    focusedChannel = channel
-                    // Bypass the 500ms browse-debounce above: opening is a deliberate action,
-                    // not a D-pad fly-by, so PlayerHost must get the URL on this same frame.
-                    // Without this, isFullscreen flips true immediately but previewUrl (what
-                    // PlayerHost actually plays) only catches up after the debounce delay,
-                    // which read to the user as a "duplicate 2-step" to get a channel playing.
-                    previewUrl = channel.streamId
-                    isFullscreen = true
-                    onFullscreenChanged(true)
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Column proportions from references/streamvault/LiveTV.png: ~28 / 34 / 30 with 20dp
+        // gutters. Gutters live here, not as trailing padding inside each column, so every
+        // column's own card/background spans exactly its slot. Always composed (see doc above) -
+        // never torn down by the fullscreen overlay that sits on top of it.
+        Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            GroupsColumn(
+                groups = groups,
+                selectedGroup = selectedGroup,
+                onGroupFocused = { group ->
+                    if (group != selectedGroup) {
+                        selectedGroup = group
+                        focusedChannel = null
+                    }
                 },
-                modifier = Modifier.weight(1.2f),
+                modifier = Modifier.weight(1f),
             )
+
+            val currentGroup = selectedGroup
+            if (currentGroup != null) {
+                val channelsFlow = remember(currentGroup) {
+                    viewModel.repository.liveChannels(currentGroup.playlistId, currentGroup.groupName)
+                        .cachedIn(viewModel.viewModelScope)
+                }
+                val pagedChannels = channelsFlow.collectAsLazyPagingItems()
+                val groupInfo = groups.firstOrNull { it.key() == currentGroup }
+                val multiplePlaylists = remember(groups) { groups.map { it.playlistId }.distinct().size > 1 }
+                val groupTitle = groupInfo?.let {
+                    val name = formatGroupName(it.groupName)
+                    if (multiplePlaylists) "${it.playlistName} › $name" else name
+                } ?: ""
+
+                ChannelsColumn(
+                    groupTitle = groupTitle,
+                    groupCount = groupInfo?.count ?: 0,
+                    channels = pagedChannels,
+                    focusedChannelId = focusedChannel?.streamId,
+                    onChannelFocused = { focusedChannel = it },
+                    onChannelOpen = { channel ->
+                        focusedChannel = channel
+                        // Bypass the 500ms browse-debounce above: opening is a deliberate action,
+                        // not a D-pad fly-by, so PlayerHost must get the URL on this same frame.
+                        // Without this, isFullscreen flips true immediately but previewUrl (what
+                        // PlayerHost actually plays) only catches up after the debounce delay,
+                        // which read to the user as a "duplicate 2-step" to get a channel playing.
+                        previewUrl = channel.streamId
+                        isFullscreen = true
+                        onFullscreenChanged(true)
+                    },
+                    modifier = Modifier.weight(1.2f),
+                )
+            }
+
+            PreviewStub(channel = focusedChannel, modifier = Modifier.weight(1.05f))
         }
 
-        PreviewStub(channel = focusedChannel, modifier = Modifier.weight(1.05f))
+        if (isFullscreen) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(fullscreenFocus)
+                    .focusable()
+                    .onKeyEvent { true },
+            ) {
+                PlayerHost(streamUrl = previewUrl, fullscreen = true, modifier = Modifier.fillMaxSize())
+            }
+        }
     }
 }
 

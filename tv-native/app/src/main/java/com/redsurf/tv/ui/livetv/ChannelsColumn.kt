@@ -50,7 +50,7 @@ import com.redsurf.tv.ui.theme.TextSecondary
  */
 @Composable
 fun ChannelsColumn(
-    groupName: String,
+    groupTitle: String,
     groupCount: Int,
     channels: LazyPagingItems<ChannelEntity>,
     focusedChannelId: String?,
@@ -59,10 +59,12 @@ fun ChannelsColumn(
     modifier: Modifier = Modifier,
 ) {
     // 14dp top padding matches the inner padding of the two panel cards either side, so all three
-    // column headers sit on one baseline.
+    // column headers sit on one baseline. groupTitle arrives pre-formatted (";" -> "›", and
+    // playlist-name-prefixed when more than one playlist is loaded - GroupsColumn.kt) so both
+    // columns format group names identically without duplicating that logic here.
     Column(modifier = modifier.fillMaxHeight().padding(top = 14.dp)) {
         Text(
-            formatGroupName(groupName),
+            groupTitle,
             style = RedSurfType.sectionTitle,
             color = TextPrimary,
             maxLines = 1,

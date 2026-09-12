@@ -721,6 +721,46 @@ the accent color, the QR code) on top of the original 1.1-1.5 build. The two kno
 deferred items are the onboarding text-field focus trap (#9) and the Live TV/Guide merge (backlog,
 recorded in `AGENTS.md`) - neither blocks calling this phase closed.
 
+## Post-Phase-1 quick fixes (2026-09-12, Sonnet) - before Phase 2
+
+Two testing-friction items the user asked for ahead of the bigger Phase 2 work, plus a workflow
+change on how verification happens from here.
+
+1. **Back after watching a channel still didn't preserve list position/focus.** Round 5 fixed
+   `selectedGroup`/`focusedChannel` surviving the fullscreen toggle (the AppShell remount bug), but
+   a narrower version of the *same* Compose trap remained one level down: `LiveTvScreen` used
+   `if (isFullscreen) { PlayerHost(...); return }`, an early return that skips composing the
+   Row/GroupsColumn/ChannelsColumn entirely while fullscreen - which disposes their `remember`ed
+   state (scroll position, D-pad focus) exactly like the AppShell case, even though the *data*
+   (`selectedGroup`/`focusedChannel`, declared above the early return) was already confirmed
+   correct. Fixed the same way: the Row is now always composed, inside a `Box`, with the
+   fullscreen `PlayerHost` as an overlay sibling instead of an early-return replacement. The
+   overlay grabs real focus and swallows all key events (`onKeyEvent { true }`) so D-pad input
+   can't leak through to the now-invisible list underneath (no player HUD exists yet to consume
+   it otherwise).
+2. **Add another playlist without deleting the first**, and show every loaded playlist under Live
+   TV grouped by name. Turned out to need very little new plumbing: `loadXtreamCodes` /
+   `loadPlaylist` / `loadStalkerPortal` never deleted existing data to begin with (only the
+   already-existing "Reset" button does that) - the missing piece was purely a UI entry point.
+   Settings gained "Add another playlist", which re-opens the same onboarding flow
+   (`MainViewModel.beginAddPlaylist` reuses the pairing server + the same load methods,
+   unmodified) with a Cancel button back to Live TV (`AppState.Onboarding.isAddingPlaylist`).
+   `ChannelDao.getLiveGroupCounts()` now joins across every playlist instead of taking one
+   `playlistId`; groups are keyed by `(playlistId, groupName)` (`GroupsColumn.GroupKey`) since two
+   providers can legitimately both have a "Sports" group. `GroupsColumn` prefixes each row with
+   its playlist's name, but only when more than one playlist is actually loaded - the common
+   single-playlist case is pixel-identical to before.
+
+**Workflow change requested alongside this:** stop verifying on-device via ADB by default even for
+small fixes - it's slow and token-heavy. From here: build, verify with compile + unit tests +
+signed `assembleRelease` only, then hand off a crisp, numbered test list for the user to run via
+OTA. Fall back to ADB only for targeted diagnosis of a specific reported bug, same exception as
+before (used three times so far this project, each time it found the real root cause).
+
+**Verified:** clean `compileDebugKotlin`, 13/13 unit tests, `assembleRelease` signed
+(`1b13f1d9…d2510d8a`), no ad-hoc local build installed to the device. **Not verified:** either fix
+on the actual TV - see the test list below.
+
 ## Non-goals — do not drift into these
 
 - EPG data of any kind. The worker is unscheduled; "No schedule information" is correct.

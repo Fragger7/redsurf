@@ -40,7 +40,10 @@ sealed class UpdateCheckStatus {
 
 sealed class AppState {
     data class Loading(val message: String = "Loading...") : AppState()
-    data class Onboarding(val localIp: String, val port: Int) : AppState()
+    // isAddingPlaylist distinguishes true first-run onboarding (nothing to cancel back to) from
+    // Settings -> "Add another playlist" (user request, 2026-09-12 - test a second source without
+    // deleting the first) - OnboardingScreen only shows a Cancel option when this is true.
+    data class Onboarding(val localIp: String, val port: Int, val isAddingPlaylist: Boolean = false) : AppState()
     // No longer carries groups: the Live TV screen collects its own group/channel flows from
     // MainViewModel.repository (PHASE_1.md #1.2). Holding every channel here is exactly the
     // memory pattern this phase removes.
@@ -63,6 +66,9 @@ class MainViewModel : ViewModel() {
 
     private var currentPlaylistId: String? = null
     private var pairingServer: PairingServer? = null
+
+    /** Snapshot to restore on [cancelAddPlaylist] - only set while adding, from [beginAddPlaylist]. */
+    private var stateBeforeAddingPlaylist: AppState.Loaded? = null
 
     private val _updateStatus = MutableStateFlow<UpdateCheckStatus>(UpdateCheckStatus.Idle)
     /** Owned here, not in MainActivity's Composable, so every trigger - the resume-time
@@ -142,6 +148,9 @@ class MainViewModel : ViewModel() {
             } else {
                 val pId = currentPlaylistId ?: playlists.first().id
                 currentPlaylistId = pId
+                // Any pending "add playlist" snapshot is stale now that a load actually
+                // succeeded - the fresh Loaded state below already includes the new playlist.
+                stateBeforeAddingPlaylist = null
                 withContext(Dispatchers.Main) {
                     _state.value = AppState.Loaded(playlists, pId)
                 }
@@ -149,7 +158,7 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    private fun startPairingServer(context: Context?) {
+    private fun startPairingServer(context: Context?, isAddingPlaylist: Boolean = false) {
         if (context == null) return
         val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val ipAddress = Formatter.formatIpAddress(wifiManager.connectionInfo.ipAddress)
@@ -176,7 +185,29 @@ class MainViewModel : ViewModel() {
             }
         }
 
-        _state.value = AppState.Onboarding(if (ipAddress == "0.0.0.0") "WiFi not connected" else ipAddress, 8080)
+        _state.value = AppState.Onboarding(
+            if (ipAddress == "0.0.0.0") "WiFi not connected" else ipAddress,
+            8080,
+            isAddingPlaylist,
+        )
+    }
+
+    /**
+     * Settings -> "Add another playlist" (user request, 2026-09-12): reuses the exact same
+     * pairing server + the exact same load* methods as first-run onboarding, unmodified - none of
+     * them delete existing data, they only ever insert a new playlist row and its channels. The
+     * only new thing here is remembering the Loaded state to restore on [cancelAddPlaylist], and
+     * marking the resulting Onboarding state so its UI offers a way back out.
+     */
+    fun beginAddPlaylist(context: Context) {
+        (_state.value as? AppState.Loaded)?.let { stateBeforeAddingPlaylist = it }
+        startPairingServer(context, isAddingPlaylist = true)
+    }
+
+    /** Cancels out of "Add another playlist" without touching any data. */
+    fun cancelAddPlaylist() {
+        stateBeforeAddingPlaylist?.let { _state.value = it }
+        stateBeforeAddingPlaylist = null
     }
 
     fun switchPlaylist(playlistId: String) {

@@ -36,12 +36,18 @@ fun OnboardingScreen(
     localIp: String,
     port: Int,
     onXtreamSubmit: (String, String, String) -> Unit,
-    onM3uSubmit: (String) -> Unit
+    onM3uSubmit: (String) -> Unit,
+    // Non-null only when reached via Settings -> "Add another playlist" (user request,
+    // 2026-09-12) rather than true first-run onboarding, which has nowhere to cancel back to.
+    onCancel: (() -> Unit)? = null,
 ) {
     var selectedMethod by remember { mutableStateOf<OnboardingMethod?>(null) }
 
     BackHandler(enabled = selectedMethod != null) {
         selectedMethod = null
+    }
+    BackHandler(enabled = selectedMethod == null && onCancel != null) {
+        onCancel?.invoke()
     }
 
     Box(
@@ -58,7 +64,7 @@ fun OnboardingScreen(
                 }
 
                 Text(
-                    "Welcome. Please select a setup method:",
+                    if (onCancel != null) "Add another playlist:" else "Welcome. Please select a setup method:",
                     style = MaterialTheme.typography.headlineMedium,
                     color = Color.Gray,
                     modifier = Modifier.padding(bottom = 32.dp)
@@ -76,6 +82,16 @@ fun OnboardingScreen(
                     }
                     OnboardingCard("Cloud Login", "Sync playlists from the web") {
                         selectedMethod = OnboardingMethod.Cloud
+                    }
+                }
+
+                if (onCancel != null) {
+                    Spacer(modifier = Modifier.height(32.dp))
+                    androidx.tv.material3.Button(
+                        onClick = onCancel,
+                        colors = androidx.tv.material3.ButtonDefaults.colors(containerColor = Color.DarkGray),
+                    ) {
+                        Text("Cancel - back to Live TV")
                     }
                 }
             }

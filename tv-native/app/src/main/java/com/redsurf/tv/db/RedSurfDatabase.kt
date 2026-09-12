@@ -5,8 +5,14 @@ import androidx.paging.PagingSource
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
-/** groupName + how many live channels are in it. Powers the Categories column (PHASE_1.md #1.4). */
-data class GroupCount(val groupName: String, val count: Int)
+/**
+ * groupName + how many live channels are in it, plus which playlist it belongs to (user request,
+ * 2026-09-12: add a second playlist for testing without deleting the first, and show both under
+ * Live TV rather than only ever showing one "active" playlist). `playlistId` is part of a group's
+ * real identity now - two different playlists can legitimately both have a "Sports" group and
+ * they must stay distinct, not merge. Powers the Categories column (PHASE_1.md #1.4).
+ */
+data class GroupCount(val playlistId: String, val playlistName: String, val groupName: String, val count: Int)
 
 @Dao
 interface ChannelDao {
@@ -19,12 +25,18 @@ interface ChannelDao {
     @Query("SELECT * FROM channels WHERE groupId = :groupId AND isHidden = 0 ORDER BY num, name")
     fun getChannelsByGroup(groupId: String): Flow<List<ChannelEntity>>
 
+    /**
+     * Across every loaded playlist, not just one - see [GroupCount]. Joined to `playlists` for
+     * the display name; grouped by (playlistId, groupName) so same-named groups from different
+     * providers stay distinct rows instead of merging their counts together.
+     */
     @Query(
-        "SELECT groupName, COUNT(*) AS count FROM channels " +
-            "WHERE playlistId = :playlistId AND streamType = 'live' AND isHidden = 0 " +
-            "GROUP BY groupName ORDER BY groupName"
+        "SELECT c.playlistId AS playlistId, p.name AS playlistName, c.groupName AS groupName, " +
+            "COUNT(*) AS count FROM channels c JOIN playlists p ON p.id = c.playlistId " +
+            "WHERE c.streamType = 'live' AND c.isHidden = 0 " +
+            "GROUP BY c.playlistId, c.groupName ORDER BY p.name, c.groupName"
     )
-    fun getLiveGroupCounts(playlistId: String): Flow<List<GroupCount>>
+    fun getLiveGroupCounts(): Flow<List<GroupCount>>
 
     @Query(
         "SELECT * FROM channels WHERE playlistId = :playlistId AND streamType = 'live' " +

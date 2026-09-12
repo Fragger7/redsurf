@@ -21,8 +21,9 @@ class ChannelRepository(
 ) {
     fun playlists(): Flow<List<PlaylistEntity>> = playlistDao.getAllPlaylists()
 
-    fun liveGroups(playlistId: String): Flow<List<GroupCount>> =
-        channelDao.getLiveGroupCounts(playlistId)
+    /** Across every loaded playlist (user request, 2026-09-12 - multiple playlists can coexist
+     * and all show up under Live TV, grouped by playlist name; see [GroupCount]). */
+    fun liveGroups(): Flow<List<GroupCount>> = channelDao.getLiveGroupCounts()
 
     /**
      * Paged live channels for one group. Caller applies `.cachedIn(scope)` when collecting -

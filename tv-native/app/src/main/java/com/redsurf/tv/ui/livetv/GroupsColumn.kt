@@ -46,6 +46,15 @@ import com.redsurf.tv.ui.theme.TextSecondary
 internal fun formatGroupName(raw: String): String = raw.replace(";", " › ")
 
 /**
+ * A group's real identity now that channels/groups are aggregated across every loaded playlist
+ * (user request, 2026-09-12) - groupName alone isn't unique any more (two providers can both
+ * have "Sports"), so selection, paging queries and list keys all use this pair together.
+ */
+data class GroupKey(val playlistId: String, val groupName: String)
+
+internal fun GroupCount.key() = GroupKey(playlistId, groupName)
+
+/**
  * Left column: live-channel groups with counts (docs/vision/UI_SPEC.md #4,
  * references/streamvault/LiveTV.png). Focusing a row - not clicking - selects the group; that's
  * what makes browsing cheap, matching TiViMate/StreamVault. onClick is a deliberate no-op: OK
@@ -59,10 +68,14 @@ internal fun formatGroupName(raw: String): String = raw.replace(";", " › ")
 @Composable
 fun GroupsColumn(
     groups: List<GroupCount>,
-    selectedGroup: String?,
-    onGroupFocused: (String) -> Unit,
+    selectedGroup: GroupKey?,
+    onGroupFocused: (GroupKey) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Only label rows with their playlist name when there's more than one playlist loaded - the
+    // common single-playlist case stays exactly as it was (no redundant prefix on every row).
+    val multiplePlaylists = remember(groups) { groups.map { it.playlistId }.distinct().size > 1 }
+
     // Initial focus: a TV screen with nothing focused shows no ring, and the first D-pad press
     // is spent just making one appear. Once, when the first group is selected and its row exists,
     // put focus on it - after a frame, so the lazy row is attached. runCatching because a row
@@ -90,12 +103,13 @@ fun GroupsColumn(
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
         TvLazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            items(groups, key = { it.groupName }) { group ->
-                val selected = group.groupName == selectedGroup
+            items(groups, key = { "${it.playlistId}:${it.groupName}" }) { group ->
+                val selected = group.key() == selectedGroup
                 GroupRow(
                     group = group,
                     selected = selected,
-                    onFocused = { onGroupFocused(group.groupName) },
+                    showPlaylistName = multiplePlaylists,
+                    onFocused = { onGroupFocused(group.key()) },
                     modifier = if (selected) Modifier.focusRequester(initialFocus) else Modifier,
                 )
             }
@@ -104,7 +118,13 @@ fun GroupsColumn(
 }
 
 @Composable
-private fun GroupRow(group: GroupCount, selected: Boolean, onFocused: () -> Unit, modifier: Modifier = Modifier) {
+private fun GroupRow(
+    group: GroupCount,
+    selected: Boolean,
+    showPlaylistName: Boolean,
+    onFocused: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         onClick = {},
         modifier = modifier
@@ -130,7 +150,8 @@ private fun GroupRow(group: GroupCount, selected: Boolean, onFocused: () -> Unit
             )
             Spacer(modifier = Modifier.width(9.dp))
             Text(
-                formatGroupName(group.groupName),
+                if (showPlaylistName) "${group.playlistName} › ${formatGroupName(group.groupName)}"
+                else formatGroupName(group.groupName),
                 style = RedSurfType.rowTitle,
                 color = TextPrimary,
                 maxLines = 1,
