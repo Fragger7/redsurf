@@ -163,6 +163,33 @@ next screen with more than one focusable column.
   rather than jumping straight to Home from anywhere. Good idea, not built - scope it first to
   Live TV's own columns (which have a real spatial relationship) rather than a fully general
   breadcrumb stack across every destination (Settings, Search, etc. aren't spatial the same way).
+- **Channel rows aren't playlist-scoped in their primary key** (found live, 2026-09-12, while
+  chasing the zap-numbering bug): `ChannelEntity.streamId` alone is `@PrimaryKey`, not composite
+  with `playlistId`, and `insertChannels` uses `OnConflictStrategy.REPLACE` - re-adding the same
+  provider under a new `playlistId` (every `loadPlaylist` call mints a fresh UUID) can silently
+  migrate a channel's row onto the new playlist if its `streamId` collides, orphaning it from its
+  original playlist's group. Fix is a composite `primaryKeys = ["playlistId", "streamId"]` plus a
+  Room version bump (destructive migration, no live users yet - same pattern already used for
+  past schema changes) - not done yet because it wipes every currently-installed device's
+  playlists on next update, and this session already had enough other changes in flight to not
+  want to compound the risk. Do it as its own isolated, clearly-flagged release.
+- **No playlist management UI at all** (user found, 2026-09-12): can't delete or re-import a
+  single already-loaded playlist - Settings only has Check for updates / Add another playlist /
+  Reset, and there's no per-playlist removal anywhere (see whether Reset's full-wipe is the only
+  current workaround before assuming one doesn't exist). Matters beyond convenience: it's also the
+  only way to pick up fixes to *how* a playlist was imported (e.g. the `num`/`tvg-chno` fix above)
+  on already-loaded data, since import-time fields are written once and don't retroactively
+  correct themselves. Real playlist management (list, remove, re-sync one) belongs with the
+  Settings redesign already planned above, not bolted on ad hoc.
+- **GroupsColumn RIGHT entry into Channels: first channel or vertically-parallel one?** (user
+  question, 2026-09-12): pressing RIGHT from a category currently lands wherever Compose's default
+  directional focus search resolves to (in practice, whatever's roughly parallel to the category
+  you left) - this was never a deliberate design choice, just the unengineered default, since
+  `onGroupFocused` clears `focusedChannel` to null on every group switch (`LiveTvScreen.kt`) and
+  nothing else claims focus for that first entry. Undecided whether "parallel row" or "always the
+  first channel" (closer to TiviMate/most TV UIs' own convention of resetting a list to its top on
+  a fresh selection) is more correct - ask the user before building either, since it's a real
+  product/UX decision, not a bug with one obviously-correct fix.
 
 ## The one rule that matters
 
