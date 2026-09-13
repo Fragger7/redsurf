@@ -57,6 +57,17 @@ sealed class AppState {
 class MainViewModel : ViewModel() {
     private var localDb: RedSurfDatabase? = null
 
+    // Application context (safe to hold for a ViewModel's lifetime, unlike an Activity context) -
+    // found live, 2026-09-13, running the Settings sprint: every caller of checkLocalCache()
+    // except setDatabase's own cold-start call passes none, defaulting to null; when that leaves
+    // zero playlists, startPairingServer(context) early-returns on a null context without ever
+    // updating _state, so the app silently stays wherever it was (e.g. Settings, showing an empty
+    // Playlists pane) instead of the Onboarding screen the UI's own copy promises ("removing it
+    // returns to setup"). Pre-existing bug from before this sprint (deletePlaylist/
+    // resetAndAddNewPlaylist both call checkLocalCache() with no args), only now exercised because
+    // Settings can finally reach "the last playlist gets removed" in one test.
+    private var appContext: Context? = null
+
     /** Set in [setDatabase]. Read-only from outside; the Live TV screen collects from this. */
     lateinit var repository: ChannelRepository
         private set
@@ -128,6 +139,7 @@ class MainViewModel : ViewModel() {
 
     fun setDatabase(db: RedSurfDatabase, context: Context) {
         localDb = db
+        appContext = context.applicationContext
         repository = ChannelRepository(db.channelDao(), db.playlistDao())
         checkLocalCache(context)
     }
@@ -137,13 +149,20 @@ class MainViewModel : ViewModel() {
      * table. Counting/grouping channels in memory (the previous version's getAllChannels() +
      * groupBy) is exactly the O(playlist size) pattern PHASE_1.md #1.2 removes; the Live TV
      * screen queries its own groups/channels directly from [repository].
+     *
+     * [context] defaults to null for every caller except [setDatabase]'s own cold-start call -
+     * falls back to [appContext] rather than trusting the parameter alone, so reaching zero
+     * playlists from any of those callers (switchPlaylist, resetAndAddNewPlaylist, deletePlaylist,
+     * the load*() methods' own tail call) still reaches [startPairingServer] with something real
+     * instead of silently no-op'ing on a null one (found live, 2026-09-13 - see [appContext]).
      */
     private fun checkLocalCache(context: Context? = null) {
+        val ctx = context ?: appContext
         viewModelScope.launch(Dispatchers.IO) {
             val playlists: List<PlaylistEntity> = localDb?.playlistDao()?.getAllPlaylists()?.first() ?: emptyList()
             if (playlists.isEmpty()) {
                 withContext(Dispatchers.Main) {
-                    startPairingServer(context)
+                    startPairingServer(ctx)
                 }
             } else {
                 val pId = currentPlaylistId ?: playlists.first().id

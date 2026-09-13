@@ -49,16 +49,22 @@ import com.redsurf.tv.ui.theme.tvSafeArea
  * app-exit - a deliberate earlier fix for a real trap bug, superseded by this one now that the
  * trap is gone and the ask has moved to "give me a stop before exiting.")
  *
- * Settings (user request, 2026-09-11) is a real minimal screen, not a placeholder like the other
- * four unbuilt destinations - started as one button to reset the saved playlist for testing a
- * different source, and now (2026-09-12) also lists every loaded playlist with its own real
- * remove action, since playlist management turned out to be load-bearing for testing itself, not
- * just a convenience - see SettingsScreen's doc comment.
+ * Settings (user request, 2026-09-11, end-state shell built 2026-09-13 per `docs/plans/SETTINGS.md`)
+ * is the real TiviMate-taxonomy/StreamVault-layout two-pane shell now - see `SettingsScreen.kt`'s
+ * doc comment for the category rail, grey rows, and its own focus trap/Back-peeling. Only
+ * Playlists and About have real content; every other category previews the finished product as
+ * grey, unfocusable rows. [selectedSettingsCategory] is hoisted here, not `remember`ed inside
+ * `SettingsScreen` itself, for the same reason `destination` already is: that composable is torn
+ * down and recomposed fresh every time `destination` switches away from and back to Settings (the
+ * conditional-composition trap this class doc already describes for `LiveTvScreen`/fullscreen), so
+ * an internal `remember` would reset to the first category on every re-entry instead of keeping
+ * whichever one the user was on (state/focus discipline, `AGENTS.md`).
  */
 @Composable
 fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     var destination by remember { mutableStateOf(NavDestination.LiveTv) }
     var liveTvFullscreen by remember { mutableStateOf(false) }
+    var selectedSettingsCategory by remember { mutableStateOf(SettingsCategory.General) }
 
     BackHandler(enabled = !liveTvFullscreen && destination != NavDestination.Home) {
         destination = NavDestination.Home
@@ -87,6 +93,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
                 val context = LocalContext.current
                 SettingsScreen(
+                    selectedCategory = selectedSettingsCategory,
+                    onCategorySelected = { selectedSettingsCategory = it },
                     updateStatus = updateStatus,
                     playlists = playlists,
                     onCheckForUpdates = { viewModel.checkForUpdates(force = true) },

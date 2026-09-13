@@ -92,3 +92,14 @@ home for it; keep the two in sync (backlog entry says which Settings row it beco
 
 Build this **before** the Player sprint - it is small, self-contained, and gives #2.5's "Resume
 last channel" toggle a real row to land in rather than another stub. Sonnet-lane.
+
+## Status: built and machine-swept, 2026-09-13
+
+All 7 machine-verifiable acceptance lines pass, on device, over two sweep passes - three real
+bugs found and fixed along the way (LEFT-to-rail navigation, focus lost on confirm dialogs, and
+a pre-existing bug where removing the last playlist never returned to Onboarding). Full account:
+`docs/plans/SPRINT_LOG.md`'s 2026-09-13 entry. The 4 feel/vision items above are now yours to
+judge - not yet looked at with real eyes. One open question surfaced during the sweep, logged in
+`AGENTS.md`'s Backlog: LEFT/Back from the pane return to the rail's *nearest* row, not
+necessarily the category you started from (same ambiguity as the existing GroupsColumn
+backlog item, mirrored).

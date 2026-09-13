@@ -14,7 +14,7 @@ a Next.js web portal at the repo root.
 | `docs/plans/HARDWARE.md` | The target device's real, measured limits. |
 | `docs/plans/PHASE_*.md` | What is being built right now, with a status board and acceptance criteria. |
 | `docs/plans/WORKFLOW.md` | Which model does which work, when to escalate, the phase gates, and **sprint mode** (how work is paced and device-tested from 2026-09-13). |
-| `docs/plans/SETTINGS.md` | The Settings shell brief - built next, before the Player sprint. |
+| `docs/plans/SETTINGS.md` | The Settings shell brief - **built and machine-swept 2026-09-13**, feel/vision pending. Branding is next. |
 | `docs/plans/DRIVING.md` | How the user operates Claude Code here (`/sprint`, permissions, hooks, headless). **Standing instruction:** when you use one of these mechanisms, tell the user in one line what it is and how they'd type it - they asked to learn in the moment. |
 | `docs/vision/references/` | Screenshots: `streamvault/` for layout, `tivimate/` for workflow, `../mockups/` for colour. |
 
@@ -178,13 +178,13 @@ next screen with more than one focusable column.
 - **Tooltip on long-focus for truncated category names** (user idea, 2026-09-12): categories long
   enough to always ellipsis, even after the visual pass, could show their full name after the
   D-pad rests on them briefly - not built, needs a design pass on timing/placement first.
-- **TiviMate-style categorized Settings screen** — **no longer backlog: briefed and next up.**
-  `docs/plans/SETTINGS.md` (2026-09-13) is the spec: StreamVault's two-pane layout, TiviMate's
-  nine categories and row placement, every planned row present from day one as a grey,
-  unfocusable row with its real name and planned default (user decision - the D-pad skips them,
-  so nobody can land on fiction). Built before the Player sprint. Settings-shaped backlog items
-  below (black-screen toggle, resolution badge, clear history, tooltip, content-type selector) now
-  each have a named row there; when one gets built, flip the row live and log it in that file.
+- **TiviMate-style categorized Settings screen** — **no longer backlog: built and machine-swept,
+  2026-09-13.** `docs/plans/SETTINGS.md` is the spec (StreamVault's two-pane layout, TiviMate's
+  nine categories and row placement, every planned row present as a grey, unfocusable row with
+  its real name and planned default) and now also the as-built record; `SPRINT_LOG.md` has the
+  sweep account. Settings-shaped backlog items below (black-screen toggle, resolution badge,
+  clear history, tooltip, content-type selector) each have a named row there; when one gets
+  built, flip the row live and log it in that file. Feel/vision review still pending (user).
 - **Content-type selector (Live/VOD/Both) missing from the on-screen Xtream/M3U forms** (user
   found, 2026-09-12) - the Mobile Phone pairing form has always had this, the on-screen forms
   never did. Deliberately not added yet: the selector is functionally inert everywhere in Phase 1
@@ -224,6 +224,20 @@ next screen with more than one focusable column.
   first channel" (closer to TiviMate/most TV UIs' own convention of resetting a list to its top on
   a fresh selection) is more correct - ask the user before building either, since it's a real
   product/UX decision, not a bug with one obviously-correct fix.
+- **Settings: LEFT/Back from the pane land on the rail's nearest row, not necessarily the
+  category you started from** (found live, 2026-09-13, Settings sprint - `SPRINT_LOG.md`'s entry
+  has the full account). Mirror of the GroupsColumn item just above - `FocusManager.moveFocus`
+  resolves to whatever's spatially nearest, and a deterministic "return to exactly this category"
+  redirect isn't available without reintroducing a real `requestFocus()`-vs-focus-trap bug this
+  same sprint hit and fixed (see `SettingsScreen.kt`'s doc comments). Same call as GroupsColumn's:
+  ask the user before building a fix, not a bug with one obviously-correct answer.
+- **`focusProperties { exit = ... }` behaved inconsistently by direction, at least in the Compose/
+  tv-foundation versions this project pins** (found live, 2026-09-13, Settings sprint): it blocked
+  an explicit `FocusRequester.requestFocus()` call even when the destination was still inside the
+  trapped subtree, while not reliably blocking default directional `moveFocus()` escapes it was
+  meant to catch. `SettingsScreen.kt` now uses explicit `onPreviewKeyEvent` interception instead
+  (matching `PlayerScreen.kt`'s router). Worth knowing before reaching for `focusProperties.exit`
+  as the go-to fix for a focus-escape bug elsewhere - it may not behave as documented here.
 
 ## The one rule that matters
 
