@@ -95,8 +95,14 @@ merging.
     the point is that everything built afterwards carries it, so it goes as early as possible.
     Scope: Android TV launcher banner (320x180) + adaptive icon, the mark in the nav strip, the
     loading screen, About - **and the already-built surfaces**: the onboarding/welcome screen
-    (where lists get added) and the web portal's pages (dashboard, pairing). Assets go in
-    `docs/vision/branding/` (SVG + high-res PNG + source) before the sprint starts. One Opus
+    (where lists get added), the web portal's pages (dashboard, pairing), and **Settings'
+    category rail tiles** (user idea, 2026-09-13, feel/vision review of the Settings shell - the
+    rail's plain initial-letter tiles read as close to StreamVault's own reference but obviously
+    missing its per-category coloring; rather than patch that in, hold for real branded icons once
+    the kit exists). Assets go in `docs/vision/branding/` (SVG + high-res PNG + source) before the
+    sprint starts - one logo already there (`Gemini_Generated_Image_mecnz9mecnz9mecn.jpeg`), user
+    says they don't love it but it's usable; a typographic wordmark rendered in code is the
+    fallback if so. One Opus
     taste check on the nav strip.
 
 - **Cloud pairing: revive** (user, 2026-09-10). Background: `pairingSessions` was locked down for
