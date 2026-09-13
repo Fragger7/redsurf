@@ -92,6 +92,60 @@ the two screenshot checkpoints (A after the layout, B after playback) and for an
 didn't anticipate. That's the intended budget shape: one expensive planning pass, cheap execution,
 two short reviews.
 
+## Sprint mode — how work is paced from 2026-09-13 on (user decision, Opus session)
+
+**What changed and why.** Phase 2 was built as thin slices (2.1a, 2.1b, 2.2 backend, …), each
+handed to the user for device testing before the next began. It found real bugs, but the user
+called out two costs: every stop is a build + a long written bug report from them, and the
+stubs the slicing forces into existence (an Actions floor with placeholder text, a RIGHT key that
+fakes a banner, recents held in memory) generate bugs of their own that a finished module can't
+have. So: **the unit of user-facing testing is now the module, not the slice.** Commits stay
+small (bisectable, reviewable); *stopping* doesn't happen until the module is done.
+
+**A sprint is one of the user's 5-hour usage windows.** Shape:
+
+1. Build the whole module end-to-end — no "coming soon" placeholders left inside it.
+2. Sweep the module's **machine-verifiable** test list on the real device over ADB. Log every
+   failure; do **not** fix-build-fix-build one at a time.
+3. Fix everything that failed, one build, sweep again. Repeat until green.
+4. Hand the user one build and the module's **feel/vision** test list - short, tagged, the things
+   ADB genuinely can't judge. They work through it on their own clock while the next sprint runs.
+
+**Two test lists per module, written before the sweep starts:**
+- *Machine-verifiable*: key injection (`adb shell input keyevent`) + assertions on **logcat**, not
+  screenshots. Debug builds log state transitions (`overlay -> …`, `tuned -> num/name`,
+  `focus -> owner`); a test is a key sequence and the log lines it must produce. Screenshots only
+  to diagnose a failure - each one is an image in context, and image cost is exactly why the old
+  per-task screenshot loop was stopped.
+- *Feel/vision*: anything needing eyes or taste - "does this match the TiviMate reference," did
+  that feel dead, is the video actually clean between zaps. Note the last one: `screencap` on the
+  Chromecast returns black for the video surface, so playback quality is *never* machine-verified
+  here, only inferred from player state logs.
+
+**Device protocol (supersedes two older rules - see below):**
+- Sprints run on **debug builds**: debuggable means `run-as` for DB inspection, `adb install -r -d`
+  for any version, no semver games. Debug and release builds can't coexist (same package,
+  different signing key), so a sprint **starts by uninstalling the release build and ends by
+  uninstalling the debug build and installing the current CI release.** That's what keeps OTA
+  working for the user afterwards - the intent of the old "never install an ad-hoc-versioned
+  build" rule, kept; its letter, replaced.
+- The Chromecast stays reachable over WiFi ADB while asleep - **verified 2026-09-13**: put to
+  sleep via `KEYCODE_SLEEP`, `mWakefulness=Asleep` / screen `OFF`, still answering 30s later,
+  woken with `KEYCODE_WAKEUP`. No "Stay awake" toggle needed. Screen off is not a blocker.
+- Playlist seeding after a wipe: the on-device pairing server is plain HTTP on :8080, so
+  `adb forward` + `curl` should re-add the test playlist with no remote in hand. **Verify this
+  once before relying on it** - if it works, wipe/migration tests are fully automatable too.
+
+**Superseded by this section:** `AGENTS.md`'s "stop doing per-task ADB screenshot round-trips"
+(still true *as stated* - screenshots are the expensive part; logcat-driven sweeps are the
+replacement, not a return to the old loop) and its "never install an ad-hoc-versioned local
+build" rule (replaced by the uninstall-at-sprint-end protocol above). `PHASE_2.md`'s "Order of
+work" still lists per-slice hand-offs; read it as module-level from here on - Checkpoint B is
+the sprint-end acceptance, not a mid-module stop.
+
+**Lanes are unchanged.** Opus writes the module brief and both test lists; Sonnet runs the sprint.
+Opus runs it only when the debugging turns into design.
+
 ## Docs-only commits: skip the release
 
 Every push to `main` triggers the release workflow and publishes a new version. For commits that

@@ -13,7 +13,8 @@ a Next.js web portal at the repo root.
 | `docs/vision/IPTV_DOMAIN_KNOWLEDGE.md` | Hard-won IPTV engineering knowledge. Read before touching parsing, networking or playback. |
 | `docs/plans/HARDWARE.md` | The target device's real, measured limits. |
 | `docs/plans/PHASE_*.md` | What is being built right now, with a status board and acceptance criteria. |
-| `docs/plans/WORKFLOW.md` | Which model does which work, when to escalate, and the phase gates. |
+| `docs/plans/WORKFLOW.md` | Which model does which work, when to escalate, the phase gates, and **sprint mode** (how work is paced and device-tested from 2026-09-13). |
+| `docs/plans/SETTINGS.md` | The Settings shell brief - built next, before the Player sprint. |
 | `docs/vision/references/` | Screenshots: `streamvault/` for layout, `tivimate/` for workflow, `../mockups/` for colour. |
 
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which
@@ -51,17 +52,25 @@ Onboarding with no sign of the previously-loaded playlist after an update — ch
 schema bump (version's been 6, unchanged, since before v0.19.1), no confirmed cause; and OTA
 reported "erratic, might be good enough for now" with no reproducible specifics.
 
-**Workflow, from user feedback this session:** stop doing per-task ADB screenshot round-trips — too
-expensive. Build + verify with compile/tests + a signed `assembleRelease` only, batch several
-changes together, hand off a build for the user to test on the real TV via OTA instead. Targeted
-ADB debugging of one specific reported bug is fine when the user says so explicitly (happened twice
-this phase, both times solved a real bug) — that's different from routine verification loops.
-**Never install an ad-hoc-versioned local build to the test device** — an early local build with
-default versionName `v1.0.0` once out-ranked every real release by semver, permanently blocking OTA
-until manually fixed; always verify a local `assembleRelease` with an explicit low/obviously-fake
-version like `-PversionName=v0.0.0-local-verify`, check its signature, then delete it rather than
-`adb install` it. Standing permission to merge to `main` freely is granted (no live users) — don't
-ask before merging.
+**Workflow — superseded 2026-09-13, read `WORKFLOW.md` "Sprint mode" first.** The paragraph below
+is kept for the reasoning, not as instruction. Short version of what replaced it: work is paced
+in module-sized sprints (one 5-hour window each), Claude runs a **logcat-driven** ADB test sweep
+on the device itself (screenshots only to diagnose), the user gets a short *feel/vision* list per
+module instead of a bug hunt, and sprints run on debug builds that are **uninstalled and replaced
+with the CI release at sprint end** so OTA keeps working.
+
+*(Historical, 2026-09-12)* stop doing per-task ADB screenshot round-trips — too expensive. Build
++ verify with compile/tests + a signed `assembleRelease` only, batch several changes together,
+hand off a build for the user to test on the real TV via OTA instead. Targeted ADB debugging of
+one specific reported bug is fine when the user says so explicitly (happened twice this phase,
+both times solved a real bug) — that's different from routine verification loops. **Never
+install an ad-hoc-versioned local build to the test device** — an early local build with default
+versionName `v1.0.0` once out-ranked every real release by semver, permanently blocking OTA until
+manually fixed; the intent (don't block OTA) survives in the sprint-end uninstall/reinstall
+protocol; outside a sprint, still verify a local `assembleRelease` with an explicit low/obviously-
+fake version like `-PversionName=v0.0.0-local-verify`, check its signature, then delete it.
+Standing permission to merge to `main` freely is granted (no live users) — don't ask before
+merging.
 
 ## Product decisions on record
 
@@ -144,13 +153,13 @@ next screen with more than one focusable column.
 - **Tooltip on long-focus for truncated category names** (user idea, 2026-09-12): categories long
   enough to always ellipsis, even after the visual pass, could show their full name after the
   D-pad rests on them briefly - not built, needs a design pass on timing/placement first.
-- **TiviMate-style categorized Settings screen** (user idea, 2026-09-12): group settings under
-  named sections the way TiviMate does, once Settings has more than the 3 actions it has today
-  (Check for updates, Add another playlist, Reset). Premature while Settings is this small.
-  **Design settled** (2026-09-12): StreamVault's left-icon-rail + right-detail-list shell (reusing
-  the `GroupsColumn`/`ChannelsColumn` pattern), with TiviMate's category names as the content plan
-  (Playlists, EPG, Playback, Appearance, About, etc.). User explicitly OK with placeholder/dummy
-  categories in the shell until real settings exist to fill them, same as Home/Movies/Series today.
+- **TiviMate-style categorized Settings screen** — **no longer backlog: briefed and next up.**
+  `docs/plans/SETTINGS.md` (2026-09-13) is the spec: StreamVault's two-pane layout, TiviMate's
+  nine categories and row placement, every planned row present from day one as a grey,
+  unfocusable row with its real name and planned default (user decision - the D-pad skips them,
+  so nobody can land on fiction). Built before the Player sprint. Settings-shaped backlog items
+  below (black-screen toggle, resolution badge, clear history, tooltip, content-type selector) now
+  each have a named row there; when one gets built, flip the row live and log it in that file.
 - **Content-type selector (Live/VOD/Both) missing from the on-screen Xtream/M3U forms** (user
   found, 2026-09-12) - the Mobile Phone pairing form has always had this, the on-screen forms
   never did. Deliberately not added yet: the selector is functionally inert everywhere in Phase 1

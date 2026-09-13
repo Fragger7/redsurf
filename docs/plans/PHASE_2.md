@@ -502,6 +502,13 @@ The small iptv-org list is fine for 2.1's state-machine work only.
 
 ## Order of work, and who
 
+> **Re-paced 2026-09-13 - see `WORKFLOW.md` "Sprint mode".** The per-slice hand-offs below are
+> how 2.1-2.3 were actually done and are kept as the record. From here: the Settings shell
+> (`SETTINGS.md`) ships first, then **2.3's Actions row + 2.4 + 2.5 as one Player sprint** -
+> built end-to-end with no placeholders, machine-swept over ADB, then Checkpoint B as the
+> sprint-end acceptance. Reason: the stubs the slicing left behind (placeholder Actions floor,
+> fake RIGHT, in-memory recents) were generating their own bugs.
+
 1. **2.1 → 2.2 → Checkpoint A** — Sonnet. Build + tests + signed release; one build handed to the
    user with the checkpoint list. No ADB loops (the standing workflow rule), *except* 2.2's zap
    verification and 2.6's measurements, which are diagnostic and explicitly allowed.
