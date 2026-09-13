@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd job that starts a RedSurf sprint at a fixed time each day (your usage-window reset).
+  NOT installed by default - do this only after you've watched a sprint run cleanly while present.
+
+  Install:
+    cp scripts/com.redsurf.sprint.plist.example ~/Library/LaunchAgents/com.redsurf.sprint.plist
+    # edit Hour/Minute and the brief path below, then:
+    launchctl load ~/Library/LaunchAgents/com.redsurf.sprint.plist
+  Remove:
+    launchctl unload ~/Library/LaunchAgents/com.redsurf.sprint.plist
+  Run once right now, to test:
+    launchctl start com.redsurf.sprint
+
+  The Mac must be awake at that time (System Settings -> Energy, or `caffeinate`). launchd runs
+  missed jobs on wake, but a sprint that starts hours late may collide with you using the window.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.redsurf.sprint</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/admin/Development/Claude/RedSurf/scripts/sprint-headless.sh</string>
+    <string>docs/plans/SETTINGS.md</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>6</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/admin/.redsurf/sprint-logs/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/admin/.redsurf/sprint-logs/launchd.err</string>
+</dict>
+</plist>

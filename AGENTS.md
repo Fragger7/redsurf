@@ -15,6 +15,7 @@ a Next.js web portal at the repo root.
 | `docs/plans/PHASE_*.md` | What is being built right now, with a status board and acceptance criteria. |
 | `docs/plans/WORKFLOW.md` | Which model does which work, when to escalate, the phase gates, and **sprint mode** (how work is paced and device-tested from 2026-09-13). |
 | `docs/plans/SETTINGS.md` | The Settings shell brief - built next, before the Player sprint. |
+| `docs/plans/DRIVING.md` | How the user operates Claude Code here (`/sprint`, permissions, hooks, headless). **Standing instruction:** when you use one of these mechanisms, tell the user in one line what it is and how they'd type it - they asked to learn in the moment. |
 | `docs/vision/references/` | Screenshots: `streamvault/` for layout, `tivimate/` for workflow, `../mockups/` for colour. |
 
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which

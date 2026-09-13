@@ -20,3 +20,6 @@ build/
 captures/
 .cxx/
 *.tsbuildinfo
+
+# Claude Code machine-specific settings (hooks with macOS commands, local permission overrides)
+.claude/settings.local.json

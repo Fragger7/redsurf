@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew *)",
+      "Bash(cd *)",
+      "Bash(export *)",
+      "Bash(adb *)",
+      "Bash(apksigner *)",
+      "Bash(gh *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push origin main)",
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git tag *)",
+      "Bash(curl *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(wc *)",
+      "Bash(sleep *)",
+      "Bash(echo *)",
+      "Bash(python3 *)",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)",
+      "Bash(adb shell rm *)",
+      "Bash(adb shell pm clear *)",
+      "Edit(.git/*)",
+      "Edit(~/.redsurf/*)",
+      "Read(~/.redsurf/keys/*)"
+    ]
+  }
+}
