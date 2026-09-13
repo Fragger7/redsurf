@@ -93,7 +93,10 @@ merging.
   - *Branding before the Player sprint*, not after Cloud Sync: the user has a logo/icon ready;
     the point is that everything built afterwards carries it, so it goes as early as possible.
     Scope: Android TV launcher banner (320x180) + adaptive icon, the mark in the nav strip, the
-    loading screen, About. One Opus taste check on the nav strip.
+    loading screen, About - **and the already-built surfaces**: the onboarding/welcome screen
+    (where lists get added) and the web portal's pages (dashboard, pairing). Assets go in
+    `docs/vision/branding/` (SVG + high-res PNG + source) before the sprint starts. One Opus
+    taste check on the nav strip.
 
 - **Cloud pairing: revive** (user, 2026-09-10). Background: `pairingSessions` was locked down for
   security, which surfaced that nothing reads it — the TV app moved to local NanoHttpd pairing and
