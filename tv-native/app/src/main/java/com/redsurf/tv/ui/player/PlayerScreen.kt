@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -220,6 +221,21 @@ fun PlayerScreen(
             // composed underneath for state preservation, so a transparent letterbox gap on a
             // non-16:9 channel would otherwise show it through).
             .background(Color.Black)
+            // Focus trap - found live, 2026-09-12, reported as focus ending up "left of Live TV"
+            // with Back then landing on the channel group. LiveTvScreen keeps its browse Row
+            // (Categories/Channels/Preview) composed and real - invisible, but still focusable -
+            // as a sibling underneath this fullscreen Box the entire time it's showing (its own
+            // doc comment: state/focus discipline). Compose's directional focus search walks the
+            // *whole* composition, not just this subtree, so any arrow key that hits a dead end in
+            // here (a picker's top/bottom row, an overlay edge) can resolve to a node in that
+            // hidden Row instead of stopping - landing real D-pad focus on an invisible category
+            // button, indistinguishable from "focus is just gone" until Back does something
+            // nonsensical. `exit = Cancel` refuses every such move, for every direction, so a key
+            // with nowhere sensible to go in here is a no-op instead of an escape hatch - one
+            // fix covering every current and future overlay/picker edge, not a patch per case.
+            // Back is unaffected: BackHandler is a separate dispatcher that doesn't use focus
+            // search at all.
+            .focusProperties { exit = { FocusRequester.Cancel } }
             .focusRequester(focusRequester)
             .focusable()
             .onKeyEvent { event ->
