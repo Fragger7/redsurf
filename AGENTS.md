@@ -74,6 +74,27 @@ merging.
 
 ## Product decisions on record
 
+- **Roadmap order** (user, 2026-09-13): Settings shell (`SETTINGS.md`) → **Branding** → Player
+  sprint (Phase 2 #2.3 Actions row, #2.4, #2.5) → EPG + Guide (Phase 3) → **Cloud Sync** →
+  VOD/Series. Two deliberate reorderings:
+  - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
+    `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud
+    state - so every module built after it inherits that, and every module built before it
+    would need retrofitting. Vision: an account tied to an email; the portal loads/enables/
+    disables lists; any device running RedSurf honours the current cloud state. Brief is Opus
+    work when its turn comes (security-sensitive). Flags already on record: TV sign-in is a
+    pairing code, not a password (the existing pairing flow becomes "link this device"); sync
+    playlist *definitions* only, never channel data - each device re-imports from the provider;
+    cloud is truth, device is cache, sync on launch + live listener, honour last-known state
+    offline; credentials encrypted per account, not just rules-protected; last-write-wins with
+    server timestamps, global enable/disable first; shape the account doc so favourites/recents/
+    settings can ride the same rails later. Prerequisite: the web portal must build locally
+    again (the `@tailwindcss/oxide` issue below) before that sprint starts.
+  - *Branding before the Player sprint*, not after Cloud Sync: the user has a logo/icon ready;
+    the point is that everything built afterwards carries it, so it goes as early as possible.
+    Scope: Android TV launcher banner (320x180) + adaptive icon, the mark in the nav strip, the
+    loading screen, About. One Opus taste check on the nav strip.
+
 - **Cloud pairing: revive** (user, 2026-09-10). Background: `pairingSessions` was locked down for
   security, which surfaced that nothing reads it — the TV app moved to local NanoHttpd pairing and
   was never reconnected, so both web pairing flows (`app/dashboard`'s push, `app/pair/[code]`)
