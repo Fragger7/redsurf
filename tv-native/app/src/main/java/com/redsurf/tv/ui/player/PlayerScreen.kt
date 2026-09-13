@@ -161,15 +161,27 @@ fun PlayerScreen(
     }
 
     // Reclaim focus onto this composable's own root whenever `overlay` collapses back to
-    // "nothing with real descendant content" (None/ZapBanner) - found live, 2026-09-12,
-    // reported as "the whole button engine seems to crash": tuning a tile from the Controls
-    // floor tears down the tile row that held real D-pad focus, and without this, Compose's
-    // fallback focus-picking after a torn-down focused descendant is unpredictable - sometimes
-    // landing nowhere, silently breaking all further key routing (this screen's onKeyEvent needs
-    // real focus to receive anything) until Back is pressed, since Back's dispatcher is a
-    // separate mechanism that doesn't require focus at all - exactly why it was the only way out.
+    // "nothing with real descendant content" (None/ZapBanner, and for now, Controls' Actions
+    // floor too - see below) - found live, 2026-09-12, reported as "the whole button engine
+    // seems to crash": tuning a tile from the Controls floor tears down the tile row that held
+    // real D-pad focus, and without this, Compose's fallback focus-picking after a torn-down
+    // focused descendant is unpredictable - sometimes landing nowhere, silently breaking all
+    // further key routing (this screen's onKeyEvent needs real focus to receive anything) until
+    // Back is pressed, since Back's dispatcher is a separate mechanism that doesn't require focus
+    // at all - exactly why it was the only way out.
+    //
+    // The Actions floor is included here too - found live, 2026-09-12, reported as UP from
+    // Actions "remaining at that Actions coming soon screen" instead of returning to Tiles: its
+    // content is still just a plain, non-focusable Text placeholder (#2.3's real action items
+    // aren't built yet), so swapping Tiles -> Actions tears down the tile that held focus with
+    // nothing in the new floor to claim it - the exact same dead end as None/ZapBanner above, just
+    // reached via the elevator instead of a tune. Revisit this condition once #2.3 gives Actions
+    // real focusable content of its own; unconditionally reclaiming onto the root would then steal
+    // focus away from it.
     LaunchedEffect(overlay) {
-        if (overlay == PlayerOverlay.None || overlay == PlayerOverlay.ZapBanner) {
+        if (overlay == PlayerOverlay.None || overlay == PlayerOverlay.ZapBanner ||
+            overlay == PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)
+        ) {
             delay(50)
             runCatching { focusRequester.requestFocus() }
         }
