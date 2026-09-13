@@ -363,7 +363,13 @@ class MainViewModel : ViewModel() {
                     )
                 )
 
-                var liveIndex = 0
+                // Per-group, not global (found live, 2026-09-12): only used when a channel's own
+                // tvg-chno is missing, but a single counter spanning the whole file previously
+                // numbered every group by raw scan-order position across the entire playlist, not
+                // within its own group - zap's next/prev-in-group query (RedSurfDatabase.kt) then
+                // walked that same nonsensical cross-group order, since it sorts by this `num`
+                // within one group. Reported as zap "no rhyme or reason," not incrementing by 1.
+                val groupFallbackCounters = mutableMapOf<String, Int>()
                 var imported = 0
                 var skipped = 0
 
@@ -375,11 +381,13 @@ class MainViewModel : ViewModel() {
                                     skipped++
                                     return@mapNotNull null
                                 }
+                                val fallbackNum = groupFallbackCounters.getOrDefault(channel.group, 0)
+                                groupFallbackCounters[channel.group] = fallbackNum + 1
                                 ChannelEntity(
                                     streamId = channel.streamUrl,
                                     playlistId = playlistId,
                                     groupId = "default",
-                                    num = liveIndex++,
+                                    num = channel.chno ?: fallbackNum,
                                     name = channel.name,
                                     streamType = "live",
                                     streamIcon = channel.logoUrl,

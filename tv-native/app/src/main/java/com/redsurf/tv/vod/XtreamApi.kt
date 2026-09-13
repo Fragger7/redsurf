@@ -157,7 +157,12 @@ object XtreamApi {
             JsonReader(InputStreamReader(stream, Charsets.UTF_8)).use { reader ->
                 reader.beginArray()
                 val batch = mutableListOf<XtreamLiveStream>()
-                var runningIndex = 0
+                // Per-group, not global - same class of bug as M3uParser/MainViewModel's
+                // liveIndex (found live, 2026-09-12): only used as a fallback when the provider's
+                // own "num" is missing/unparseable, but a single running counter would still
+                // number that channel by its position across every category, not within its own,
+                // which is what next/prev-in-group's query actually sorts by.
+                val groupFallbackCounters = mutableMapOf<String, Int>()
 
                 while (reader.hasNext()) {
                     reader.beginObject()
@@ -182,17 +187,19 @@ object XtreamApi {
                     reader.endObject()
 
                     if (streamId.isNotEmpty()) {
+                        val groupName = categories[categoryId] ?: "Uncategorized"
+                        val fallbackNum = groupFallbackCounters.getOrDefault(groupName, 0)
+                        groupFallbackCounters[groupName] = fallbackNum + 1
                         batch.add(
                             XtreamLiveStream(
                                 streamId = streamId,
                                 name = name.ifEmpty { "Unknown Channel" },
                                 streamIcon = streamIcon,
-                                groupName = categories[categoryId] ?: "Uncategorized",
+                                groupName = groupName,
                                 epgChannelId = epgChannelId,
-                                num = num ?: runningIndex,
+                                num = num ?: fallbackNum,
                             )
                         )
-                        runningIndex++
                     }
 
                     if (batch.size >= batchSize) {

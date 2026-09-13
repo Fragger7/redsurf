@@ -30,6 +30,7 @@ object M3uParser {
         var currentLogo = ""
         var currentGroup = ""
         var currentEpgId = ""
+        var currentChno: Int? = null
 
         inputStream.bufferedReader().useLines { lines ->
             for (line in lines) {
@@ -40,11 +41,21 @@ object M3uParser {
                     val logoRegex = "tvg-logo=\"([^\"]+)\"".toRegex()
                     currentLogo = logoRegex.find(trimmed)?.groupValues?.get(1) ?: ""
 
+                    // .trim() - found live, 2026-09-12: an untrimmed group-title with incidental
+                    // whitespace fractures what the user sees as one group into several distinct
+                    // ones here (exact-string equality everywhere this is grouped/queried by,
+                    // RedSurfDatabase.kt), which then also breaks zap's next/prev-in-group query.
                     val groupRegex = "group-title=\"([^\"]+)\"".toRegex()
-                    currentGroup = groupRegex.find(trimmed)?.groupValues?.get(1) ?: "Uncategorized"
+                    currentGroup = groupRegex.find(trimmed)?.groupValues?.get(1)?.trim() ?: "Uncategorized"
 
                     val idRegex = "tvg-id=\"([^\"]+)\"".toRegex()
                     currentEpgId = idRegex.find(trimmed)?.groupValues?.get(1) ?: ""
+
+                    // The provider's real channel number - found live, 2026-09-12, never parsed
+                    // before (see Channel.chno's doc). Absent on many providers, hence nullable;
+                    // MainViewModel falls back to a per-group counter when this is null.
+                    val chnoRegex = "tvg-chno=\"([^\"]+)\"".toRegex()
+                    currentChno = chnoRegex.find(trimmed)?.groupValues?.get(1)?.trim()?.toIntOrNull()
 
                     currentName = trimmed.substringAfterLast(",").trim()
                 } else if (!trimmed.startsWith("#")) {
@@ -62,12 +73,14 @@ object M3uParser {
                             group = currentGroup,
                             epgId = currentEpgId,
                             streamType = streamType,
+                            chno = currentChno,
                         )
                     )
                     currentName = ""
                     currentLogo = ""
                     currentGroup = ""
                     currentEpgId = ""
+                    currentChno = null
 
                     if (batch.size >= batchSize) {
                         onBatch(batch.toList())

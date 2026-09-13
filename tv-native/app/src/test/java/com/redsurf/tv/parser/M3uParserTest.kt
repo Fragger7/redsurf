@@ -75,6 +75,35 @@ class M3uParserTest {
     }
 
     @Test
+    fun parseM3u_parsesTvgChno_nullWhenAbsent() = runBlocking {
+        val m3uData = """
+            #EXTM3U
+            #EXTINF:-1 tvg-chno="105" group-title="News",CNN
+            http://stream.com/cnn/live.ts
+            #EXTINF:-1 group-title="News",No Chno Here
+            http://stream.com/nochno/live.ts
+        """.trimIndent()
+
+        val channels = parseAll(m3uData)
+
+        assertEquals(105, channels[0].chno)
+        assertEquals(null, channels[1].chno)
+    }
+
+    @Test
+    fun parseM3u_trimsGroupTitle() = runBlocking {
+        // Found live, 2026-09-12: an untrimmed group-title fractures one logical group into
+        // several distinct ones everywhere groupName is compared by exact string equality.
+        val m3uData = """
+            #EXTM3U
+            #EXTINF:-1 group-title=" News ",CNN
+            http://stream.com/cnn/live.ts
+        """.trimIndent()
+
+        assertEquals("News", parseAll(m3uData)[0].group)
+    }
+
+    @Test
     fun parseM3u_respectsBatchSize() = runBlocking {
         val sb = StringBuilder("#EXTM3U\n")
         repeat(12) { i ->

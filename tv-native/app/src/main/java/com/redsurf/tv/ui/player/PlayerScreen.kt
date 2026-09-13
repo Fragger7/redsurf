@@ -131,6 +131,25 @@ fun PlayerScreen(
     var overlay by remember { mutableStateOf<PlayerOverlay>(PlayerOverlay.None) }
     val tilesFloorFocus = remember { FocusRequester() }
 
+    // Shared by Level 0's zap and the Controls elevator's ceiling/floor fallback below (user
+    // decision, 2026-09-12, after comparing against real TiviMate behavior: TiviMate stops UP/DOWN
+    // dead once its own player-controls step is also showing, but that step doesn't exist here yet
+    // - rather than copy the dead stop, an UP/DOWN with nowhere left to navigate to falls through
+    // to changing the channel, exactly like Level 0's own UP/DOWN). Shows the zap banner the same
+    // way regardless of which overlay state triggered it.
+    fun zap(goingUp: Boolean) {
+        overlay = PlayerOverlay.ZapBanner
+        val channel = currentChannel ?: return
+        scope.launch {
+            val next = if (goingUp) {
+                repository.prevChannel(channel.playlistId, channel.groupName, channel.num)
+            } else {
+                repository.nextChannel(channel.playlistId, channel.groupName, channel.num)
+            }
+            next?.let(onChannelChanged)
+        }
+    }
+
     // Opening the Tiles floor focuses the first recent channel if any, else TV guide (decision 8)
     // - re-fires every genuine transition into Controls(Tiles), not just once ever, since the
     // user can leave and re-open this floor repeatedly within one fullscreen session.
@@ -272,16 +291,28 @@ fun PlayerScreen(
                         // Consumed on every DOWN event for these two keys, not just isFirstDown -
                         // a held key's repeat-count ticks need to stay dead ends too, the same
                         // reasoning as the comment above, just covering the repeat stream as well
-                        // as the initial press.
+                        // as the initial press. At the bottom floor (Actions) DOWN has nowhere
+                        // left to swap to, so it falls through to channel-down instead (see zap()
+                        // above); DOWN at the top floor (Tiles) still just swaps to Actions.
                         if (isDown && event.key == Key.DirectionDown) {
-                            if (isFirstDown && current.floor == PlayerOverlay.Controls.Floor.Tiles) {
-                                overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)
+                            if (isFirstDown) {
+                                if (current.floor == PlayerOverlay.Controls.Floor.Tiles) {
+                                    overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)
+                                } else {
+                                    zap(goingUp = false)
+                                }
                             }
                             return@onKeyEvent true
                         }
+                        // Mirror of the above: UP at the top floor (Tiles) has nowhere left to
+                        // swap to, so it falls through to channel-up.
                         if (isDown && event.key == Key.DirectionUp) {
-                            if (isFirstDown && current.floor == PlayerOverlay.Controls.Floor.Actions) {
-                                overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)
+                            if (isFirstDown) {
+                                if (current.floor == PlayerOverlay.Controls.Floor.Actions) {
+                                    overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)
+                                } else {
+                                    zap(goingUp = true)
+                                }
                             }
                             return@onKeyEvent true
                         }
@@ -315,21 +346,7 @@ fun PlayerScreen(
                                 // UP -> previous, DOWN -> next (decision 3). One zap per press,
                                 // not per repeat tick (isFirstDown) - a held key must not
                                 // machine-gun through channels.
-                                if (isFirstDown) {
-                                    overlay = PlayerOverlay.ZapBanner
-                                    val channel = currentChannel
-                                    if (channel != null) {
-                                        val goingUp = event.key == Key.DirectionUp
-                                        scope.launch {
-                                            val next = if (goingUp) {
-                                                repository.prevChannel(channel.playlistId, channel.groupName, channel.num)
-                                            } else {
-                                                repository.nextChannel(channel.playlistId, channel.groupName, channel.num)
-                                            }
-                                            next?.let(onChannelChanged)
-                                        }
-                                    }
-                                }
+                                if (isFirstDown) zap(goingUp = event.key == Key.DirectionUp)
                             Key.DirectionLeft -> if (isFirstDown) overlay = PlayerOverlay.ChannelList
                             Key.DirectionRight ->
                                 // Last-channel zap is #2.4 - state transition only for now.
