@@ -241,6 +241,22 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Real per-playlist removal (user request, 2026-09-12: playlist management is critical-path
+     * for testing, not something to keep deferring to the full Settings redesign) - unlike
+     * [resetAndAddNewPlaylist], this keeps every *other* loaded playlist intact. If the removed
+     * one was [currentPlaylistId], clear it first so [checkLocalCache] picks a fresh one from
+     * whatever's left (or correctly falls back to Onboarding if that was the last one).
+     */
+    fun deletePlaylist(playlistId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            localDb?.channelDao()?.deleteChannelsByPlaylist(playlistId)
+            localDb?.playlistDao()?.deletePlaylist(playlistId)
+            if (currentPlaylistId == playlistId) currentPlaylistId = null
+            withContext(Dispatchers.Main) { checkLocalCache() }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         pairingServer?.stop()

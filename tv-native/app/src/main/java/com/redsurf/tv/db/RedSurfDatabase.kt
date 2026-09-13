@@ -124,6 +124,13 @@ interface PlaylistDao {
     /** Testing-enablement (user request, 2026-09-11) - wipes every saved playlist. */
     @Query("DELETE FROM playlists")
     suspend fun deleteAllPlaylists()
+
+    /** Real per-playlist removal (user request, 2026-09-12: Settings playlist management as a
+     * critical-testing-path priority, not deferred to the full Settings redesign) - paired with
+     * ChannelDao.deleteChannelsByPlaylist so removing one playlist doesn't leave its channels
+     * behind, the same reasoning as deleteAllChannels/deleteAllPlaylists above. */
+    @Query("DELETE FROM playlists WHERE id = :id")
+    suspend fun deletePlaylist(id: String)
 }
 
 @Database(entities = [

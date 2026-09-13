@@ -50,8 +50,10 @@ import com.redsurf.tv.ui.theme.tvSafeArea
  * trap is gone and the ask has moved to "give me a stop before exiting.")
  *
  * Settings (user request, 2026-09-11) is a real minimal screen, not a placeholder like the other
- * four unbuilt destinations - one button to reset the saved playlist for testing a different
- * source, since there's no other way to do that without reinstalling.
+ * four unbuilt destinations - started as one button to reset the saved playlist for testing a
+ * different source, and now (2026-09-12) also lists every loaded playlist with its own real
+ * remove action, since playlist management turned out to be load-bearing for testing itself, not
+ * just a convenience - see SettingsScreen's doc comment.
  */
 @Composable
 fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
@@ -82,12 +84,15 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 PlaceholderScreen("Live TV", "No active playlist")
             destination == NavDestination.Settings -> {
                 val updateStatus by viewModel.updateStatus.collectAsState()
+                val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
                 val context = LocalContext.current
                 SettingsScreen(
                     updateStatus = updateStatus,
+                    playlists = playlists,
                     onCheckForUpdates = { viewModel.checkForUpdates(force = true) },
                     onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
                     onAddPlaylist = { viewModel.beginAddPlaylist(context) },
+                    onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
                 )
             }
             else ->
