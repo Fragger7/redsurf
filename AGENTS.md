@@ -340,6 +340,51 @@ with more than one focusable region, not just these.
   discipline class as every other bug in this section; fix is making a channel change from inside
   the player also update `selectedGroup` to that channel's actual group, not just `focusedChannel`.
 
+- **Progress feedback: three places where the app goes silent** (user, 2026-09-13, after sprint
+  1) - a small "Feedback & progress" brief, best folded into the **Branding** sprint since the
+  spinner/progress bar should be a branded component used everywhere, not three one-offs:
+  1. **Playlist import.** What the user sees: the "Importing N channels..." count climbs to
+     ~28K, then the screen sits there "forever" with no change. What's actually happening (read,
+     not guessed): the M3U path (`MainViewModel.loadPlaylist`) streams the provider's *entire*
+     file - the user's is 327 MB / 1.23M entries - and only counts live entries toward
+     `imported`; VOD/series lines are parsed and discarded (`skipped++`), and *nothing on screen
+     moves while that happens*. So the freeze is the parser chewing through ~1.2M lines it will
+     throw away, not VOD being downloaded - VOD isn't stored anywhere yet (Phase 1 non-goal) and
+     `contentType` is inert on both import paths. Fix has two halves: (a) progress that reflects
+     *parse* progress (bytes read of `Content-Length`, or lines seen incl. "skipping VOD/series:
+     N"), with distinct phases once VOD is real; (b) stop seeding the app via the M3U URL for an
+     Xtream provider - the JSON API path is ~28K objects and already what the app prefers
+     (sprint protocol updated). Related: the Live/VOD/Both selector is still inert (backlog above).
+  2. **OTA update download.** `UpdateManager` downloads the APK with no progress reporting at all
+     (confirmed: no `Content-Length`/progress code in it) - the user sees nothing between "Install
+     now" and the Package Manager sheet. Add branded download progress; leave install to the
+     system installer.
+  3. **Channel tune and zap.** From OK on a channel (or UP/DOWN in the player) to first frame,
+     nothing indicates work is happening - `PlayerHost` renders no buffering state (confirmed: no
+     buffering/playbackState UI in it). Decision 13's "no black screen" zap deliberately keeps the
+     old frame up, which is right, but it needs a small, unobtrusive "tuning" indicator so a slow
+     stream reads as loading rather than dead. Same component as 1 and 2, smallest form.
+- **Zap UP/DOWN order still wrong for the user - open investigation, not yet understood**
+  (user, 2026-09-13, after sprint 1): channel numbers in the list are sequential, but zapping is
+  "random, and sometimes UP decreases while DOWN increases." Two rounds have already gone at
+  this (provider-gap theory - wrong; then the real `tvg-chno`-never-parsed bug, fixed in
+  v0.25.4 - a fresh import is required for it to apply). The user's latest report is *after*
+  that fix, so either it wasn't enough or the tested data predates it. Hypotheses to eliminate,
+  in order, before touching code again: (a) **stale data** - was the zap test on a playlist
+  imported after v0.25.4? Sprint 1 wiped the device, so anything added now is fresh; (b)
+  **mixed numbering within one group** - `num = channel.chno ?: fallbackNum`; if the provider
+  sets `tvg-chno` on *some* entries in a group but not others, real numbers (e.g. 101, 102) and
+  0-based fallback counters interleave under `ORDER BY num`, which would look exactly like
+  "random" - check by inspecting `num` across one group in the DB (debug build + `run-as` is
+  broken on this Chromecast; use a `Log.d` of the group's first 20 `num` values instead); (c)
+  **wrap-around at group edges** - `nextChannel` wraps to `firstInGroup` past the end and
+  `prevChannel` to `lastInGroup` past the start, which at a boundary reads as UP going *up* in
+  number - could explain "sometimes inverted" if the test group is small; (d) **direction
+  convention itself** - decision 3 maps UP → previous (lower num), DOWN → next; confirm against
+  the user's TiviMate that this is the expected direction and not itself the "inverted" half of
+  the report. Needs the user's answers to (a) and the source type (Xtream vs M3U) before a
+  third code attempt - see the questions asked 2026-09-13.
+
 ## The one rule that matters
 
 **Never claim something works because you wrote plausible code for it.**

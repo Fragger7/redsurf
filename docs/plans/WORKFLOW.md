@@ -146,6 +146,45 @@ the sprint-end acceptance, not a mid-module stop.
 **Lanes are unchanged.** Opus writes the module brief and both test lists; Sonnet runs the sprint.
 Opus runs it only when the debugging turns into design.
 
+### Sprint 1 retrospective (Settings shell, 2026-09-13 - Opus, from the full transcript)
+
+**Verdict from the user:** the approach works - far more got done than with the user in the loop
+at every slice. Keep it. **What didn't go to protocol,** read directly from the transcript rather
+than asked of Sonnet:
+
+- **Fix-as-you-go crept back in.** The protocol says sweep everything, log every failure, fix all,
+  *one* rebuild, sweep again. What happened: the LEFT-to-rail bug was hit at criterion #3 and
+  Sonnet then did roughly six rebuild+reinstall+re-navigate cycles trying successive fixes
+  (`onKeyEvent` → `onPreviewKeyEvent` → deferred `LaunchedEffect` → trap disabled → direction-aware
+  `exit` → explicit guard) before continuing the sweep. The first deviation was defensible - that
+  bug genuinely blocked traversing the remaining criteria, and Sonnet said so. The next two
+  (confirm-dialog focus, null-context onboarding) were *not* blocking and were still each fixed
+  and rebuilt immediately. So: one legitimate exception, then drift. The result was correct, but
+  the window was spent on ~9 debug builds and far more screenshots than "only on failure."
+- **Test-harness flakiness ate cycles.** Batched `adb shell input keyevent` sequences dropped
+  presses and assumed a starting pill that wasn't there; Sonnet rebuilt a verify-then-act helper
+  mid-sprint from scratch. That helper should exist in the repo *before* the next sprint, not be
+  re-derived inside it.
+- **Seeding choice mattered more than expected.** The playlist was seeded via the provider's M3U
+  URL, which streams the *whole* file (VOD/series lines included, then discarded) - ~3-4 minutes
+  per re-seed, three re-seeds. Same provider via the Xtream JSON API is ~28K objects, far faster,
+  and is the path the app already prefers. (This is also the root of the user's "the screen sits
+  forever after channels are done" report - see `AGENTS.md` backlog, progress feedback.)
+
+**Protocol tightened accordingly** (`.claude/commands/sprint.md` updated to match):
+1. "Blocking" is defined narrowly: a failure blocks only if later test cases *cannot be executed*
+   without fixing it. Cosmetic, data, or focus-lands-wrong failures are logged and carried.
+2. When genuinely blocked: apply the *smallest* fix that unblocks, rebuild once, and continue the
+   sweep - don't iterate on that fix until it's polished, and don't verify it in isolation.
+3. Hard cap: **3 debug builds per sweep pass.** Hitting it means stop, log, re-plan - not a 4th.
+4. Every deviation from the sweep order gets a one-line "deviated: <why>" in `SPRINT_LOG.md`.
+5. Screenshots are budgeted: none for routine state checks (use logcat/`uiautomator`), only to
+   diagnose a failure that logs can't explain.
+6. Seed via the Xtream API (server/user/pass), `contentType=live`, never the M3U URL, unless the
+   test *is* the M3U path.
+7. The verify-then-act ADB helper lives at `scripts/tv-test.sh` (to be committed from Sonnet's
+   sprint-1 scratch version) and every sprint uses it instead of raw key sequences.
+
 ## Docs-only commits: skip the release
 
 Every push to `main` triggers the release workflow and publishes a new version. For commits that

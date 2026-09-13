@@ -22,34 +22,55 @@ the second.
    then **uninstall it** and install a debug build (`./gradlew :app:assembleDebug`,
    `adb install -r -d app/build/outputs/apk/debug/app-debug.apk`). Debug and release can't
    coexist (different signing keys).
-4. Seed the test playlist. First time: verify the `adb forward tcp:8080 tcp:8080` + `curl` path
-   against the pairing server actually works and record the exact command in
-   `docs/plans/SPRINT_LOG.md`; afterwards just use it.
+4. Seed the test playlist via `adb forward tcp:8080 tcp:8080` + `curl` POST to
+   `http://127.0.0.1:8080/submit` (verified working, sprint 1). **Use the Xtream API path**
+   (`type=xtream`, `server`/`user`/`pass` parsed from `~/.redsurf/test-playlist.url`) with
+   `contentType=live` - never the M3U URL unless the test *is* the M3U parser. The M3U path
+   streams the provider's entire file including VOD/series it then discards: ~3-4 minutes per
+   seed on this device versus seconds via the JSON API. Do not add VOD until a test needs it.
+5. Use `scripts/tv-test.sh` for every device interaction (focused-node lookup, verify-then-act
+   navigation, logcat capture). Do not hand-roll raw `input keyevent` sequences with fixed sleeps -
+   sprint 1 lost most of an hour to dropped presses and wrong starting-pill assumptions before
+   building exactly this helper from scratch.
 
 ## Build
 
-5. Build the **whole module** the brief describes. No "coming soon" placeholders inside it. Small
+6. Build the **whole module** the brief describes. No "coming soon" placeholders inside it. Small
    commits as you go (conventional prefixes: `feat:`/`fix:`), but **do not push until the sweep
    is green** - every push to `main` cuts a release.
-6. Debug builds must log the state transitions the tests assert on (`overlay ->`, `tuned ->`,
+7. Debug builds must log the state transitions the tests assert on (`overlay ->`, `tuned ->`,
    `focus ->`, `settings ->` etc. per the brief). That logging is part of the module, not extra.
 
 ## Sweep
 
-7. Run the machine-verifiable list top to bottom via `adb shell input keyevent` + `adb logcat`.
-   Log every failure with the key sequence and the log lines seen vs. expected. **Do not stop to
-   fix the first one.** Screenshots only to diagnose a failure you can't explain from logs.
-8. Fix everything that failed. One build. Sweep again from the top. Repeat until green.
+8. Run the machine-verifiable list top to bottom via `scripts/tv-test.sh` + `adb logcat`. Log
+   every failure with the key sequence and the log lines seen vs. expected. **Do not stop to fix
+   the first one.** Screenshots only to diagnose a failure logs can't explain - never for routine
+   "where is focus now" checks (that's `uiautomator` via the helper).
+9. **"Blocking" means one thing only:** later test cases *cannot be executed* without the fix.
+   Wrong-focus-landing, cosmetic, and data failures are not blocking - log and carry them. When
+   genuinely blocked, apply the *smallest* change that unblocks, rebuild once, and keep sweeping.
+   Do not iterate that fix toward polish, and do not re-verify it in isolation - it gets verified
+   by the next full pass like everything else.
+10. Fix everything that failed. One build. Sweep again from the top. Repeat until green.
+    **Hard cap: 3 debug builds per sweep pass.** If you're about to do a 4th, stop, write what
+    you know to `docs/plans/SPRINT_LOG.md`, and tell the user - that's a re-plan, not a retry.
+11. Any departure from the sweep order (a mid-sweep fix, an extra build) gets a one-line
+    `deviated: <why>` in the sprint's `SPRINT_LOG.md` entry, at the time it happens. Sprint 1
+    drifted into fix-as-you-go without noticing; this line is what makes it visible.
 
 ## Hand-off
 
-9. Uninstall the debug build. Push to `main`, wait for CI (`gh run watch`), confirm the release
+12. Uninstall the debug build. Push to `main`, wait for CI (`gh run watch`), confirm the release
    exists, then install **that** APK on the device (download it with `gh release download`) so
    OTA keeps working from here. Verify `versionName` on the device matches the new release.
-10. Update the brief's status / "what actually happened" section and the PHASE status board.
+13. Update the brief's status / "what actually happened" section and the PHASE status board.
     Append a dated entry to `docs/plans/SPRINT_LOG.md`: what was built, sweep results per pass,
-    the release tag, and anything deferred (also add deferred items to `AGENTS.md`'s Backlog).
-11. Give the user the **feel/vision list only** - short, numbered, one line each, tagged with
+    how many debug builds it took and every `deviated:` line, the release tag, and anything
+    deferred (also add deferred items to `AGENTS.md`'s Backlog). Note: the debug/release swap
+    wipes the device's app data - say so in the hand-off so the user isn't surprised by the
+    Onboarding screen.
+14. Give the user the **feel/vision list only** - short, numbered, one line each, tagged with
     what to look at. Not a bug report, not a summary of the sweep. If you can send a push
     notification or a file to the user from this session, do so with that list.
 
