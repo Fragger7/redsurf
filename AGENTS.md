@@ -215,15 +215,18 @@ next screen with more than one focusable column.
   on already-loaded data, since import-time fields are written once and don't retroactively
   correct themselves. Real playlist management (list, remove, re-sync one) belongs with the
   Settings redesign already planned above, not bolted on ad hoc.
-- **GroupsColumn RIGHT entry into Channels: first channel or vertically-parallel one?** (user
-  question, 2026-09-12): pressing RIGHT from a category currently lands wherever Compose's default
-  directional focus search resolves to (in practice, whatever's roughly parallel to the category
-  you left) - this was never a deliberate design choice, just the unengineered default, since
-  `onGroupFocused` clears `focusedChannel` to null on every group switch (`LiveTvScreen.kt`) and
-  nothing else claims focus for that first entry. Undecided whether "parallel row" or "always the
-  first channel" (closer to TiviMate/most TV UIs' own convention of resetting a list to its top on
-  a fresh selection) is more correct - ask the user before building either, since it's a real
-  product/UX decision, not a bug with one obviously-correct fix.
+- **GroupsColumn RIGHT/OK entry into Channels must focus the first channel - DECIDED** (user,
+  2026-09-13, resolving the 2026-09-12 open question below). Currently, RIGHT/OK from a category
+  lands wherever Compose's default directional focus search resolves to (in practice, whatever's
+  roughly parallel to the category you left, described by the user as "random, doesn't make
+  sense") - never a deliberate choice, just the unengineered default, since `onGroupFocused`
+  clears `focusedChannel` to null on every group switch (`LiveTvScreen.kt`) and nothing else
+  claims focus for that first entry. **Decision: always the first channel in the category**,
+  matching TiviMate/most TV UIs' convention of resetting a list to its top on a fresh selection -
+  not built yet, needs a `ChannelsColumn` entry-redirect the same shape as its own
+  `returnFocusRequester` mechanism (or `SettingsPane`'s `firstRowFocus`/`hadFocus` pattern from
+  the Settings sprint - same fix, third place it'd apply). *(Original 2026-09-12 framing, for
+  context: undecided whether "parallel row" or "always first" was more correct - now settled.)*
 - **Settings: LEFT/Back from the pane land on the rail's nearest row, not necessarily the
   category you started from** (found live, 2026-09-13, Settings sprint - `SPRINT_LOG.md`'s entry
   has the full account). Mirror of the GroupsColumn item just above - `FocusManager.moveFocus`
@@ -238,6 +241,32 @@ next screen with more than one focusable column.
   meant to catch. `SettingsScreen.kt` now uses explicit `onPreviewKeyEvent` interception instead
   (matching `PlayerScreen.kt`'s router). Worth knowing before reaching for `focusProperties.exit`
   as the go-to fix for a focus-escape bug elsewhere - it may not behave as documented here.
+- **Settings' category rail doesn't scroll** (user found, 2026-09-13, feel/vision pass on
+  `v0.27.0`): the last row ("About") is visibly cut off and DOWN does nothing once focus reaches
+  it - real bug, not a taste call. Root cause: `CategoryRail` (`SettingsScreen.kt`) lays out all
+  nine rows in a plain `Column`, not a `TvLazyColumn` - every other real list in this app
+  (`GroupsColumn`, `ChannelsColumn`, `SettingsPane` itself) uses `TvLazyColumn`, which scrolls to
+  keep focus on-screen for free; the rail was written as a plain `Column` since nine fixed rows
+  never needed paging, but that also means nothing scrolls the viewport when they overflow the
+  card's height. Fix is almost certainly swapping it to `TvLazyColumn` for consistency with every
+  other column in the app, not a bespoke scroll solution - low-risk, but not done yet per the
+  user's explicit "log only, don't fix now."
+- **About: add a "Created by" row** (user idea, 2026-09-13): "Created By: Faraz Ahmad, or
+  something more accurate of a role" - the user wasn't sure of the exact title to use. Add
+  alongside the existing Version/Check for updates rows in `SETTINGS.md`'s About table; confirm
+  wording with the user before building (a live row's label is real copy, not a placeholder).
+- **Recent-channel tile selection across categories: Back returns focus to the wrong category**
+  (user found, 2026-09-13): watching a channel in category X, opening the tile row and picking a
+  *recent* channel that belongs to a different category Y, then pressing Back to leave
+  fullscreen - focus lands back on category X (the one playback started in), not Y (the channel
+  actually now playing). Root cause (read, not yet fixed): `PlayerScreen`'s tile select and
+  `LiveTvScreen`'s zap path both call `onChannelChanged`, which updates `focusedChannel` but never
+  `selectedGroup`/`queriedGroup` - so `ChannelsColumn` is still showing category X's paged list
+  when fullscreen closes, `returnFocusRequester`'s search for the new channel's id finds no
+  matching row in it (the new channel isn't in that list at all), fails silently, and default
+  focus picking falls back to whatever's already selected - category X. Same state/focus
+  discipline class as every other bug in this section; fix is making a channel change from inside
+  the player also update `selectedGroup` to that channel's actual group, not just `focusedChannel`.
 
 ## The one rule that matters
 

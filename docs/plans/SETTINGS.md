@@ -42,7 +42,7 @@ Live rows are the ones that exist and work today. **Everything else is a grey ro
 | **Remote control** | — | Long-press OK · Context menu / Digit keys · Channel number entry |
 | **Parental controls** | — | PIN · Not set / Hidden groups · none |
 | **Other** | — | Backup & restore / Clear watch history / Diagnostics & logs |
-| **About** | Version (`BuildConfig.VERSION_NAME`) · Check for updates + inline status (moved here from the top of the old screen - this is where people look for it) | Auto-update · On |
+| **About** | Version (`BuildConfig.VERSION_NAME`) · Check for updates + inline status (moved here from the top of the old screen - this is where people look for it) | Auto-update · On / **Created by · Faraz Ahmad** (user idea, 2026-09-13 - exact wording/role not yet confirmed) |
 
 Where a grey row's feature is already in `AGENTS.md`'s backlog, this table is now the canonical
 home for it; keep the two in sync (backlog entry says which Settings row it becomes).
@@ -55,8 +55,10 @@ home for it; keep the two in sync (backlog entry says which Settings row it beco
   UI: a tester can never land on fiction.
 - **A category with zero live rows** (EPG, Parental controls, Remote control, Other today):
   RIGHT from the rail has nowhere to go, so focus stays on the rail. That is correct - and it is
-  exactly the focus-escape shape hunted in the player on 2026-09-12, so the shell carries the
-  same `focusProperties { exit = Cancel }` trap the player does, from its first commit.
+  exactly the focus-escape shape hunted in the player on 2026-09-12. *(As built, 2026-09-13: not
+  via the `focusProperties { exit = Cancel }` trap this line originally specified - that turned
+  out to behave inconsistently by direction in practice and was replaced with explicit
+  `onPreviewKeyEvent` interception. Same intent, different mechanism - see `SPRINT_LOG.md`.)*
 - **Flipping a row live** is: make it focusable, wire the value, give OK an action. Nothing
   about its position or label changes. Log it under the category in this file.
 
@@ -93,13 +95,27 @@ home for it; keep the two in sync (backlog entry says which Settings row it beco
 Build this **before** the Player sprint - it is small, self-contained, and gives #2.5's "Resume
 last channel" toggle a real row to land in rather than another stub. Sonnet-lane.
 
-## Status: built and machine-swept, 2026-09-13
+## Status: built, swept, and feel/vision-reviewed, 2026-09-13
 
 All 7 machine-verifiable acceptance lines pass, on device, over two sweep passes - three real
 bugs found and fixed along the way (LEFT-to-rail navigation, focus lost on confirm dialogs, and
 a pre-existing bug where removing the last playlist never returned to Onboarding). Full account:
-`docs/plans/SPRINT_LOG.md`'s 2026-09-13 entry. The 4 feel/vision items above are now yours to
-judge - not yet looked at with real eyes. One open question surfaced during the sweep, logged in
-`AGENTS.md`'s Backlog: LEFT/Back from the pane return to the rail's *nearest* row, not
-necessarily the category you started from (same ambiguity as the existing GroupsColumn
-backlog item, mirrored).
+`docs/plans/SPRINT_LOG.md`'s 2026-09-13 entry.
+
+**Feel/vision results (user, same day):**
+1. Two-pane layout: **good first draft, close to StreamVault.** Textual parity with TiviMate's
+   own copy per row not yet individually verified.
+2. Grey rows: **clear enough** - not visually heavy-grey, but focus skipping them reads as
+   "disabled" unambiguously. No change requested.
+3. "Check for updates" location: **confirmed correct.** Two follow-ups from this question, both
+   logged in `AGENTS.md`'s Backlog: (a) the rail doesn't scroll - "About" is cut off and DOWN
+   can't reach it, a real bug, not a taste call; (b) add a "Created by" row to About (this file's
+   table above).
+4. Rail tile treatment: not yet judged - the user asked what the question referred to rather
+   than answering it. Re-ask once the scroll bug (3a) is fixed, since it currently affects
+   whether "About" (bottom of the rail) is even visible to judge.
+5. Not answered as asked (LEFT/Back's nearest-row landing) - the user redirected to two unrelated
+   Live TV bugs instead, both logged in `AGENTS.md`'s Backlog: the GroupsColumn RIGHT/OK-entry
+   question is now **decided** (always the first channel), and a new one was found (recent-channel
+   tile selection across categories doesn't update `selectedGroup`, so Back lands on the wrong
+   category). The original question here is still open - re-ask separately.
