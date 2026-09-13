@@ -156,14 +156,42 @@ working only because its dispatcher doesn't need focus). Every overlay/modal sta
 internally needs the same explicit reclaim-on-close this rule already asks for at the screen
 level - not just once, at the door.
 
-**Known, not yet fixed:** moving focus away from a column (e.g. Categories) and back (e.g. into
-Channels) via LEFT/RIGHT doesn't restore the exact row you left - it lands wherever directional
-search resolves to from the new focus position, not "the same one as before." Needs a real
-"remember focus per column, restore on re-entry" mechanism (an `onFocusChanged` at the column
-level detecting entry-from-outside vs. movement-within, redirecting carefully to avoid focus-
-loop bugs) - deliberately not rushed alongside the fullscreen-specific fix that inspired this
-rule, since a hasty version risks new focus bugs of its own. Backlog item for whoever builds the
-next screen with more than one focusable column.
+**DECIDED, 2026-09-13 - deterministic return, never spatial-nearest.** Every case below where
+leaving a region and coming back doesn't restore the *exact* item the user was on - it just lands
+wherever directional search or `FocusManager.moveFocus` resolves to from the new position - is a
+bug to fix the same way, not a per-case judgment call anymore. Basis: the user tested real
+TiviMate specifically for this (drilling into a settings category and hitting Back correctly
+refocuses that exact category, even though TiviMate's own settings isn't a multi-pane layout);
+it also matches documented practice (Android TV's own "10-foot UI" focus guidelines, equivalent
+console UX guidelines, and the general consistency/recognition-over-recall heuristic) and this
+project's own binding rule above, arrived at independently. Applies wherever this pattern exists
+in the app, not just where it's been individually reported - check for it as part of "state and
+focus discipline," the same way this whole section already asks.
+
+Known instances, all still open (decided *what*, not yet built):
+- **Live TV: Categories ↔ Channels via LEFT/RIGHT** doesn't restore the exact row you left -
+  it lands wherever directional search resolves to from the new focus position. Needs a real
+  "remember focus per column, restore on re-entry" mechanism (an `onFocusChanged` at the column
+  level detecting entry-from-outside vs. movement-within, redirecting carefully to avoid focus-
+  loop bugs) - deliberately not rushed alongside the fullscreen-specific fix that inspired this
+  rule originally, since a hasty version risks new focus bugs of its own.
+- **Settings: LEFT/Back from the pane back to the rail** (Settings sprint, 2026-09-13,
+  `SPRINT_LOG.md`) - lands on the rail's spatially-nearest row via `FocusManager.moveFocus`, not
+  necessarily the category just left. Likely cheaper to fix than it first looked: the pane-entry
+  redirect already in `SettingsScreen.kt` (`SettingsPane`'s `hadFocus`/`firstRowFocus` - land
+  wherever by default, then redirect once already inside the target region) sidesteps the
+  `requestFocus()`-vs-focus-guard conflict that broke a direct fix mid-sprint; the same shape run
+  in reverse on `CategoryRail` (redirect to the row matching `selectedCategory` once focus has
+  already landed somewhere on the rail, not while still crossing into it) should too.
+- **Recent-channel tile selection across categories → Back lands on the wrong category** (found
+  live, 2026-09-13, same session) - a stricter version of the same bug: `selectedGroup` never
+  even gets updated when a channel change originates from inside the player (only `focusedChannel`
+  does), so there's no "restore" to attempt at all yet - fixing that data gap is the prerequisite
+  before this one can be fixed the same way as the other two.
+
+All three are backlog items - pick up whichever is most relevant when next touching that screen,
+or do all three together as their own small pass; apply the same discipline to any future screen
+with more than one focusable region, not just these.
 
 ## Backlog - explicitly logged, not forgotten
 
@@ -233,13 +261,11 @@ next screen with more than one focusable column.
   `returnFocusRequester` mechanism (or `SettingsPane`'s `firstRowFocus`/`hadFocus` pattern from
   the Settings sprint - same fix, third place it'd apply). *(Original 2026-09-12 framing, for
   context: undecided whether "parallel row" or "always first" was more correct - now settled.)*
-- **Settings: LEFT/Back from the pane land on the rail's nearest row, not necessarily the
-  category you started from** (found live, 2026-09-13, Settings sprint - `SPRINT_LOG.md`'s entry
-  has the full account). Mirror of the GroupsColumn item just above - `FocusManager.moveFocus`
-  resolves to whatever's spatially nearest, and a deterministic "return to exactly this category"
-  redirect isn't available without reintroducing a real `requestFocus()`-vs-focus-trap bug this
-  same sprint hit and fixed (see `SettingsScreen.kt`'s doc comments). Same call as GroupsColumn's:
-  ask the user before building a fix, not a bug with one obviously-correct answer.
+- **Settings: LEFT/Back from the pane land on the rail's nearest row, not the category you
+  started from** - no longer an open question, decided alongside its Live TV twin and a third
+  instance; see "State and focus discipline" above ("DECIDED, 2026-09-13 - deterministic return,
+  never spatial-nearest") for the full list, the TiviMate/UX-guideline rationale, and the likely
+  fix shape for this one specifically.
 - **`focusProperties { exit = ... }` behaved inconsistently by direction, at least in the Compose/
   tv-foundation versions this project pins** (found live, 2026-09-13, Settings sprint): it blocked
   an explicit `FocusRequester.requestFocus()` call even when the destination was still inside the
@@ -262,10 +288,12 @@ next screen with more than one focusable column.
   alongside the existing Version/Check for updates rows in `SETTINGS.md`'s About table; confirm
   wording with the user before building (a live row's label is real copy, not a placeholder).
 - **Recent-channel tile selection across categories: Back returns focus to the wrong category**
-  (user found, 2026-09-13): watching a channel in category X, opening the tile row and picking a
-  *recent* channel that belongs to a different category Y, then pressing Back to leave
-  fullscreen - focus lands back on category X (the one playback started in), not Y (the channel
-  actually now playing). Root cause (read, not yet fixed): `PlayerScreen`'s tile select and
+  (user found, 2026-09-13) - the third instance of "State and focus discipline"'s now-decided
+  deterministic-return principle above, but with an extra prerequisite (see there): watching a
+  channel in category X, opening the tile row and picking a *recent* channel that belongs to a
+  different category Y, then pressing Back to leave fullscreen - focus lands back on category X
+  (the one playback started in), not Y (the channel actually now playing). Root cause (read, not
+  yet fixed): `PlayerScreen`'s tile select and
   `LiveTvScreen`'s zap path both call `onChannelChanged`, which updates `focusedChannel` but never
   `selectedGroup`/`queriedGroup` - so `ChannelsColumn` is still showing category X's paged list
   when fullscreen closes, `returnFocusRequester`'s search for the new channel's id finds no
