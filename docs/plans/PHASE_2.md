@@ -5,8 +5,8 @@
 | # | Task | State |
 |---|---|---|
 | 2.1 | `PlayerScreen`: key router, overlay state machine, Back peeling, scrim | ✅ done & build-verified |
-| 2.2 | Zap: neighbour queries, UP/DOWN, zap banner, stream badges, no-black-screen | ⬜ not started |
-| **A** | **Checkpoint — user tests entry, zap, OK overlay skeleton, Back** | ⬜ |
+| 2.2 | Zap: neighbour queries, UP/DOWN, zap banner, stream badges, no-black-screen | ✅ done & device-verified (multiple live-bug rounds through 2026-09-12, incl. real tvg-chno numbering) |
+| **A** | **Checkpoint — user tests entry, zap, OK overlay skeleton, Back** | 🟡 in progress - several real bugs found + fixed live 2026-09-12 (focus loss, zap dead-stop, channel numbering); awaiting a clean pass to close |
 | 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | 🟡 info block + tile row + History picker done; actions/other pickers remain |
 | 2.4 | LEFT channel-list overlay, RIGHT last-channel zap, long-press context menu | ⬜ not started |
 | 2.5 | Recents + last-channel: table, real migration 6→7, History tile, resume setting | ⬜ not started |
