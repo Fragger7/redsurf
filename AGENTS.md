@@ -231,6 +231,29 @@ with more than one focusable region, not just these.
   rather than jumping straight to Home from anywhere. Good idea, not built - scope it first to
   Live TV's own columns (which have a real spatial relationship) rather than a fully general
   breadcrumb stack across every destination (Settings, Search, etc. aren't spatial the same way).
+  **New evidence, 2026-09-13 (Settings feel/vision pass):** the flat hop is now visibly worse in
+  Settings than it first looked - Back from deep in Settings lands on Home, a placeholder with
+  nothing built (see the next two entries for what that Currently does to focus), so the user
+  hit it live and asked outright whether Back should land on Home or Settings here. Current
+  behavior is the existing, documented, deliberate design (`AppShell.kt`: Back always flat-hops
+  to Home) - not a new bug, but this is the second independent report asking for something better,
+  which is real signal toward prioritizing the fix above rather than more scope-narrowing.
+- **`PlaceholderScreen` (Home, and every other unbuilt destination) never claims initial focus,
+  and has no visible focus state at all** (user found, 2026-09-13, chasing the Back-to-Home report
+  above). Two stacked violations of already-binding rules, not one: it's `.focusable()` (so
+  something *can* land there) but nothing ever calls `requestFocus()` on it the way every real
+  screen does (`GroupsColumn`, `SettingsScreen`'s rail, etc.) - state/focus discipline above says
+  every screen must; and even when it does hold real Compose focus, it's a plain `Box`, not a
+  themed `Surface` with `RedSurfFocus` styling, so there is no ring/glow to see it - **Binding
+  technical constraint #4** below ("every focusable element needs a visible focus state") in
+  plain violation. Net effect, confirmed live: after Back-to-Home, nothing *looks* focused (though
+  the Box actually holds real focus, invisibly) until the first arrow key, which then jumps
+  focus to whichever NavStrip pill default search resolves to - not deterministically "Home," the
+  pill actually representing where you are (a fourth instance of the deterministic-return
+  question above, once Home has real initial focus to return *to*). Concrete, well-scoped fix:
+  give `PlaceholderScreen` the same `FocusRequester` + claim-on-compose pattern every real screen
+  already has, and route it through a real (even if inert) `Surface`/`RedSurfFocus` so it's
+  visible - cheap, and removes an entire category of "where did my focus go" reports at once.
 - **Channel rows aren't playlist-scoped in their primary key** (found live, 2026-09-12, while
   chasing the zap-numbering bug): `ChannelEntity.streamId` alone is `@PrimaryKey`, not composite
   with `playlistId`, and `insertChannels` uses `OnConflictStrategy.REPLACE` - re-adding the same
@@ -273,6 +296,21 @@ with more than one focusable region, not just these.
   meant to catch. `SettingsScreen.kt` now uses explicit `onPreviewKeyEvent` interception instead
   (matching `PlayerScreen.kt`'s router). Worth knowing before reaching for `focusProperties.exit`
   as the go-to fix for a focus-escape bug elsewhere - it may not behave as documented here.
+- **Settings rail: UP at the top row (General) is blocked from reaching NavStrip; the pane's own
+  top row isn't** (user found, 2026-09-13, feel/vision pass) - an inconsistency, and the user's
+  report reads as "this is wrong," not "this is right": UP from the *pane*'s top live row (e.g.
+  Playlists' "Remove") correctly reaches the top ribbon, but UP from the *rail*'s top row doesn't,
+  even though both are the same screen. Root cause: `SettingsScreen.kt`'s `onPreviewKeyEvent`
+  guard explicitly blocks `Key.DirectionUp` while on the rail at
+  `SettingsCategory.entries.first()` - the pane side has no equivalent guard at all and simply
+  relies on default `moveFocus()`, which is what's actually reaching NavStrip successfully. That
+  rail guard was added by direct analogy to `PlayerScreen.kt`'s fullscreen escape-prevention
+  without separately confirming Settings needed the same treatment - fullscreen video has no
+  visible NavStrip to sensibly land on, but Settings does, so the cases aren't equivalent. Likely
+  fix: drop the `DirectionUp`/rail-top-row branch of that guard (the `DirectionDown`/rail-bottom
+  and `DirectionRight`/empty-pane branches are unrelated and still needed) so the rail matches the
+  pane - then, per the deterministic-return decision above, make sure it lands specifically on
+  the *Settings* pill, not whichever NavStrip pill default search happens to resolve to.
 - **Settings' category rail doesn't scroll** (user found, 2026-09-13, feel/vision pass on
   `v0.27.0`): the last row ("About") is visibly cut off and DOWN does nothing once focus reaches
   it - real bug, not a taste call. Root cause: `CategoryRail` (`SettingsScreen.kt`) lays out all
