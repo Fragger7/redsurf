@@ -54,4 +54,7 @@ from. Same open ambiguity as the existing "GroupsColumn RIGHT entry" backlog ite
 mirror direction; deterministic redirect isn't possible here without reintroducing the
 `requestFocus()` bug above, so it's a product decision, not a bug with an obvious fix.
 
-**Release:** `v0.26.2` (pending this handoff's push).
+**Release:** `v0.27.0` - installed and version-verified on the Chromecast, signature confirmed
+against the release key. Device was fully wiped during the sprint's debug/release swap (expected,
+per the sprint protocol) - it's back on the Onboarding screen; needs a playlist added before the
+feel/vision pass.
