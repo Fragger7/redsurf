@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -89,6 +90,35 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val appPreferences = remember { AppPreferences(prefsContext) }
     val blackScreenBetweenZaps by appPreferences.blackScreenBetweenZaps.collectAsState()
     val showRawResolution by appPreferences.showRawResolution.collectAsState()
+    val resumeLastChannelOnLaunch by appPreferences.resumeLastChannelOnLaunch.collectAsState()
+
+    // Resume-last-channel-on-launch restore (AGENTS.md backlog, user decision 2026-09-15: land on
+    // Live TV with it pre-selected, not a forced auto-play - opening it is the same OK-on-a-
+    // focused-channel action as any other channel). LaunchedEffect(Unit) - fires exactly once,
+    // this composable's first composition (cold app launch), never again on recomposition, so a
+    // deliberate category/channel change later in the session is never overwritten by this.
+    // Looks the persisted (playlistId, streamId) pair up against the real channel table rather
+    // than trusting it blindly - the channel may be gone (playlist re-imported, provider dropped
+    // it), in which case this is a no-op and LiveTvScreen's own "first group" default applies,
+    // same as any other stale-reference case in this app.
+    LaunchedEffect(Unit) {
+        if (!resumeLastChannelOnLaunch) return@LaunchedEffect
+        val (playlistId, streamId) = appPreferences.getLastWatchedChannel() ?: return@LaunchedEffect
+        val channel = viewModel.repository.getChannel(playlistId, streamId) ?: return@LaunchedEffect
+        liveTvSelectedGroup = GroupKey(channel.playlistId, channel.groupName)
+        liveTvFocusedChannel = channel
+    }
+
+    // The write side of the same feature - records whatever channel is actually playing
+    // (`liveTvFullscreen`, not just browse-focused - resuming into whatever you idly scrolled
+    // past while browsing would be wrong) every time it changes, independent of whether the
+    // toggle is currently on. That way turning the toggle on later doesn't start from nothing.
+    LaunchedEffect(liveTvFocusedChannel, liveTvFullscreen) {
+        val channel = liveTvFocusedChannel
+        if (liveTvFullscreen && channel != null) {
+            appPreferences.setLastWatchedChannel(channel.playlistId, channel.streamId)
+        }
+    }
 
     // BACKLOG_SWEEP.md #8: excluded while Live TV's own Channels column holds focus, mirroring
     // the fullscreen exclusion right below it - LiveTvScreen owns its own BackHandler for that
@@ -149,6 +179,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     showRawResolution = showRawResolution,
                     onToggleShowRawResolution = {
                         appPreferences.setShowRawResolution(!showRawResolution)
+                    },
+                    resumeLastChannelOnLaunch = resumeLastChannelOnLaunch,
+                    onToggleResumeLastChannelOnLaunch = {
+                        appPreferences.setResumeLastChannelOnLaunch(!resumeLastChannelOnLaunch)
                     },
                 )
             }

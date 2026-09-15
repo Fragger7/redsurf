@@ -50,4 +50,8 @@ class ChannelRepository(
     /** Zap-order diagnostics (AGENTS.md, 2026-09-14 mini-sprint) - see `ChannelDao.firstNInGroup`. */
     suspend fun debugFirstInGroup(playlistId: String, groupName: String, limit: Int = 30): List<ChannelEntity> =
         channelDao.firstNInGroup(playlistId, groupName, limit)
+
+    /** Resume-last-channel-on-launch (AGENTS.md backlog, 2026-09-15) - see `ChannelDao.getChannel`. */
+    suspend fun getChannel(playlistId: String, streamId: String): ChannelEntity? =
+        channelDao.getChannel(playlistId, streamId)
 }

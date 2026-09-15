@@ -25,6 +25,13 @@ interface ChannelDao {
     @Query("SELECT * FROM channels WHERE groupId = :groupId AND isHidden = 0 ORDER BY num, name")
     fun getChannelsByGroup(groupId: String): Flow<List<ChannelEntity>>
 
+    /** Resume-last-channel-on-launch (AGENTS.md backlog, 2026-09-15) - the one lookup that needs
+     * a channel by its composite key directly, not a group/paging query. Null if the persisted
+     * channel is gone (playlist re-imported, channel removed) - the caller falls back to the
+     * normal first-group default, same as any other "stale reference" case in this app. */
+    @Query("SELECT * FROM channels WHERE playlistId = :playlistId AND streamId = :streamId LIMIT 1")
+    suspend fun getChannel(playlistId: String, streamId: String): ChannelEntity?
+
     /**
      * Across every loaded playlist, not just one - see [GroupCount]. Joined to `playlists` for
      * the display name; grouped by (playlistId, groupName) so same-named groups from different

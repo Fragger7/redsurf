@@ -104,6 +104,9 @@ fun SettingsScreen(
     onToggleBlackScreenBetweenZaps: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
+    // AGENTS.md backlog, 2026-09-15 - same AppPreferences pattern as the two above.
+    resumeLastChannelOnLaunch: Boolean,
+    onToggleResumeLastChannelOnLaunch: () -> Unit,
 ) {
     val railFocus = remember { FocusRequester() }
     val paneFirstRowFocus = remember { FocusRequester() }
@@ -145,10 +148,13 @@ fun SettingsScreen(
     // entirely [SETTINGS_GREY_ROWS] today.
     // Playback and Appearance joined this list (BACKLOG_SWEEP.md #11/#12) - each now has exactly
     // one live toggle row alongside its grey ones.
+    // General joined this list too (AGENTS.md backlog, 2026-09-15) - "Resume last channel on
+    // launch" is now its one live toggle row.
     val hasLiveContent = selectedCategory == SettingsCategory.Playlists ||
         selectedCategory == SettingsCategory.About ||
         selectedCategory == SettingsCategory.Playback ||
-        selectedCategory == SettingsCategory.Appearance
+        selectedCategory == SettingsCategory.Appearance ||
+        selectedCategory == SettingsCategory.General
 
     Row(
         modifier = Modifier
@@ -200,6 +206,8 @@ fun SettingsScreen(
             onToggleBlackScreenBetweenZaps = onToggleBlackScreenBetweenZaps,
             showRawResolution = showRawResolution,
             onToggleShowRawResolution = onToggleShowRawResolution,
+            resumeLastChannelOnLaunch = resumeLastChannelOnLaunch,
+            onToggleResumeLastChannelOnLaunch = onToggleResumeLastChannelOnLaunch,
             firstRowFocus = paneFirstRowFocus,
             onFocusChanged = { focusInPane = it },
             modifier = Modifier.weight(1.8f),
@@ -348,6 +356,8 @@ private fun SettingsPane(
     onToggleBlackScreenBetweenZaps: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
+    resumeLastChannelOnLaunch: Boolean,
+    onToggleResumeLastChannelOnLaunch: () -> Unit,
     firstRowFocus: FocusRequester,
     onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -374,6 +384,11 @@ private fun SettingsPane(
         )
         TvLazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             when (category) {
+                SettingsCategory.General -> generalContent(
+                    resumeLastChannelOnLaunch = resumeLastChannelOnLaunch,
+                    onToggle = onToggleResumeLastChannelOnLaunch,
+                    firstRowFocus = firstRowFocus,
+                )
                 SettingsCategory.Playlists -> playlistsContent(
                     playlists = playlists,
                     onAddPlaylist = onAddPlaylist,
@@ -603,6 +618,25 @@ private fun TvLazyListScope.aboutContent(
         )
     }
     items(ABOUT_GREY_ROWS) { GreyRowContent(it) }
+}
+
+/** General (`AGENTS.md` backlog, 2026-09-15): one live toggle - land on Live TV with the last-
+ * watched channel pre-selected on launch, not a forced auto-play - ahead of its remaining grey
+ * rows, same layering as every other category's live-rows-then-grey-rows shape. */
+private fun TvLazyListScope.generalContent(
+    resumeLastChannelOnLaunch: Boolean,
+    onToggle: () -> Unit,
+    firstRowFocus: FocusRequester,
+) {
+    item {
+        LiveRow(
+            label = "Resume last channel on launch",
+            value = if (resumeLastChannelOnLaunch) "On" else "Off",
+            onClick = onToggle,
+            modifier = Modifier.focusRequester(firstRowFocus),
+        )
+    }
+    items(SETTINGS_GREY_ROWS[SettingsCategory.General].orEmpty()) { GreyRowContent(it) }
 }
 
 /** Playback (`BACKLOG_SWEEP.md` #11): one live toggle - the "old cable box" black-screen-between-
