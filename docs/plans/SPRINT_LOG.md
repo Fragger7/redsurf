@@ -2,6 +2,45 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-14 — Zap UP/DOWN order mini-sprint (`AGENTS.md` backlog entry as brief)
+
+**Builds this pass: 1** (well under the 3-build cap). **Deviations: none** - straight setup →
+build → sweep → hand-off, no mid-sweep fixes needed.
+
+**Setup:** debug/release swap as usual. Seeded via the Xtream API path (`scripts/tv-test.sh
+seed_playlist xtream`), not M3U - **~30s to "Importing 13500 channels..." vs. the ~3-4 minutes
+the M3U path took every time in sprint 1.** One transient `HTTP 000` on the very first seed
+attempt (curl fired before the pairing server had fully bound right after relaunch) - retried
+immediately, succeeded. Worth a beat of settle time after `relaunch` before seeding in future
+sprints, not a real bug.
+
+**Built:** the direction flip (`PlayerScreen.zap`: UP → `nextChannel`, DOWN → `prevChannel`,
+was backwards) plus permanent diagnostic logging - `ChannelDao.firstNInGroup` /
+`ChannelRepository.debugFirstInGroup` (group snapshot, capped at 30, same order as the real
+queries), and two `Log.d` lines: the group snapshot on entering fullscreen, and
+`zap dir=<up|down> from=(<num> <name>) -> to=(<num> <name>) group=<groupName>` on every zap.
+
+**Sweep, one pass, clean:**
+- Group snapshot, "AF | AFRICA" (175 channels, real Xtream data): confirmed sequential
+  `num` 24180-24354 with country-separator pseudo-channels inline (e.g. "##### AF - GHANA #####")
+  - a genuine provider-organization quirk, not a data bug.
+- 10× UP from 24180: `24180→24181→24182→24183→24184→24185→24186→24187→24188→24189→24190` - every
+  step +1, zero repeats/skips/reversals.
+- 10× DOWN from 24190: exact reverse back to 24180 - same zero-defect trace.
+- Wrap-around: DOWN from the group's lowest (24180) → 24354 (the group's highest, "AF - FRANCE
+  24"); UP from there → back to 24180. Both correct (`lastInGroup`/`firstInGroup` fallback).
+
+Full logs (20-press trace + wrap-around) are in the session transcript; not duplicated here -
+see `AGENTS.md`'s updated zap-order entry for the summary and what's still open.
+
+**Hand-off:** debug uninstalled, release verified signed (fake-version local check), pushed,
+CI green, release installed and version-verified on the Chromecast.
+
+**Release:** pending this entry's own push (see version below once tagged).
+
+**Feel/vision for the user:** does UP/DOWN zapping now feel like TiviMate on your real list, not
+just this one 175-channel test group? That's the one thing this sprint couldn't measure for you.
+
 ## 2026-09-13 — Settings shell (`docs/plans/SETTINGS.md`)
 
 **Built:** the full two-pane shell - `SettingsCategory.kt` (taxonomy + grey-row tables),

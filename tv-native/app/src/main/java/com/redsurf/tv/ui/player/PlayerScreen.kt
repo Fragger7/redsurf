@@ -137,17 +137,47 @@ fun PlayerScreen(
     // - rather than copy the dead stop, an UP/DOWN with nowhere left to navigate to falls through
     // to changing the channel, exactly like Level 0's own UP/DOWN). Shows the zap banner the same
     // way regardless of which overlay state triggered it.
+    //
+    // Direction corrected 2026-09-14 (AGENTS.md, user verified against real TiviMate): UP must
+    // increment (go to the next *higher* channel number), DOWN decrement - PHASE_2.md decision 3
+    // originally had this backwards (UP -> prevChannel), which is exactly what read as "up means
+    // down" to the user. UP -> nextChannel, DOWN -> prevChannel, now matching TiviMate.
     fun zap(goingUp: Boolean) {
         overlay = PlayerOverlay.ZapBanner
         val channel = currentChannel ?: return
         scope.launch {
             val next = if (goingUp) {
-                repository.prevChannel(channel.playlistId, channel.groupName, channel.num)
-            } else {
                 repository.nextChannel(channel.playlistId, channel.groupName, channel.num)
+            } else {
+                repository.prevChannel(channel.playlistId, channel.groupName, channel.num)
             }
+            // Zap-order diagnostics (AGENTS.md, 2026-09-14 mini-sprint) - debug builds only in
+            // spirit (this whole app is unreleased-signed-release-only anyway, but this line
+            // exists purely to be grepped out of logcat during the mini-sprint's machine test,
+            // not for any release-path purpose). Format is the one the test script parses.
+            Log.d(
+                TAG,
+                "zap dir=${if (goingUp) "up" else "down"} from=(${channel.num} ${channel.name}) " +
+                    "-> to=${next?.let { "(${it.num} ${it.name})" } ?: "null"} group=${channel.groupName}",
+            )
             next?.let(onChannelChanged)
         }
+    }
+
+    // Zap-order diagnostics (AGENTS.md, 2026-09-14 mini-sprint) - logs the group's own num/name
+    // sequence once, on entering fullscreen, in the exact order the visible channel list and the
+    // zap queries both use (`ORDER BY num, name`) - the reference the machine test compares zap's
+    // actual behavior against. Keyed on Unit, not currentChannel, deliberately: this is "what did
+    // the group look like when this fullscreen session started," not a running log of every
+    // subsequent channel change (the zap log above already covers that).
+    LaunchedEffect(Unit) {
+        val channel = currentChannel ?: return@LaunchedEffect
+        val snapshot = repository.debugFirstInGroup(channel.playlistId, channel.groupName)
+        Log.d(
+            TAG,
+            "group snapshot (${channel.groupName}, ${snapshot.size} shown): " +
+                snapshot.joinToString(", ") { "(${it.num} ${it.name})" },
+        )
     }
 
     // Opening the Tiles floor focuses the first recent channel if any, else TV guide (decision 8)

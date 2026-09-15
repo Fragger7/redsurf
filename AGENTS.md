@@ -364,41 +364,38 @@ with more than one focusable region, not just these.
      buffering/playbackState UI in it). Decision 13's "no black screen" zap deliberately keeps the
      old frame up, which is right, but it needs a small, unobtrusive "tuning" indicator so a slow
      stream reads as loading rather than dead. Same component as 1 and 2, smallest form.
-- **Zap UP/DOWN order - "total chaos", still wrong on v0.27.0 - next: instrument, don't guess**
-  (user, 2026-09-13/14). Two rounds already: the provider-gap theory (wrong), then the real
-  `tvg-chno`-never-parsed bug (fixed v0.25.4 - **but that fix is M3U-only, and the user's
-  provider is Xtream Codes**, where `num` comes straight from the provider's JSON. So round two
-  was correct and irrelevant to this report). Answers on record (2026-09-14): tested on data
-  imported after v0.25.4; Xtream, never M3U; both apps show numbers next to channels; TiviMate
-  steps them in order, RedSurf doesn't; and in TiviMate **UP → higher number, DOWN → lower.**
+- **Zap UP/DOWN order - RESOLVED (pending user re-test), 2026-09-14 mini-sprint.** Was: "total
+  chaos" on v0.27.0, up meaning down, no predictable increment. Root cause was exactly hypothesis
+  1 below, confirmed by instrumented, on-device measurement - not a guess. Two prior rounds: the
+  provider-gap theory (wrong), then the real `tvg-chno`-never-parsed bug (fixed v0.25.4, but
+  M3U-only - this user is Xtream Codes, so that fix never applied to their report).
 
-  **Two facts now certain, one still unknown:**
-  1. *Certain - direction is inverted by design:* Phase 2 decision 3 mapped UP → `prevChannel`
-     (lower `num`). Flip it (`PlayerScreen.zap`: UP → `nextChannel`, DOWN → `prevChannel`).
-     Decision 3 in `PHASE_2.md` amended. This alone explains "up means down."
-  2. *Certain - the numbering fix never applied to this user:* see above. Don't count it.
-  3. *Unknown - the "no predictable increment" part.* Every query path has been read twice
-     (`nextInGroup`/`prevInGroup` are `num > :num ORDER BY num, name LIMIT 1` scoped to the same
-     `playlistId`+`groupName`+`streamType='live'` the visible list uses) and nothing in the code
-     explains chaos. Remaining suspects, none confirmable by reading: mixed real/fallback `num`
-     within one Xtream category (`num ?: fallbackNum` when the provider omits or non-numerics a
-     `num`); duplicate `num` across a category; wrap-around at group edges on a small test group
-     (`nextChannel` → `firstInGroup` past the end, reads as a jump); or `currentChannel` at
-     key-press time not being the channel actually playing (e.g. after a recent-tile pick - see
-     the `selectedGroup` bug above).
+  **What the mini-sprint found:** the direction flip (Phase 2 decision 3 had UP → `prevChannel`,
+  backwards vs. TiviMate's confirmed UP → higher number) was applied, then measured with a
+  logcat-instrumented 20-press test on the real device against live Xtream data (group "AF |
+  AFRICA", 175 channels, `num` 24180-24354, no gaps): **10× UP traced a perfectly clean
+  24180→24181→...→24190, 10× DOWN traced the exact reverse back to 24180 - zero repeats, skips,
+  or reversals.** A follow-up wrap-around check (DOWN past the group's lowest `num`, UP past the
+  highest) also traced perfectly (`lastInGroup`/`firstInGroup` fallback both correct). None of the
+  three "unknown" suspects logged 2026-09-13 (mixed real/fallback `num`, duplicate `num`,
+  wrap-around) reproduced - on this data, the direction flip was the entire bug. One inverted
+  mapping, consistently applied, reads exactly like "random" against a lifetime of opposite
+  TiviMate muscle memory - which is what made it worth measuring instead of re-guessing.
 
-  **The mini-sprint (Sonnet, one debug build, no third code guess first):**
-  - Apply the direction flip (1).
-  - Instrument, debug builds only: on entering fullscreen log the current group's first 30
-    `(num, name)` in list order; on every zap log
-    `zap dir=<up|down> from=(<num> <name>) -> to=(<num> <name>) group=<groupName>`.
-    (`run-as` is broken on this Chromecast, so logcat is the only DB window.)
-  - Machine test, `scripts/tv-test.sh`: seed via Xtream API, open the first channel of a group
-    with ≥ 30 channels, press UP 10× then DOWN 10× with 1s settles, read the log. Expected:
-    each UP → the next higher `num` in that group's list order, each DOWN → the next lower;
-    the 20 lines must trace a clean ascending-then-descending path with no repeats, skips, or
-    reversals. Any deviation is the bug, and the log shows exactly which suspect it is.
-  - Only then fix, one build, re-run the same 20-press test. Hand the user the two logs.
+  **Shipped:** `PlayerScreen.zap` - UP → `nextChannel`, DOWN → `prevChannel`. `PHASE_2.md`
+  decision 3 amended with the correction on record. Diagnostic logging
+  (`zap dir=… from=… -> to=… group=…`, the group-snapshot line, and
+  `ChannelDao.firstNInGroup`/`ChannelRepository.debugFirstInGroup`) shipped too, deliberately -
+  cheap, real Log.d calls with no release-path UI cost, and exactly what the next zap report (if
+  any) should be checked against before writing new code. Two logs (before/after the flip) are in
+  `SPRINT_LOG.md`'s 2026-09-14 entry.
+
+  **Not fully closed:** this is one group on one provider. "Resolved" here means "the mechanism
+  is proven correct and the specific bug reported is fixed," not "guaranteed clean on every
+  group in the user's real ~28K-channel list." If the user hits chaos again after re-testing on
+  v0.27.1+, it's very likely a *different*, group-specific data issue (the three original
+  suspects are still real possibilities for some category, just not this one) - the same
+  instrumentation makes that a fast diagnosis, not a new investigation from zero.
 
 ## The one rule that matters
 

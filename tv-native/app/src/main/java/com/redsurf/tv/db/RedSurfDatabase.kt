@@ -74,6 +74,16 @@ interface ChannelDao {
     )
     suspend fun lastInGroup(playlistId: String, groupName: String): ChannelEntity?
 
+    /** Zap-order diagnostics (AGENTS.md, 2026-09-14 mini-sprint) - the same order/filter as
+     * [getLiveChannelsInGroup] and the zap neighbour queries above, capped, so a debug build can
+     * log "what the app thinks this group's sequence actually is" without loading the whole
+     * group. Debug logging only - never called from release-path UI. */
+    @Query(
+        "SELECT * FROM channels WHERE playlistId = :playlistId AND groupName = :groupName " +
+            "AND streamType = 'live' AND isHidden = 0 ORDER BY num, name LIMIT :limit"
+    )
+    suspend fun firstNInGroup(playlistId: String, groupName: String, limit: Int): List<ChannelEntity>
+
     @Query("SELECT * FROM channels WHERE isFavorite = 1 ORDER BY num, name")
     fun getFavorites(): Flow<List<ChannelEntity>>
 
