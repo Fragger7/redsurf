@@ -18,16 +18,26 @@ the second.
    `$ANDROID_HOME/platform-tools/adb`; the device is `192.172.7.160:35631` - always pass `-s`.
 2. Device: `adb connect`, confirm it answers. If it doesn't within two attempts, **stop** and log
    the blocker (see "Blocked" below) - don't keep retrying.
-3. Record the installed release version (`dumpsys package com.redsurf.tv | grep versionName`),
-   then **uninstall it** and install a debug build (`./gradlew :app:assembleDebug`,
-   `adb install -r -d app/build/outputs/apk/debug/app-debug.apk`). Debug and release can't
-   coexist (different signing keys).
-4. Seed the test playlist via `adb forward tcp:8080 tcp:8080` + `curl` POST to
+3. Record the installed version (`dumpsys package com.redsurf.tv | grep versionName`). Build a
+   debug APK with a `versionCode` higher than what's installed - Android's downgrade protection
+   blocks `-r` otherwise - and install it **without uninstalling anything**:
+   `./gradlew :app:assembleDebug -PversionCode=999 -PversionName=vX.Y.Z-debug`,
+   `adb install -r -d app/build/outputs/apk/debug/app-debug.apk`. Debug builds share the release
+   signing key (2026-09-15 - no live users, single device) specifically so this works in either
+   direction with the device's data intact; there is no more uninstall step in this protocol.
+   **If the install fails on a genuine signature mismatch** (a device that predates this change,
+   or local signing.properties missing) fall back to uninstall-then-install and say so - don't
+   silently wipe without noting it.
+4. Seed the test playlist **only if the device doesn't already have one** (check via a screenshot
+   or the app's own state, not automatically) via `adb forward tcp:8080 tcp:8080` + `curl` POST to
    `http://127.0.0.1:8080/submit` (verified working, sprint 1). **Use the Xtream API path**
    (`type=xtream`, `server`/`user`/`pass` parsed from `~/.redsurf/test-playlist.url`) with
    `contentType=live` - never the M3U URL unless the test *is* the M3U parser. The M3U path
    streams the provider's entire file including VOD/series it then discards: ~3-4 minutes per
    seed on this device versus seconds via the JSON API. Do not add VOD until a test needs it.
+   **If a sprint does still need to wipe the device (a Reset test, a fresh-install acceptance
+   criterion) re-seed immediately afterward, automatically** - never hand off or pause with the
+   device sitting on Onboarding waiting for the user to re-add their playlist.
 5. Use `scripts/tv-test.sh` for every device interaction (focused-node lookup, verify-then-act
    navigation, logcat capture). Do not hand-roll raw `input keyevent` sequences with fixed sleeps -
    sprint 1 lost most of an hour to dropped presses and wrong starting-pill assumptions before
@@ -61,15 +71,15 @@ the second.
 
 ## Hand-off
 
-12. Uninstall the debug build. Push to `main`, wait for CI (`gh run watch`), confirm the release
-   exists, then install **that** APK on the device (download it with `gh release download`) so
-   OTA keeps working from here. Verify `versionName` on the device matches the new release.
+12. Push to `main`, wait for CI (`gh run watch`), confirm the release exists, then install
+   **that** APK on the device with `adb install -r -d` (download it with `gh release download`) -
+   no uninstall needed, the device's data stays intact. Verify `versionName` on the device matches
+   the new release and its signature (`apksigner verify --print-certs`) matches prior releases.
 13. Update the brief's status / "what actually happened" section and the PHASE status board.
     Append a dated entry to `docs/plans/SPRINT_LOG.md`: what was built, sweep results per pass,
     how many debug builds it took and every `deviated:` line, the release tag, and anything
-    deferred (also add deferred items to `AGENTS.md`'s Backlog). Note: the debug/release swap
-    wipes the device's app data - say so in the hand-off so the user isn't surprised by the
-    Onboarding screen.
+    deferred (also add deferred items to `AGENTS.md`'s Backlog). Note whether the device's app
+    data survived the whole sprint (expected now) or was wiped at some point and why.
 14. Give the user the **feel/vision list only** - short, numbered, one line each, tagged with
     what to look at. Not a bug report, not a summary of the sweep. If you can send a push
     notification or a file to the user from this session, do so with that list.

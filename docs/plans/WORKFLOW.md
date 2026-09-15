@@ -123,12 +123,26 @@ small (bisectable, reviewable); *stopping* doesn't happen until the module is do
   here, only inferred from player state logs.
 
 **Device protocol (supersedes two older rules - see below):**
-- Sprints run on **debug builds**: debuggable means `run-as` for DB inspection, `adb install -r -d`
-  for any version, no semver games. Debug and release builds can't coexist (same package,
-  different signing key), so a sprint **starts by uninstalling the release build and ends by
-  uninstalling the debug build and installing the current CI release.** That's what keeps OTA
-  working for the user afterwards - the intent of the old "never install an ad-hoc-versioned
-  build" rule, kept; its letter, replaced.
+- Sprints run on **debug builds**, `adb install -r -d` for any version, no semver games. As of
+  2026-09-15 (user decision - no live users, single family device, the usual reason to keep debug
+  and release signing apart doesn't apply here) **debug builds share the release signing key**
+  (`app/build.gradle.kts`'s `debug` block, same `hasReleaseSigning` keystore the `release` block
+  already used) - debug and release used to be unable to coexist on the device at all (same
+  package, different signature), which is what forced a sprint to *uninstall the release build to
+  start and uninstall the debug build to hand off*, wiping the device's app data (playlists,
+  settings, everything) each time. **No longer needed**: `adb install -r -d` now moves between a
+  release build and a debug one in either direction with the user's data intact throughout - a
+  sprint installs a debug build directly over whatever's already there, and hands off the same
+  way, straight to the new CI release, never touching an uninstall. Pass a `versionCode` higher
+  than what's installed (`./gradlew :app:assembleDebug -PversionCode=999 -PversionName=vX.Y.Z-debug`)
+  - Android's own downgrade-protection blocks `-r` otherwise, `-d` alone isn't enough on every
+  device. **Always re-seed automatically after any wipe you do still cause** (a Reset, a fresh
+  playlist test) - don't leave the device on Onboarding for the user to redo by hand.
+- `run-as` for on-device DB inspection is **not reliably available on this Chromecast** - found
+  2026-09-15, `run-as: /mnt has wrong owner: 0/1000, not 1000`, unrelated to the signing change
+  above (a device/ROM quirk). No root either (`adb root` refused, no `su`). DB inspection needs a
+  different path (e.g. reading through the app's own UI/logs, or asking the user to pull a backup)
+  until/unless that's solved - don't assume `run-as` works without checking first.
 - The Chromecast stays reachable over WiFi ADB while asleep - **verified 2026-09-13**: put to
   sleep via `KEYCODE_SLEEP`, `mWakefulness=Asleep` / screen `OFF`, still answering 30s later,
   woken with `KEYCODE_WAKEUP`. No "Stay awake" toggle needed. Screen off is not a blocker.

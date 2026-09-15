@@ -62,6 +62,22 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
+        debug {
+            // Debug builds share the release signing key (user decision, 2026-09-15 - no live
+            // users, single family device, the usual reason to keep them apart doesn't apply
+            // here) - AGP's default debug keystore and the release one can't coexist on one
+            // device (different signatures), which is what forced every sprint to uninstall the
+            // release build before installing a debug one, and uninstall-then-reinstall-release
+            // at hand-off. With both signed the same, `adb install -r -d` works across debug and
+            // release in either direction - sprints keep the user's real data/playlists intact
+            // the whole time, no wipe required. Falls back to AGP's own debug keystore when no
+            // signing.properties/env vars are present (e.g. a fresh clone with no keys yet) -
+            // `debuggable` (set by the `debug` build type itself, unrelated to this) is what
+            // `run-as`/DB inspection actually depend on, not the signing key.
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 }
 
