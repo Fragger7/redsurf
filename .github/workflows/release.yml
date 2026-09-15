@@ -88,5 +88,10 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.new_tag }}
           name: RedSurf ${{ steps.version.outputs.new_tag }}
-          generate_release_notes: true
+          # Real changelog, not GitHub's PR-based auto-notes - this repo pushes straight to main
+          # with no PRs, so `generate_release_notes: true` produced almost nothing (just a
+          # compare link, verified 2026-09-15 across several releases). github-tag-action already
+          # builds a conventional-commits changelog from the commit messages since the last tag
+          # (this repo's commits already use feat:/fix:/docs: prefixes) - use that instead.
+          body: ${{ steps.version.outputs.changelog }}
           files: tv-native/app/build/outputs/apk/release/RedSurf-${{ steps.version.outputs.new_tag }}.apk
