@@ -197,20 +197,18 @@ with more than one focusable region, not just these.
 
 - **Live TV loses its category/channel/recent-tiles on leaving and returning** - **no longer
   backlog: fixed and verified live, 2026-09-15** (user report, three examples: category resets
-  every time you leave Live TV, recent-channel tiles disappear, no relaunch-resume). The
-  navigate-away-and-back third of this is fixed: `selectedGroup`/`focusedChannel`/`recentChannels`
-  hoisted to `AppShell` (same conditional-composition-trap fix `selectedSettingsCategory` already
-  needed). **Still open, needs real disk persistence, not just hoisting** - two related pieces,
-  not yet scoped in detail:
-  1. **Resume last channel across a real app relaunch/process death** - the General category's
-     "Resume last channel on launch" row (`SettingsCategory.kt`) is still grey/unbuilt. Open
-     question: does "resume" mean auto-play straight into fullscreen on launch, or land on Live TV
-     with that channel merely pre-selected/ready to open? (TiviMate's real behavior: configurable,
-     defaults to auto-play.) Needs a user decision before building.
-  2. **Recent-channel tiles surviving relaunch, not just tab-switching** - needs #2.5's real
-     `recent_channels` table (Room), not the in-memory stand-in - a real schema addition like the
-     BACKLOG_SWEEP.md #13 composite-key migration, not a quick fix. Whether to pull this forward
-     now (like the black-screen fix) or hold for the Player sprint is an open question too.
+  every time you leave Live TV, recent-channel tiles disappear, no relaunch-resume).
+  Navigate-away-and-back: `selectedGroup`/`focusedChannel`/`recentChannels` hoisted to `AppShell`
+  (same conditional-composition-trap fix `selectedSettingsCategory` already needed). Resume across
+  a real relaunch: **also shipped, 2026-09-15** - General → "Resume last channel on launch" is a
+  real toggle now; when on, cold launch looks the last-watched (playlistId, streamId) up
+  (`ChannelDao.getChannel`, `AppPreferences.getLastWatchedChannel`) and seeds Live TV with it
+  pre-selected (user decision: pre-select, not forced auto-play - opening it is the same OK action
+  as any other channel). Verified live: force-stopped the app after watching a specific channel,
+  relaunched, landed on its exact category with it focused. **Still open**: recent-channel tiles
+  surviving a relaunch (not just tab-switching) needs #2.5's real `recent_channels` table (Room),
+  not the in-memory stand-in - user decision 2026-09-15: hold for the Player sprint, not pulled
+  forward.
 - **EPG data source, for when Phase 3 (EPG sync + the merged Live TV/Guide screen, see the
   dedicated entry below) is underway** - user request, 2026-09-15, researched (not built): most
   Xtream providers already ship their own EPG endpoint, which is the first and most accurate
