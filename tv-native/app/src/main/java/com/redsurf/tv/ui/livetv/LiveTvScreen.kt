@@ -99,26 +99,39 @@ fun LiveTvScreen(
     // AppPreferences) and PlayerScreen (which actually reads them).
     blackScreenBetweenZaps: Boolean = false,
     showRawResolution: Boolean = false,
+    // Hoisted to AppShell (found live, 2026-09-15, user report) - same conditional-composition
+    // trap SettingsScreen's own selectedCategory already had to escape: this composable is torn
+    // down and recomposed fresh every time `destination` switches away from Live TV and back, so
+    // a plain `remember` here reset the category, the focused channel, and the recent-tiles row
+    // to nothing on every re-entry instead of keeping where the user actually was. Plain
+    // value/`onXChanged` hoisting (Kotlin local `var`s can't take custom accessors, unlike a
+    // class property) - every assignment site below calls the matching `onXChanged` instead of
+    // reassigning a local `var` directly; reads use the parameter as-is.
+    selectedGroup: GroupKey? = null,
+    onSelectedGroupChanged: (GroupKey?) -> Unit = {},
+    focusedChannel: ChannelEntity? = null,
+    onFocusedChannelChanged: (ChannelEntity?) -> Unit = {},
+    // Stand-in for PHASE_2.md #2.5's real recent_channels table (decision 8) - most recent first,
+    // capped at 8, deduped by streamId. Recorded on every deliberate channel change (open or zap)
+    // so the player's tile row and History picker have real content before the real table lands.
+    // Hoisted to AppShell now (see above) - survives switching destinations within this app
+    // session; still lost on process death/relaunch until #2.5's real table exists (AGENTS.md
+    // backlog).
+    recentChannels: List<ChannelEntity> = emptyList(),
+    onRecentChannelsChanged: (List<ChannelEntity>) -> Unit = {},
 ) {
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
-    var selectedGroup by remember { mutableStateOf<GroupKey?>(null) }
-    var focusedChannel by remember { mutableStateOf<ChannelEntity?>(null) }
     var isFullscreen by remember { mutableStateOf(false) }
     var channelsHasFocus by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
-    // In-memory stand-in for PHASE_2.md #2.5's real recent_channels table (decision 8) - most
-    // recent first, capped at 8, deduped by streamId. Recorded on every deliberate channel change
-    // (open or zap) so the player's tile row and History picker have real content before the
-    // real table lands; lost on process death, which is fine for a stub.
-    var recentChannels by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
     fun recordRecent(channel: ChannelEntity) {
-        recentChannels = (listOf(channel) + recentChannels.filter { it.streamId != channel.streamId }).take(8)
+        onRecentChannelsChanged((listOf(channel) + recentChannels.filter { it.streamId != channel.streamId }).take(8))
     }
 
     LaunchedEffect(groups) {
         if ((selectedGroup == null || groups.none { it.key() == selectedGroup }) && groups.isNotEmpty()) {
-            selectedGroup = groups.first().key()
+            onSelectedGroupChanged(groups.first().key())
         }
     }
 
@@ -198,8 +211,8 @@ fun LiveTvScreen(
                 selectedGroup = selectedGroup,
                 onGroupFocused = { group ->
                     if (group != selectedGroup) {
-                        selectedGroup = group
-                        focusedChannel = null
+                        onSelectedGroupChanged(group)
+                        onFocusedChannelChanged(null)
                     }
                 },
                 modifier = Modifier.weight(1f),
@@ -224,11 +237,11 @@ fun LiveTvScreen(
                     groupCount = groupInfo?.count ?: 0,
                     channels = pagedChannels,
                     focusedChannelId = focusedChannel?.streamId,
-                    onChannelFocused = { focusedChannel = it },
+                    onChannelFocused = { onFocusedChannelChanged(it) },
                     returnFocusRequester = channelReturnFocus,
                     onFocusStateChanged = { channelsHasFocus = it },
                     onChannelOpen = { channel ->
-                        focusedChannel = channel
+                        onFocusedChannelChanged(channel)
                         // Bypass the 500ms browse-debounce above: opening is a deliberate action,
                         // not a D-pad fly-by, so PlayerHost must get the URL on this same frame.
                         // Without this, isFullscreen flips true immediately but previewUrl (what
@@ -267,7 +280,7 @@ fun LiveTvScreen(
                 currentChannel = focusedChannel,
                 repository = viewModel.repository,
                 onChannelChanged = { channel ->
-                    focusedChannel = channel
+                    onFocusedChannelChanged(channel)
                     // Bypass the browse-debounce, same reason as onChannelOpen above: zapping is
                     // a deliberate action, not a D-pad fly-by, and waiting on it would reintroduce
                     // the "duplicate 2-step" bug that debounce-bypass already fixed once.
@@ -282,7 +295,7 @@ fun LiveTvScreen(
                     // entry-redirect, see its doc comment, faithfully returns to that stale
                     // selection instead of the new channel's actual group).
                     val newGroup = GroupKey(channel.playlistId, channel.groupName)
-                    if (newGroup != selectedGroup) selectedGroup = newGroup
+                    if (newGroup != selectedGroup) onSelectedGroupChanged(newGroup)
                 },
                 breadcrumb = breadcrumb,
                 recentChannels = recentChannels.filter { it.streamId != focusedChannel?.streamId },

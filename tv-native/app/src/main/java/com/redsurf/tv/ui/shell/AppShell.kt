@@ -15,7 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.redsurf.tv.MainViewModel
+import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.settings.AppPreferences
+import com.redsurf.tv.ui.livetv.GroupKey
 import com.redsurf.tv.ui.livetv.LiveTvScreen
 import com.redsurf.tv.ui.theme.tvSafeArea
 
@@ -68,6 +70,18 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     var liveTvChannelsFocused by remember { mutableStateOf(false) }
     var selectedSettingsCategory by remember { mutableStateOf(SettingsCategory.General) }
 
+    // Hoisted for the same reason selectedSettingsCategory is (see class doc above) - found
+    // live, 2026-09-15 (user report): leaving Live TV for any other destination and coming back
+    // reset the category all the way to the first one, discarded whatever channel had focus, and
+    // dropped the recent-channels tile row, because all three lived in a plain `remember` inside
+    // LiveTvScreen, which the conditional-composition trap tears down on every destination
+    // switch. In-memory only, like `selectedSettingsCategory` - survives switching tabs within
+    // this app session, not a process death/relaunch (that needs real disk persistence, a
+    // separate, bigger piece - AGENTS.md backlog).
+    var liveTvSelectedGroup by remember { mutableStateOf<GroupKey?>(null) }
+    var liveTvFocusedChannel by remember { mutableStateOf<ChannelEntity?>(null) }
+    var liveTvRecentChannels by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
+
     // BACKLOG_SWEEP.md #10 - one instance for the whole shell, same lifetime as the ViewModel;
     // AppShell is the natural owner since both destinations that touch these prefs (Settings to
     // flip them, Live TV/PlayerScreen to read them) are composed from here.
@@ -106,6 +120,12 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     onChannelsFocusChanged = { liveTvChannelsFocused = it },
                     blackScreenBetweenZaps = blackScreenBetweenZaps,
                     showRawResolution = showRawResolution,
+                    selectedGroup = liveTvSelectedGroup,
+                    onSelectedGroupChanged = { liveTvSelectedGroup = it },
+                    focusedChannel = liveTvFocusedChannel,
+                    onFocusedChannelChanged = { liveTvFocusedChannel = it },
+                    recentChannels = liveTvRecentChannels,
+                    onRecentChannelsChanged = { liveTvRecentChannels = it },
                 )
             destination == NavDestination.LiveTv ->
                 PlaceholderScreen("Live TV", "No active playlist")
