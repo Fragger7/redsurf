@@ -312,9 +312,18 @@ before the report comes in, not after.
   TiviMate behavior") - makes more sense once #2.5's real `recent_channels` table exists; the
   current in-memory stand-in already clears itself every process restart, so a manual clear
   button for it would be low-value. Build alongside #2.5, not before.
-- **Tooltip on long-focus for truncated category names** (user idea, 2026-09-12): categories long
-  enough to always ellipsis, even after the visual pass, could show their full name after the
-  D-pad rests on them briefly - not built, needs a design pass on timing/placement first.
+- **Long channel/category names: marquee (scrolling text) on the focused row, not a hover
+  tooltip** - user decision, 2026-09-15, superseding the tooltip idea this replaces. Pushed back
+  on tooltip-on-dwell deliberately: a hover/dwell tooltip is a desktop-mouse pattern ported onto a
+  D-pad, needs a timing decision (how long is "resting"?) with no clean answer, and reveals
+  nothing until the user waits. Marquee is the actual TV-native convention for this (TiviMate,
+  YouTube, Spotify's own TV apps all do it) - self-explaining the instant a row gets focus, no
+  dwell timer to tune. Scoped care, not "just make it scroll": only the *focused* row marquees
+  (unfocused truncated rows stay static/ellipsized - simultaneous scrolling everywhere would be
+  genuinely bad, not just a matter of taste); pause about 1s static before scrolling starts and
+  about 1s at the end before looping/reversing, smooth and unhurried, not a tight fast loop
+  (that's what reads as cheap - the technique itself doesn't). Applies to channel/category names
+  specifically (the actual overflow cases), not blanket-applied to every text element.
 - **TiviMate-style categorized Settings screen** — **no longer backlog: built and machine-swept,
   2026-09-13.** `docs/plans/SETTINGS.md` is the spec (StreamVault's two-pane layout, TiviMate's
   nine categories and row placement, every planned row present as a grey, unfocusable row with
@@ -371,12 +380,47 @@ before the report comes in, not after.
   top row isn't** - **no longer backlog: built and machine-swept, BACKLOG_SWEEP.md #3, 2026-09-15.**
   Dropped the `DirectionUp`/rail-top-row branch of `SettingsScreen.kt`'s `onPreviewKeyEvent` guard;
   UP now escapes via default `moveFocus`, same as the pane side always did.
-  **New finding, swept 2026-09-15:** it lands on the "Home" pill, not "Settings" - Compose's
-  default spatial search picks whichever NavStrip pill is horizontally nearest the rail (far
-  left of the screen), not the pill actually entered from, and forcing "Settings" specifically
-  would need the same cross-branch `requestFocus()` this session already found unreliable
-  (`SettingsPane`'s doc comment). Not blocking, not fixed this sprint - logged as feel/vision:
-  does landing on Home read as wrong, or is "UP always reaches leftmost-ish NavStrip" acceptable?
+  **The "lands on Home, not Settings" finding this swept up - user decided, 2026-09-15, don't
+  patch this one spot, fix the actual missing concept:** every escape-to-NavStrip in the app today
+  (this one, and `PlaceholderScreen`'s own RIGHT-from-Home landing on Guide instead of Live TV -
+  found live the same day) is really the same bug - Compose's default spatial search picks
+  whichever pill is nearest in screen coordinates, and nothing anywhere establishes "the pill for
+  the destination you're actually on" as a real, canonical concept the app can target. Patching
+  each spot's spatial quirk individually would just find a third and fourth instance later.
+  **Superseded by, and expected to be fixed for free by, the long-press-Back nav-jump item below**
+  - building a real "resolve the current destination to its own pill" lookup for that feature
+  gives every other escape-to-NavStrip case the same deterministic target to reuse, rather than
+  four different ad hoc spatial-search outcomes. Don't fix this one in isolation; fix it as part
+  of that.
+- **Global quick-jump to the NavStrip from anywhere (long-press Back)** - user idea 2026-09-15,
+  raised after finding that a deep scroll (150th category, or several tabs deep in Settings) has
+  no fast way back to the top-level nav, since the strip lives above content rather than beside it
+  (TiviMate's own left rail doesn't have this problem - it's one LEFT away regardless of depth).
+  **Decided: long-press Back**, not a new/different key - the two of us landed on this
+  independently. Short Back keeps today's one-step-at-a-time peel (Channels→Categories→Home,
+  Settings pane→rail) exactly as-is; holding it jumps straight to the NavStrip from anywhere, on
+  the pill for whatever destination is actually current (see the entry above - same canonical
+  "current destination's pill" lookup both need, built once).
+  - **Discoverability, user's real open question - answered, not hand-waved:** the strongest
+    option is to make the gesture *self-teaching through its own visual feedback* rather than
+    requiring the user already know about it - the same pattern Android's own long-press-to-
+    confirm affordances use (a small radial/progress fill under or near the Back hint the instant
+    the key is held down, completing exactly when the jump fires; releasing early cancels with
+    nothing happening). A user who holds Back even briefly - intentionally or by accident - sees
+    it start to reveal itself before it commits, so understanding doesn't depend on reading
+    documentation first. Pair with a light, one-time dismissible tip ("Hold BACK to jump to the
+    menu") the first time someone scrolls past some depth threshold, as reinforcement, not the
+    primary teaching mechanism.
+  - **Conflicting system action, user's other real question - checked, low risk but not zero:**
+    unlike `KEYCODE_HOME` (frequently reserved by Android TV launchers for Assistant/app-switching
+    on long-press), `KEYCODE_BACK` has no universal Android TV system-level long-press reservation
+    - this app already intercepts key events explicitly (`PlayerScreen.kt`'s router is the existing
+    precedent) and consuming the long-press in our own handler should pre-empt any launcher-level
+    fallback. **Caveat: "should" - this needs verifying live on the actual Chromecast/launcher
+    combination before relying on it, not assumed from general Android knowledge alone; a rare
+    edge case worth a one-line awareness, not a blocker, is an accessibility service (TalkBack)
+    reserving long-press-Back for its own gesture on a device where one's active - not expected to
+    matter on this family's own devices, but worth a real check, not a guess, before shipping.**
 - **Settings' category rail doesn't scroll** - **no longer backlog: built and machine-swept,
   BACKLOG_SWEEP.md #2, 2026-09-15.** `CategoryRail` swapped to `TvLazyColumn`, matching every
   other list in the app; "About" is reachable and fully visible. `SPRINT_LOG.md` has the sweep
