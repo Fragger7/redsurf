@@ -251,12 +251,21 @@ before the report comes in, not after.
     test data this session - EPG entirely absent everywhere so far, but that's Phase 1/2 not
     having EPG at all yet, not evidence either way about the provider's own coverage once EPG
     sync exists).
-  - **Supplemented-data indicator, on by default** - when a program's schedule line comes from a
-    public fallback source rather than the provider, show a small, honest marker (a tag/badge
-    next to the programme title, matching `RedSurfType.badge`'s existing visual language for
-    exactly this kind of "here's where this came from" label - see the player's resolution/codec
-    badges) so the user can tell provider data from supplemented data at a glance. Same
-    "never claim something works without showing it's real" principle as grey Settings rows.
+  - **Supplemented-data indicator - user idea 2026-09-15, refined: a colour legend on the EPG
+    grid, not a per-entry text badge.** Agreed direction - a repeated text badge on every
+    supplemented cell would be visual noise across a dense multi-row/multi-column grid; a subtle
+    background-tint difference (provider-sourced vs. supplemented), explained once by a small key
+    somewhere on the Guide screen, reads clean and matches how real EPG/DVR UIs already
+    distinguish program state by colour. **One real caveat, not a rejection - color can't be the
+    only signal.** WCAG guidance (and ~8% of men having some form of color vision deficiency) is
+    specific about this: pair the tint with a second, non-colour cue (a different border style -
+    solid vs. dashed - or a small corner mark) so the distinction still reads for someone who
+    can't distinguish the two colours, not just "prettier." Also worth guarding when this is
+    actually designed: RedSurf's `Accent` red already carries real meaning everywhere (focus/
+    selection) - the supplemented-data tint needs to visually read as a *different kind* of signal
+    (e.g. a cool tone, not another red/warm variant) so it never gets confused with "this row is
+    focused." Same "never claim something works without showing it's real" principle as grey
+    Settings rows, just expressed as colour + a border cue instead of text.
   - **Settings control for this, not just a fixed default** - a user may not want supplemental EPG
     at all (accuracy concerns, a provider whose own listings are already complete, or simply
     preferring "no data" over "possibly wrong data"). Needs an off switch - open question whether
