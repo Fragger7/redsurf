@@ -7,16 +7,22 @@ import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.delay
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.MediaItem
@@ -154,9 +160,25 @@ fun PlayerHost(
         if (!fullscreen) afrManager.restoreOriginalMode()
     }
 
+    // Real black-screen-between-zaps (found not-working live, 2026-09-15 - user compared
+    // directly against TiviMate: RedSurf showed a "smoky gradient" mid-zap, not an immediate hard
+    // cut). Root cause: `setKeepContentOnPlayerReset(false)` below only stops the *old* frame
+    // from lingering - it says nothing about the *new* stream's first few frames, which on a live
+    // IPTV source are often blocky/smeared while the decoder syncs to a keyframe. Relying on
+    // ExoPlayer's own reset/shutter timing gives no control over that window at all. This state,
+    // not the shutter, is now the actual black screen: a real opaque Compose layer, independent
+    // of the video surface, held from the moment a zap is initiated until this player confirms a
+    // frame of the *new* stream actually rendered ([Player.Listener.onRenderedFirstFrame] - the
+    // one signal that means "there is now something real to show," not just "reset happened").
+    var showBlackOverlay by remember { mutableStateOf(false) }
+
     val lastUrl = remember { mutableStateOf<String?>(null) }
     LaunchedEffect(streamUrl, blackScreenBetweenZaps) {
         if (streamUrl != null && streamUrl != lastUrl.value) {
+            // Only between zaps, not the very first tune-in this session (lastUrl.value == null)
+            // - matches the setting's own name, and the screen is already blank before a first
+            // frame ever arrives so there's nothing to hide.
+            if (blackScreenBetweenZaps && lastUrl.value != null) showBlackOverlay = true
             // clearMediaItems() is the actual "reset" event setKeepContentOnPlayerReset below
             // cares about - setMediaItem()+prepare() alone doesn't trigger it, so without this
             // call the toggle would have nothing to act on and every zap would keep holding the
@@ -169,6 +191,17 @@ fun PlayerHost(
             exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
             exoPlayer.prepare()
             lastUrl.value = streamUrl
+        }
+    }
+
+    // Belt-and-suspenders timeout: if the new stream never renders a frame (dead channel, no
+    // signal), don't leave the user staring at permanent black with no explanation - that would
+    // be a worse outcome than today's behavior, not a wash. Cleared normally by
+    // onRenderedFirstFrame below long before this fires on a healthy stream.
+    LaunchedEffect(showBlackOverlay) {
+        if (showBlackOverlay) {
+            delay(5_000)
+            showBlackOverlay = false
         }
     }
 
@@ -219,6 +252,11 @@ fun PlayerHost(
         val listener = object : Player.Listener {
             override fun onTracksChanged(tracks: Tracks) = report()
             override fun onVideoSizeChanged(videoSize: VideoSize) = report()
+            // The real "lift the black overlay" signal - see showBlackOverlay's doc comment
+            // above. Harmless when blackScreenBetweenZaps is off (overlay was never shown).
+            override fun onRenderedFirstFrame() {
+                showBlackOverlay = false
+            }
         }
         exoPlayer.addListener(listener)
         onDispose { exoPlayer.removeListener(listener) }
@@ -254,4 +292,12 @@ fun PlayerHost(
         update = { view -> view.setKeepContentOnPlayerReset(!blackScreenBetweenZaps) },
         modifier = modifier.fillMaxSize(),
     )
+
+    // The real black screen (see showBlackOverlay's doc comment above) - an immediate, hard cut
+    // to solid black, no fade/crossfade, matching what was asked for ("just an immediate insert
+    // of a full black screen until the next channel loads"). Drawn on top of the AndroidView
+    // above, same size, so it fully occludes any in-progress decode artifacts underneath.
+    if (showBlackOverlay) {
+        Box(modifier = modifier.fillMaxSize().background(Color.Black))
+    }
 }
