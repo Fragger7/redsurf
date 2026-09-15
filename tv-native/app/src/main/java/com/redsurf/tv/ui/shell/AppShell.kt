@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.redsurf.tv.MainViewModel
+import com.redsurf.tv.settings.AppPreferences
 import com.redsurf.tv.ui.livetv.LiveTvScreen
 import com.redsurf.tv.ui.theme.tvSafeArea
 
@@ -64,9 +65,26 @@ import com.redsurf.tv.ui.theme.tvSafeArea
 fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     var destination by remember { mutableStateOf(NavDestination.LiveTv) }
     var liveTvFullscreen by remember { mutableStateOf(false) }
+    var liveTvChannelsFocused by remember { mutableStateOf(false) }
     var selectedSettingsCategory by remember { mutableStateOf(SettingsCategory.General) }
 
-    BackHandler(enabled = !liveTvFullscreen && destination != NavDestination.Home) {
+    // BACKLOG_SWEEP.md #10 - one instance for the whole shell, same lifetime as the ViewModel;
+    // AppShell is the natural owner since both destinations that touch these prefs (Settings to
+    // flip them, Live TV/PlayerScreen to read them) are composed from here.
+    val prefsContext = LocalContext.current
+    val appPreferences = remember { AppPreferences(prefsContext) }
+    val blackScreenBetweenZaps by appPreferences.blackScreenBetweenZaps.collectAsState()
+    val showRawResolution by appPreferences.showRawResolution.collectAsState()
+
+    // BACKLOG_SWEEP.md #8: excluded while Live TV's own Channels column holds focus, mirroring
+    // the fullscreen exclusion right below it - LiveTvScreen owns its own BackHandler for that
+    // one Back press (Channels -> Categories), the same mutual-exclusivity-via-`enabled` pattern
+    // this class doc already describes for fullscreen, just a second instance of it.
+    BackHandler(
+        enabled = !liveTvFullscreen &&
+            destination != NavDestination.Home &&
+            !(destination == NavDestination.LiveTv && liveTvChannelsFocused),
+    ) {
         destination = NavDestination.Home
     }
 
@@ -85,6 +103,9 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 LiveTvScreen(
                     viewModel = viewModel,
                     onFullscreenChanged = { liveTvFullscreen = it },
+                    onChannelsFocusChanged = { liveTvChannelsFocused = it },
+                    blackScreenBetweenZaps = blackScreenBetweenZaps,
+                    showRawResolution = showRawResolution,
                 )
             destination == NavDestination.LiveTv ->
                 PlaceholderScreen("Live TV", "No active playlist")
@@ -101,6 +122,14 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
                     onAddPlaylist = { viewModel.beginAddPlaylist(context) },
                     onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
+                    blackScreenBetweenZaps = blackScreenBetweenZaps,
+                    onToggleBlackScreenBetweenZaps = {
+                        appPreferences.setBlackScreenBetweenZaps(!blackScreenBetweenZaps)
+                    },
+                    showRawResolution = showRawResolution,
+                    onToggleShowRawResolution = {
+                        appPreferences.setShowRawResolution(!showRawResolution)
+                    },
                 )
             }
             else ->

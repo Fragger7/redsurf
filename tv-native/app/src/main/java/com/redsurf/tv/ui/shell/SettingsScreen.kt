@@ -99,6 +99,11 @@ fun SettingsScreen(
     onResetPlaylist: () -> Unit,
     onAddPlaylist: () -> Unit,
     onDeletePlaylist: (String) -> Unit,
+    // BACKLOG_SWEEP.md #10/#11/#12 - AppPreferences-backed, owned by AppShell.
+    blackScreenBetweenZaps: Boolean,
+    onToggleBlackScreenBetweenZaps: () -> Unit,
+    showRawResolution: Boolean,
+    onToggleShowRawResolution: () -> Unit,
 ) {
     val railFocus = remember { FocusRequester() }
     val paneFirstRowFocus = remember { FocusRequester() }
@@ -138,7 +143,12 @@ fun SettingsScreen(
     // explicit escape guard below. Playlists and About always have at least one live row (Add
     // playlist / Check for updates) even with nothing else in them; every other category is
     // entirely [SETTINGS_GREY_ROWS] today.
-    val hasLiveContent = selectedCategory == SettingsCategory.Playlists || selectedCategory == SettingsCategory.About
+    // Playback and Appearance joined this list (BACKLOG_SWEEP.md #11/#12) - each now has exactly
+    // one live toggle row alongside its grey ones.
+    val hasLiveContent = selectedCategory == SettingsCategory.Playlists ||
+        selectedCategory == SettingsCategory.About ||
+        selectedCategory == SettingsCategory.Playback ||
+        selectedCategory == SettingsCategory.Appearance
 
     Row(
         modifier = Modifier
@@ -151,15 +161,20 @@ fun SettingsScreen(
             // router already sets the precedent that explicit interception beats relying on
             // Compose's focus-search internals for exactly this "don't let a key escape this
             // screen" job. NavStrip is a composed sibling one level up in AppShell's Column, so
-            // any of these three, left unguarded, can land real D-pad focus on a nav pill instead
-            // of leaving it inside Settings: UP past the rail's first row, DOWN past its last, or
-            // RIGHT into a category with nothing focusable in its pane (confirmed live for all
-            // three). Only fires while focus is on the rail (`!focusInPane`) - once inside the
-            // pane, its own content and `TvLazyColumn` handle their own UP/DOWN normally.
+            // either of these two, left unguarded, can land real D-pad focus on a nav pill instead
+            // of leaving it inside Settings: DOWN past the rail's last row, or RIGHT into a
+            // category with nothing focusable in its pane (confirmed live for both). Only fires
+            // while focus is on the rail (`!focusInPane`) - once inside the pane, its own content
+            // and `TvLazyColumn` handle their own UP/DOWN normally.
+            //
+            // UP at the rail's top row ("General") is deliberately NOT guarded (BACKLOG_SWEEP.md
+            // #3, found live 2026-09-14/15) - the pane side of this same row was never guarded and
+            // already let UP escape to the Settings NavStrip pill correctly; the rail side blocked
+            // it for no functional reason (there's nothing above "General" to protect), so the
+            // asymmetry was just a bug, not an intentional guard. Dropped.
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown || focusInPane) return@onPreviewKeyEvent false
                 when (event.key) {
-                    Key.DirectionUp -> selectedCategory == SettingsCategory.entries.first()
                     Key.DirectionDown -> selectedCategory == SettingsCategory.entries.last()
                     Key.DirectionRight -> !hasLiveContent
                     else -> false
@@ -181,6 +196,10 @@ fun SettingsScreen(
             onResetPlaylist = onResetPlaylist,
             onAddPlaylist = onAddPlaylist,
             onDeletePlaylist = onDeletePlaylist,
+            blackScreenBetweenZaps = blackScreenBetweenZaps,
+            onToggleBlackScreenBetweenZaps = onToggleBlackScreenBetweenZaps,
+            showRawResolution = showRawResolution,
+            onToggleShowRawResolution = onToggleShowRawResolution,
             firstRowFocus = paneFirstRowFocus,
             onFocusChanged = { focusInPane = it },
             modifier = Modifier.weight(1.8f),
@@ -193,6 +212,17 @@ fun SettingsScreen(
  * tinted tile - the exact same visual language as `ChannelsColumn`'s `ChannelLogo`/`PlayerScreen`'s
  * `ChannelTile`, reused rather than inventing a new motif) plus the category name. Focus, not OK,
  * selects - identical convention to `GroupsColumn`'s category rows.
+ *
+ * `hadFocus`/the `onFocusChanged` redirect below is [SettingsPane]'s own rail-entry-redirect
+ * pattern, mirrored (BACKLOG_SWEEP.md #5): once LEFT/Back's default `moveFocus` has already
+ * landed focus *somewhere* on the rail (`state.hasFocus` flips false->true), redirect to
+ * [railFocus] - the requester already tied to [selected]'s own row - so the row you get back is
+ * always the category actually selected, not whatever was spatially nearest to where you left
+ * the pane. Redirecting only *after* the crossing, never during it, is the important part: an
+ * earlier attempt mid-sprint-1 to call `requestFocus()` directly from the pane's LEFT handler hit
+ * the cross-branch `requestFocus()` bug documented on [SettingsPane] and silently did nothing.
+ * This redirect never crosses branches - by the time it fires, focus is already inside the rail's
+ * own subtree - so it doesn't hit that bug.
  */
 @Composable
 private fun CategoryRail(
@@ -201,11 +231,19 @@ private fun CategoryRail(
     railFocus: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
+    var hadFocus by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxHeight()
             .background(SurfaceColor, RoundedCornerShape(16.dp))
-            .padding(horizontal = 12.dp, vertical = 14.dp),
+            .padding(horizontal = 12.dp, vertical = 14.dp)
+            .onFocusChanged { state ->
+                if (state.hasFocus && !hadFocus) {
+                    runCatching { railFocus.requestFocus() }
+                }
+                hadFocus = state.hasFocus
+            },
     ) {
         Text(
             "Settings",
@@ -213,14 +251,20 @@ private fun CategoryRail(
             color = TextPrimary,
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
-        SettingsCategory.entries.forEach { category ->
-            CategoryRow(
-                category = category,
-                selected = category == selected,
-                onFocused = { onFocused(category) },
-                modifier = if (category == selected) Modifier.focusRequester(railFocus) else Modifier,
-            )
-            Spacer(modifier = Modifier.height(2.dp))
+        // TvLazyColumn, not a plain Column (found live, BACKLOG_SWEEP.md #2) - nine fixed rows
+        // never needed paging, but a plain Column also never scrolls, so "About" (the last row)
+        // was clipped by the card's fixed height with no way to bring it into view. Every other
+        // real list in the app (GroupsColumn, ChannelsColumn, SettingsPane itself) already uses
+        // TvLazyColumn specifically because it scrolls to keep focus on-screen for free.
+        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            items(SettingsCategory.entries, key = { it.name }) { category ->
+                CategoryRow(
+                    category = category,
+                    selected = category == selected,
+                    onFocused = { onFocused(category) },
+                    modifier = if (category == selected) Modifier.focusRequester(railFocus) else Modifier,
+                )
+            }
         }
     }
 }
@@ -300,6 +344,10 @@ private fun SettingsPane(
     onResetPlaylist: () -> Unit,
     onAddPlaylist: () -> Unit,
     onDeletePlaylist: (String) -> Unit,
+    blackScreenBetweenZaps: Boolean,
+    onToggleBlackScreenBetweenZaps: () -> Unit,
+    showRawResolution: Boolean,
+    onToggleShowRawResolution: () -> Unit,
     firstRowFocus: FocusRequester,
     onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -336,6 +384,16 @@ private fun SettingsPane(
                 SettingsCategory.About -> aboutContent(
                     updateStatus = updateStatus,
                     onCheckForUpdates = onCheckForUpdates,
+                    firstRowFocus = firstRowFocus,
+                )
+                SettingsCategory.Playback -> playbackContent(
+                    blackScreenBetweenZaps = blackScreenBetweenZaps,
+                    onToggle = onToggleBlackScreenBetweenZaps,
+                    firstRowFocus = firstRowFocus,
+                )
+                SettingsCategory.Appearance -> appearanceContent(
+                    showRawResolution = showRawResolution,
+                    onToggle = onToggleShowRawResolution,
                     firstRowFocus = firstRowFocus,
                 )
                 else -> items(SETTINGS_GREY_ROWS[category].orEmpty()) { row -> GreyRowContent(row) }
@@ -519,6 +577,19 @@ private fun TvLazyListScope.aboutContent(
         }
     }
     item {
+        // Live, static info row (BACKLOG_SWEEP.md #9, user's own text) - same non-interactive
+        // shape as "Version" above (no Surface/focus/click, nothing to act on), not a GreyRowContent
+        // stand-in (it's real, not planned) and not a LiveRow (there's no action to take on it).
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Created by", style = RedSurfType.rowTitle, color = TextPrimary)
+            Text("Faraz Ahmad", style = RedSurfType.rowSecondary, color = TextSecondary)
+        }
+    }
+    item {
         LiveRow(
             label = "Check for updates",
             value = when (updateStatus) {
@@ -532,6 +603,43 @@ private fun TvLazyListScope.aboutContent(
         )
     }
     items(ABOUT_GREY_ROWS) { GreyRowContent(it) }
+}
+
+/** Playback (`BACKLOG_SWEEP.md` #11): one live toggle - the "old cable box" black-screen-between-
+ * zaps behavior - ahead of its remaining grey rows, same layering as [aboutContent]'s live rows
+ * before [ABOUT_GREY_ROWS]. */
+private fun TvLazyListScope.playbackContent(
+    blackScreenBetweenZaps: Boolean,
+    onToggle: () -> Unit,
+    firstRowFocus: FocusRequester,
+) {
+    item {
+        LiveRow(
+            label = "Black screen between zaps",
+            value = if (blackScreenBetweenZaps) "On" else "Off",
+            onClick = onToggle,
+            modifier = Modifier.focusRequester(firstRowFocus),
+        )
+    }
+    items(SETTINGS_GREY_ROWS[SettingsCategory.Playback].orEmpty()) { GreyRowContent(it) }
+}
+
+/** Appearance (`BACKLOG_SWEEP.md` #12): one live toggle - literal `WxH` vs. the derived
+ * SD/HD/FHD/4K class on the player's resolution badge - ahead of its remaining grey rows. */
+private fun TvLazyListScope.appearanceContent(
+    showRawResolution: Boolean,
+    onToggle: () -> Unit,
+    firstRowFocus: FocusRequester,
+) {
+    item {
+        LiveRow(
+            label = "Resolution badge",
+            value = if (showRawResolution) "Exact (e.g. 1920x1080)" else "Class (SD/HD/FHD/4K)",
+            onClick = onToggle,
+            modifier = Modifier.focusRequester(firstRowFocus),
+        )
+    }
+    items(SETTINGS_GREY_ROWS[SettingsCategory.Appearance].orEmpty()) { GreyRowContent(it) }
 }
 
 /** A real, focusable `Label ······ Value` row (`SETTINGS.md`'s layout) - value right-aligned in

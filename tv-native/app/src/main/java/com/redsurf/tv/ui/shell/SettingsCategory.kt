@@ -40,14 +40,16 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
         GreyRow("Time offset", "0h"),
         GreyRow("Refresh every", "12h"),
     ),
+    // "Resolution badge" flipped live (BACKLOG_SWEEP.md #12) - now AppearanceContent's own toggle
+    // row in SettingsScreen.kt, not a grey row here.
     SettingsCategory.Appearance to listOf(
-        GreyRow("Resolution badge", "Class (SD/HD/FHD/4K)"),
         GreyRow("Hide nav strip when idle", "Off"),
         GreyRow("Show full category name on hold", "Off"),
         GreyRow("Accent", "Red"),
     ),
+    // "Black screen between zaps" flipped live (BACKLOG_SWEEP.md #11) - now PlaybackContent's own
+    // toggle row in SettingsScreen.kt, not a grey row here.
     SettingsCategory.Playback to listOf(
-        GreyRow("Black screen between zaps", "Off"),
         GreyRow("Auto frame rate", "Off"),
         GreyRow("Buffer", "Default"),
         GreyRow("Preferred audio", "Auto"),

@@ -34,9 +34,21 @@ data class ChannelGroupEntity(
 
 // Indexed for the per-group Live TV queries (PHASE_1.md #2b) - a GROUP BY over tens of
 // thousands of rows without this index is a full table scan and a visible stall.
-@Entity(tableName = "channels", indices = [Index(value = ["playlistId", "streamType", "groupName"])])
+//
+// Composite primary key (BACKLOG_SWEEP.md #13, v6->v7, user-confirmed bundling 2026-09-15): a
+// bare streamId is only unique *within* one provider - Xtream/M3U stream IDs are small sequential
+// integers assigned by each provider independently, so two loaded playlists can and did collide
+// on the same streamId for two unrelated channels. `@Insert(OnConflictStrategy.REPLACE)` on a
+// single-column PK meant importing playlist B could silently overwrite rows that belonged to
+// playlist A whenever their id ranges overlapped. (playlistId, streamId) together are always
+// unique. Destructive migration - no live users, sprints already wipe the device routinely.
+@Entity(
+    tableName = "channels",
+    primaryKeys = ["playlistId", "streamId"],
+    indices = [Index(value = ["playlistId", "streamType", "groupName"])],
+)
 data class ChannelEntity(
-    @PrimaryKey val streamId: String,
+    val streamId: String,
     val playlistId: String,
     val groupId: String, // Maps to channel_groups.id
     val num: Int,

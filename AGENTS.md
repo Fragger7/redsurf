@@ -195,16 +195,14 @@ with more than one focusable region, not just these.
 
 ## Backlog - explicitly logged, not forgotten
 
-- **Optional black-screen between channel zaps** (user idea, 2026-09-12): the "no black screen"
-  zap behavior (PHASE_2.md decision 13, `PRODUCT_VISION.md` §3's "black screen minimizer") is
-  deliberately the opposite of old cable-box channel changing - the user specifically likes that
-  old behavior and wants it as a toggle, not a replacement for the default. A "Playback" Settings
-  category item once the categorized shell exists (pairs with the resolution-display toggle
-  below).
-- **Real pixel resolution as an alternative to the SD/HD/FHD/4K badge class** (user idea,
-  2026-09-12) - a Settings toggle between the derived class and the literal `WxH` (e.g.
-  "1920x1080"). `StreamInfo.rawResolution` already captures the raw value (`PlayerHost.kt`,
-  2026-09-12) - only the Settings toggle to switch the badge display is outstanding.
+- **Optional black-screen between channel zaps** - **no longer backlog: built and machine-swept,
+  BACKLOG_SWEEP.md #11, 2026-09-15.** Live toggle, Settings → Playback; `AppPreferences`-backed,
+  `PlayerHost` reads it and inverts `setKeepContentOnPlayerReset`. `SPRINT_LOG.md` has the sweep
+  account.
+- **Real pixel resolution as an alternative to the SD/HD/FHD/4K badge class** - **no longer
+  backlog: built and machine-swept, BACKLOG_SWEEP.md #12, 2026-09-15.** Live toggle, Settings →
+  Appearance; `PlayerInfoBlock`'s badge row reads `StreamInfo.rawResolution` instead of
+  `resolutionClass` when on. `SPRINT_LOG.md` has the sweep account.
 - **"Clear history" button on the player's History picker** (user idea, 2026-09-12, "copy
   TiviMate behavior") - makes more sense once #2.5's real `recent_channels` table exists; the
   current in-memory stand-in already clears itself every process restart, so a manual clear
@@ -216,9 +214,10 @@ with more than one focusable region, not just these.
   2026-09-13.** `docs/plans/SETTINGS.md` is the spec (StreamVault's two-pane layout, TiviMate's
   nine categories and row placement, every planned row present as a grey, unfocusable row with
   its real name and planned default) and now also the as-built record; `SPRINT_LOG.md` has the
-  sweep account. Settings-shaped backlog items below (black-screen toggle, resolution badge,
-  clear history, tooltip, content-type selector) each have a named row there; when one gets
-  built, flip the row live and log it in that file. Feel/vision review still pending (user).
+  sweep account. Settings-shaped backlog items below (clear history, tooltip, content-type
+  selector - black-screen toggle and resolution badge flipped live, BACKLOG_SWEEP.md #11/#12)
+  each have a named row there; when one gets built, flip the row live and log it in that file.
+  Feel/vision review still pending (user).
 - **Content-type selector (Live/VOD/Both) missing from the on-screen Xtream/M3U forms** (user
   found, 2026-09-12) - the Mobile Phone pairing form has always had this, the on-screen forms
   never did. Deliberately not added yet: the selector is functionally inert everywhere in Phase 1
@@ -226,69 +225,36 @@ with more than one focusable region, not just these.
   assumed), so it would be UI that doesn't change behavior. Add it when the VOD phase makes the
   choice actually matter, not before - **the Playlist Name field sibling gap was different (real
   effect right now) and was fixed immediately instead**, see the round below.
-- **Back should retrace the same path as LEFT instead of one flat hop to Home** (user idea,
-  2026-09-12): e.g. inside Live TV, Back from Channels could step to Categories first, then Home,
-  rather than jumping straight to Home from anywhere. Good idea, not built - scope it first to
-  Live TV's own columns (which have a real spatial relationship) rather than a fully general
-  breadcrumb stack across every destination (Settings, Search, etc. aren't spatial the same way).
-  **New evidence, 2026-09-13 (Settings feel/vision pass):** the flat hop is now visibly worse in
-  Settings than it first looked - Back from deep in Settings lands on Home, a placeholder with
-  nothing built (see the next two entries for what that Currently does to focus), so the user
-  hit it live and asked outright whether Back should land on Home or Settings here. Current
-  behavior is the existing, documented, deliberate design (`AppShell.kt`: Back always flat-hops
-  to Home) - not a new bug, but this is the second independent report asking for something better,
-  which is real signal toward prioritizing the fix above rather than more scope-narrowing.
+- **Back should retrace the same path as LEFT instead of one flat hop to Home** - **no longer
+  backlog: built and machine-swept, BACKLOG_SWEEP.md #8, 2026-09-15.** Scoped to Live TV's own
+  columns as originally planned: Channels → Categories on one Back, Home on the next, via
+  `LiveTvScreen`'s own `BackHandler` kept mutually exclusive with `AppShell`'s Home-jump one
+  (`onChannelsFocusChanged`, same `enabled`-flag mechanism as the fullscreen case). `SPRINT_LOG.md`
+  has the sweep account.
 - **`PlaceholderScreen` (Home, and every other unbuilt destination) never claims initial focus,
-  and has no visible focus state at all** (user found, 2026-09-13, chasing the Back-to-Home report
-  above). Two stacked violations of already-binding rules, not one: it's `.focusable()` (so
-  something *can* land there) but nothing ever calls `requestFocus()` on it the way every real
-  screen does (`GroupsColumn`, `SettingsScreen`'s rail, etc.) - state/focus discipline above says
-  every screen must; and even when it does hold real Compose focus, it's a plain `Box`, not a
-  themed `Surface` with `RedSurfFocus` styling, so there is no ring/glow to see it - **Binding
-  technical constraint #4** below ("every focusable element needs a visible focus state") in
-  plain violation. Net effect, confirmed live: after Back-to-Home, nothing *looks* focused (though
-  the Box actually holds real focus, invisibly) until the first arrow key, which then jumps
-  focus to whichever NavStrip pill default search resolves to - not deterministically "Home," the
-  pill actually representing where you are (a fourth instance of the deterministic-return
-  question above, once Home has real initial focus to return *to*). Concrete, well-scoped fix:
-  give `PlaceholderScreen` the same `FocusRequester` + claim-on-compose pattern every real screen
-  already has, and route it through a real (even if inert) `Surface`/`RedSurfFocus` so it's
-  visible - cheap, and removes an entire category of "where did my focus go" reports at once.
-- **Channel rows aren't playlist-scoped in their primary key** (found live, 2026-09-12, while
-  chasing the zap-numbering bug): `ChannelEntity.streamId` alone is `@PrimaryKey`, not composite
-  with `playlistId`, and `insertChannels` uses `OnConflictStrategy.REPLACE` - re-adding the same
-  provider under a new `playlistId` (every `loadPlaylist` call mints a fresh UUID) can silently
-  migrate a channel's row onto the new playlist if its `streamId` collides, orphaning it from its
-  original playlist's group. Fix is a composite `primaryKeys = ["playlistId", "streamId"]` plus a
-  Room version bump (destructive migration, no live users yet - same pattern already used for
-  past schema changes) - not done yet because it wipes every currently-installed device's
-  playlists on next update, and this session already had enough other changes in flight to not
-  want to compound the risk. Do it as its own isolated, clearly-flagged release.
-- **No playlist management UI at all** (user found, 2026-09-12): can't delete or re-import a
-  single already-loaded playlist - Settings only has Check for updates / Add another playlist /
-  Reset, and there's no per-playlist removal anywhere (see whether Reset's full-wipe is the only
-  current workaround before assuming one doesn't exist). Matters beyond convenience: it's also the
-  only way to pick up fixes to *how* a playlist was imported (e.g. the `num`/`tvg-chno` fix above)
-  on already-loaded data, since import-time fields are written once and don't retroactively
-  correct themselves. Real playlist management (list, remove, re-sync one) belongs with the
-  Settings redesign already planned above, not bolted on ad hoc.
-- **GroupsColumn RIGHT/OK entry into Channels must focus the first channel - DECIDED** (user,
-  2026-09-13, resolving the 2026-09-12 open question below). Currently, RIGHT/OK from a category
-  lands wherever Compose's default directional focus search resolves to (in practice, whatever's
-  roughly parallel to the category you left, described by the user as "random, doesn't make
-  sense") - never a deliberate choice, just the unengineered default, since `onGroupFocused`
-  clears `focusedChannel` to null on every group switch (`LiveTvScreen.kt`) and nothing else
-  claims focus for that first entry. **Decision: always the first channel in the category**,
-  matching TiviMate/most TV UIs' convention of resetting a list to its top on a fresh selection -
-  not built yet, needs a `ChannelsColumn` entry-redirect the same shape as its own
-  `returnFocusRequester` mechanism (or `SettingsPane`'s `firstRowFocus`/`hadFocus` pattern from
-  the Settings sprint - same fix, third place it'd apply). *(Original 2026-09-12 framing, for
-  context: undecided whether "parallel row" or "always first" was more correct - now settled.)*
+  and has no visible focus state at all** - **no longer backlog: built and machine-swept,
+  BACKLOG_SWEEP.md #1, 2026-09-15.** Same `FocusRequester` + claim-on-compose pattern every real
+  screen uses, routed through a themed `Surface`/`RedSurfFocus`. `SPRINT_LOG.md` has the sweep
+  account.
+- **Channel rows aren't playlist-scoped in their primary key** - **no longer backlog: built and
+  machine-swept, BACKLOG_SWEEP.md #13, 2026-09-15.** `ChannelEntity`'s primary key is now
+  composite (`playlistId`, `streamId`), Room v6→v7, destructive migration (user-confirmed
+  bundling this in, no live users). Fresh-install import verified correct (`num`/`groupName`
+  intact) on real Xtream data. `SPRINT_LOG.md` has the sweep account.
+- ~~No playlist management UI at all~~ - **stale entry, removed BACKLOG_SWEEP.md hand-off,
+  2026-09-15**: resolved by the Settings sprint (`SETTINGS.md`, 2026-09-13) - Playlists category
+  has real per-playlist Remove today. This entry wasn't updated when that shipped.
+- **GroupsColumn RIGHT/OK entry into Channels must focus the first channel** - **no longer
+  backlog: built and machine-swept, BACKLOG_SWEEP.md #6, 2026-09-15.** `ChannelsColumn` now
+  redirects to index 0's row (by `num` order) on a fresh, never-browsed entry, the same
+  entry-redirect shape as `returnFocusRequester`/`SettingsPane`'s `firstRowFocus` pattern.
+  `SPRINT_LOG.md` has the sweep account.
 - **Settings: LEFT/Back from the pane land on the rail's nearest row, not the category you
-  started from** - no longer an open question, decided alongside its Live TV twin and a third
-  instance; see "State and focus discipline" above ("DECIDED, 2026-09-13 - deterministic return,
-  never spatial-nearest") for the full list, the TiviMate/UX-guideline rationale, and the likely
-  fix shape for this one specifically.
+  started from** - **no longer backlog: built and machine-swept, BACKLOG_SWEEP.md #5, 2026-09-15.**
+  `CategoryRail` now mirrors `SettingsPane`'s own `hadFocus`/entry-redirect pattern in reverse,
+  redirecting to the selected category's row only after focus has already crossed into the rail
+  (never mid-crossing, which is what broke a direct `requestFocus()` fix during the Settings
+  sprint). `SPRINT_LOG.md` has the sweep account.
 - **`focusProperties { exit = ... }` behaved inconsistently by direction, at least in the Compose/
   tv-foundation versions this project pins** (found live, 2026-09-13, Settings sprint): it blocked
   an explicit `FocusRequester.requestFocus()` call even when the destination was still inside the
@@ -297,48 +263,30 @@ with more than one focusable region, not just these.
   (matching `PlayerScreen.kt`'s router). Worth knowing before reaching for `focusProperties.exit`
   as the go-to fix for a focus-escape bug elsewhere - it may not behave as documented here.
 - **Settings rail: UP at the top row (General) is blocked from reaching NavStrip; the pane's own
-  top row isn't** (user found, 2026-09-13, feel/vision pass) - an inconsistency, and the user's
-  report reads as "this is wrong," not "this is right": UP from the *pane*'s top live row (e.g.
-  Playlists' "Remove") correctly reaches the top ribbon, but UP from the *rail*'s top row doesn't,
-  even though both are the same screen. Root cause: `SettingsScreen.kt`'s `onPreviewKeyEvent`
-  guard explicitly blocks `Key.DirectionUp` while on the rail at
-  `SettingsCategory.entries.first()` - the pane side has no equivalent guard at all and simply
-  relies on default `moveFocus()`, which is what's actually reaching NavStrip successfully. That
-  rail guard was added by direct analogy to `PlayerScreen.kt`'s fullscreen escape-prevention
-  without separately confirming Settings needed the same treatment - fullscreen video has no
-  visible NavStrip to sensibly land on, but Settings does, so the cases aren't equivalent. Likely
-  fix: drop the `DirectionUp`/rail-top-row branch of that guard (the `DirectionDown`/rail-bottom
-  and `DirectionRight`/empty-pane branches are unrelated and still needed) so the rail matches the
-  pane - then, per the deterministic-return decision above, make sure it lands specifically on
-  the *Settings* pill, not whichever NavStrip pill default search happens to resolve to.
-- **Settings' category rail doesn't scroll** (user found, 2026-09-13, feel/vision pass on
-  `v0.27.0`): the last row ("About") is visibly cut off and DOWN does nothing once focus reaches
-  it - real bug, not a taste call. Root cause: `CategoryRail` (`SettingsScreen.kt`) lays out all
-  nine rows in a plain `Column`, not a `TvLazyColumn` - every other real list in this app
-  (`GroupsColumn`, `ChannelsColumn`, `SettingsPane` itself) uses `TvLazyColumn`, which scrolls to
-  keep focus on-screen for free; the rail was written as a plain `Column` since nine fixed rows
-  never needed paging, but that also means nothing scrolls the viewport when they overflow the
-  card's height. Fix is almost certainly swapping it to `TvLazyColumn` for consistency with every
-  other column in the app, not a bespoke scroll solution - low-risk, but not done yet per the
-  user's explicit "log only, don't fix now."
-- **About: add a "Created by" row** (user idea, 2026-09-13): "Created By: Faraz Ahmad, or
-  something more accurate of a role" - the user wasn't sure of the exact title to use. Add
-  alongside the existing Version/Check for updates rows in `SETTINGS.md`'s About table; confirm
-  wording with the user before building (a live row's label is real copy, not a placeholder).
+  top row isn't** - **no longer backlog: built and machine-swept, BACKLOG_SWEEP.md #3, 2026-09-15.**
+  Dropped the `DirectionUp`/rail-top-row branch of `SettingsScreen.kt`'s `onPreviewKeyEvent` guard;
+  UP now escapes via default `moveFocus`, same as the pane side always did.
+  **New finding, swept 2026-09-15:** it lands on the "Home" pill, not "Settings" - Compose's
+  default spatial search picks whichever NavStrip pill is horizontally nearest the rail (far
+  left of the screen), not the pill actually entered from, and forcing "Settings" specifically
+  would need the same cross-branch `requestFocus()` this session already found unreliable
+  (`SettingsPane`'s doc comment). Not blocking, not fixed this sprint - logged as feel/vision:
+  does landing on Home read as wrong, or is "UP always reaches leftmost-ish NavStrip" acceptable?
+- **Settings' category rail doesn't scroll** - **no longer backlog: built and machine-swept,
+  BACKLOG_SWEEP.md #2, 2026-09-15.** `CategoryRail` swapped to `TvLazyColumn`, matching every
+  other list in the app; "About" is reachable and fully visible. `SPRINT_LOG.md` has the sweep
+  account.
+- **About: add a "Created by" row** - **no longer backlog: built and machine-swept,
+  BACKLOG_SWEEP.md #9, 2026-09-15.** Live row, "Created by · Faraz Ahmad", styled like Version.
+  Feel/vision still open: is the wording final, or does the user want a role appended now that
+  it's live?
 - **Recent-channel tile selection across categories: Back returns focus to the wrong category**
-  (user found, 2026-09-13) - the third instance of "State and focus discipline"'s now-decided
-  deterministic-return principle above, but with an extra prerequisite (see there): watching a
-  channel in category X, opening the tile row and picking a *recent* channel that belongs to a
-  different category Y, then pressing Back to leave fullscreen - focus lands back on category X
-  (the one playback started in), not Y (the channel actually now playing). Root cause (read, not
-  yet fixed): `PlayerScreen`'s tile select and
-  `LiveTvScreen`'s zap path both call `onChannelChanged`, which updates `focusedChannel` but never
-  `selectedGroup`/`queriedGroup` - so `ChannelsColumn` is still showing category X's paged list
-  when fullscreen closes, `returnFocusRequester`'s search for the new channel's id finds no
-  matching row in it (the new channel isn't in that list at all), fails silently, and default
-  focus picking falls back to whatever's already selected - category X. Same state/focus
-  discipline class as every other bug in this section; fix is making a channel change from inside
-  the player also update `selectedGroup` to that channel's actual group, not just `focusedChannel`.
+  - **no longer backlog: built and machine-swept, BACKLOG_SWEEP.md #7, 2026-09-15.**
+  `LiveTvScreen`'s `onChannelChanged` (the tile-pick and zap path both use it) now also updates
+  `selectedGroup` to the new channel's actual `(playlistId, groupName)`, not just `focusedChannel`
+  - verified live: picking a recent channel from a different category, then Back, correctly shows
+  that channel's real category selected and the channel itself focused. `SPRINT_LOG.md` has the
+  sweep account.
 
 - **Progress feedback: three places where the app goes silent** (user, 2026-09-13, after sprint
   1) - a small "Feedback & progress" brief, best folded into the **Branding** sprint since the

@@ -3,6 +3,7 @@ package com.redsurf.tv.player
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -109,6 +110,10 @@ fun PlayerHost(
     streamUrl: String?,
     fullscreen: Boolean,
     modifier: Modifier = Modifier,
+    // BACKLOG_SWEEP.md #11 (Settings -> Playback -> "Black screen between zaps", AppPreferences-
+    // backed) - false (default) is this composable's existing "no-black-screen zapping" trick,
+    // unchanged; true skips it, matching the old-cable-box behavior the user asked for.
+    blackScreenBetweenZaps: Boolean = false,
     onStreamInfo: (StreamInfo) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -150,8 +155,17 @@ fun PlayerHost(
     }
 
     val lastUrl = remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(streamUrl) {
+    LaunchedEffect(streamUrl, blackScreenBetweenZaps) {
         if (streamUrl != null && streamUrl != lastUrl.value) {
+            // clearMediaItems() is the actual "reset" event setKeepContentOnPlayerReset below
+            // cares about - setMediaItem()+prepare() alone doesn't trigger it, so without this
+            // call the toggle would have nothing to act on and every zap would keep holding the
+            // last frame regardless of the setting.
+            // Diagnostic only (BACKLOG_SWEEP.md #10/#11 acceptance criterion - "verifiable via
+            // PlayerHost state logs, not a screenshot", since a real black frame between two
+            // live streams is too fast to reliably catch in one screencap).
+            Log.d("PlayerHost", "media swap blackScreenBetweenZaps=$blackScreenBetweenZaps keepContentOnReset=${!blackScreenBetweenZaps}")
+            if (blackScreenBetweenZaps) exoPlayer.clearMediaItems()
             exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
             exoPlayer.prepare()
             lastUrl.value = streamUrl
@@ -221,11 +235,12 @@ fun PlayerHost(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
                 // No-black-screen zapping (PHASE_2.md #2.2, decision 13,
-                // PRODUCT_VISION.md #3's "black screen minimizer"): hold the outgoing channel's
-                // last frame - on a solid black shutter, never a stale video frame from whatever
-                // was on screen even earlier - until the next stream's first frame is ready,
-                // instead of clearing to a blank/default surface the instant media is reset.
-                setKeepContentOnPlayerReset(true)
+                // PRODUCT_VISION.md #3's "black screen minimizer") by default: hold the outgoing
+                // channel's last frame - on a solid black shutter, never a stale video frame from
+                // whatever was on screen even earlier - until the next stream's first frame is
+                // ready, instead of clearing to a blank/default surface the instant media is
+                // reset. [blackScreenBetweenZaps] (BACKLOG_SWEEP.md #11) inverts this.
+                setKeepContentOnPlayerReset(!blackScreenBetweenZaps)
                 setShutterBackgroundColor(android.graphics.Color.BLACK)
                 // Screensaver/screen-off kicking in mid-playback (found live, 2026-09-12) -
                 // decoding/rendering video isn't "user activity" as far as Android's idle timer
@@ -236,6 +251,7 @@ fun PlayerHost(
                 keepScreenOn = true
             }
         },
+        update = { view -> view.setKeepContentOnPlayerReset(!blackScreenBetweenZaps) },
         modifier = modifier.fillMaxSize(),
     )
 }

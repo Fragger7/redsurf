@@ -2,6 +2,86 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-15 — Backlog sweep (`docs/plans/BACKLOG_SWEEP.md`)
+
+**Builds this pass: 1** (well under the 3-build cap). **Deviations: one** - `deviated:` added a
+diagnostic `Log.d` line to `PlayerHost` (item #11's acceptance criterion explicitly asks for a
+log-verifiable check, not a screenshot, since a black frame between two live streams is too fast
+to reliably catch in one screencap) partway through building, before the first compile - logged
+here since it's a departure from the brief's file list, not because it changed the sweep order.
+
+**Setup:** debug/release swap as usual; seeded via the Xtream API path
+(`scripts/tv-test.sh seed_playlist xtream`) - one transient `HTTP 000` on the first attempt (same
+known pairing-server-not-yet-bound issue as the 2026-09-14 mini-sprint), retried 3s later,
+succeeded (~27K channels, ~25s import).
+
+**Built:** all 13 items from `BACKLOG_SWEEP.md`, in one pass, before the first compile -
+`PlaceholderScreen` focus claim (#1); `CategoryRail` → `TvLazyColumn` (#2) and its `DirectionUp`
+guard dropped (#3); `GroupsColumn`/`ChannelsColumn` deterministic focus-return, already present
+from an earlier sprint for #4 (verified, not rebuilt) and newly added for #6 (first-channel
+redirect on a never-browsed entry); `CategoryRail`'s own `hadFocus` return-redirect mirroring
+`SettingsPane`'s (#5); `LiveTvScreen.onChannelChanged` now updates `selectedGroup` too, not just
+`focusedChannel` (#7); `LiveTvScreen`'s own `BackHandler` (Channels → Categories → Home), kept
+mutually exclusive with `AppShell`'s Home-jump one via `onChannelsFocusChanged` (#8); About →
+"Created by · Faraz Ahmad" row (#9); new `settings/AppPreferences.kt`, `SharedPreferences` +
+`StateFlow`, two booleans (#10); Playback → "Black screen between zaps" toggle, threaded to
+`PlayerHost` (`clearMediaItems()` + `setKeepContentOnPlayerReset` inversion) (#11); Appearance →
+"Resolution badge" toggle, threaded to `PlayerInfoBlock`'s badge row (#12); `ChannelEntity`
+composite primary key (`playlistId`, `streamId`), Room v6→v7, destructive migration (#13).
+
+**Sweep, one pass, clean - all 12 machine-verifiable criteria green, zero blocking failures:**
+1. Home: `PlaceholderScreen`'s themed `Surface` reports real focus with a visible ring
+   immediately on arrival (confirmed via both Back-to-Home and direct nav). ✅
+2. Settings rail: UP/DOWN through all nine rows reaches "About" with its value fully visible,
+   bounds inside the rail's card. ✅
+3. Settings rail: UP at "General" escapes (no longer blocked); DOWN at "About" still stays put.
+   ✅ with a **new, non-blocking finding**: UP lands on the "Home" NavStrip pill, not "Settings" -
+   Compose's default spatial search picks whichever pill is horizontally nearest the rail (far
+   left), not the one actually entered from. Logged as feel/vision in `AGENTS.md`, not fixed
+   this sprint (forcing "Settings" specifically would need the same cross-branch `requestFocus()`
+   this project already found unreliable).
+4. Live TV: focused channel 24182, LEFT to Categories, RIGHT back - same `streamId` (24182)
+   confirmed via `uiautomator` dump both times (this entry-redirect was already built in an
+   earlier sprint; this pass verified it, not rebuilt it). ✅
+5. Settings: entered "Check for updates" (spatially near "Parental controls"/"Other"), LEFT back
+   to rail - landed on "About" (the category actually selected), not the spatially-nearest row.
+   ✅
+6. Live TV: RIGHT into a never-browsed category landed on its first channel by `num` order
+   (confirmed both via bounds/child-text and a fresh-launch AF|AFRICA → 24180 check). ✅
+7. Full round-trip verified live: opened a channel in AF|AFRICA, backed out, opened a different
+   channel in AF|MALI, opened the tile row, picked the AF|AFRICA recent tile, Back twice out of
+   fullscreen - Categories showed AF|AFRICA selected, Channels showed 24180 focused. Confirmed via
+   `PlayerHost`'s media-swap log line and two full-screen screenshots (before/after the tile
+   pick). ✅
+8. Live TV: Back from Channels → Categories (bounds confirmed still inside Live TV, not
+   NavStrip); Back again → Home (`PlaceholderScreen`'s Surface, real focus). ✅
+9. About: "Created by · Faraz Ahmad" row visible, styled like Version, screenshot-confirmed. ✅
+10. Playback → "Black screen between zaps" flips live (screenshot: Off → On); `PlayerHost` logs
+    `blackScreenBetweenZaps=true keepContentOnReset=false` on every subsequent media swap,
+    confirming the flag reached the player, not just the Settings row. ✅
+11. Appearance → "Resolution badge" flips live (screenshot: "Class (SD/HD/FHD/4K)" →
+    "Exact (e.g. 1920x1080)"); with it on, the zap-banner badge showed the literal `896x504`
+    instead of a class label, screenshot-confirmed. ✅
+12. Fresh install (uninstall, install debug, seed via Xtream) after the v7 schema bump: ~27K
+    channels imported and displayed correctly - `num`/`groupName`/group counts all intact, no
+    crash, no `SQLiteException` in logcat. ✅
+
+**Hand-off:** debug uninstalled, release build to follow this entry's own push; `AGENTS.md`'s
+Backlog trimmed - every item this sprint resolved is marked, and the stale "No playlist
+management UI" entry (resolved by the 2026-09-13 Settings sprint but never updated) was removed
+per the brief's own hand-off instruction.
+
+**Feel/vision for the user (3 items):**
+1. Back-in-Live-TV (Channels → Categories → Home) - right number of presses to exit, or too many?
+2. The black-screen zap toggle - does it actually feel like the old cable-box behavior you wanted?
+3. "Created by · Faraz Ahmad" - final wording, or want a role appended now that you can see it live?
+
+Plus the new, non-blocking finding from criterion 3 above: is "UP from Settings' rail always
+reaches the Home pill" fine, or should it target the Settings pill specifically (would need new
+plumbing, not a quick fix)?
+
+**Release:** pending this entry's own push (see version below once tagged).
+
 ## 2026-09-14 — Zap UP/DOWN order mini-sprint (`AGENTS.md` backlog entry as brief)
 
 **Builds this pass: 1** (well under the 3-build cap). **Deviations: none** - straight setup →

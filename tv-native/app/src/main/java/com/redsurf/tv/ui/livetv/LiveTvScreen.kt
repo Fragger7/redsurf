@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -27,7 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
@@ -84,11 +87,25 @@ import kotlinx.coroutines.delay
  * 2026-09-12.
  */
 @Composable
-fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Unit) {
+fun LiveTvScreen(
+    viewModel: MainViewModel,
+    onFullscreenChanged: (Boolean) -> Unit,
+    // BACKLOG_SWEEP.md #8: lets AppShell exclude its own Home-jump BackHandler while real focus
+    // is in the Channels column, mirroring the existing fullscreen mutual-exclusivity mechanism
+    // (see AppShell.kt's own doc comment) rather than introducing a second, competing pattern.
+    onChannelsFocusChanged: (Boolean) -> Unit = {},
+    // BACKLOG_SWEEP.md #11/#12 - threaded straight through to PlayerScreen; LiveTvScreen has no
+    // use for either value itself, it's just the composable in between AppShell (which owns
+    // AppPreferences) and PlayerScreen (which actually reads them).
+    blackScreenBetweenZaps: Boolean = false,
+    showRawResolution: Boolean = false,
+) {
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     var selectedGroup by remember { mutableStateOf<GroupKey?>(null) }
     var focusedChannel by remember { mutableStateOf<ChannelEntity?>(null) }
     var isFullscreen by remember { mutableStateOf(false) }
+    var channelsHasFocus by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
 
     // In-memory stand-in for PHASE_2.md #2.5's real recent_channels table (decision 8) - most
     // recent first, capped at 8, deduped by streamId. Recorded on every deliberate channel change
@@ -103,6 +120,10 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
         if ((selectedGroup == null || groups.none { it.key() == selectedGroup }) && groups.isNotEmpty()) {
             selectedGroup = groups.first().key()
         }
+    }
+
+    LaunchedEffect(channelsHasFocus) {
+        onChannelsFocusChanged(channelsHasFocus)
     }
 
     // Debounced: a D-pad flying down the list must not start a stream per row it passes over.
@@ -151,6 +172,21 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
         }
     }
 
+    // Back retraces this screen's own path instead of flat-hopping straight to Home
+    // (BACKLOG_SWEEP.md #8, user-verified against real TiviMate 2026-09-14): Channels -> back to
+    // Categories first, Home only on the next Back from there. `focusManager.moveFocus(Left)`, not
+    // a direct `requestFocus()` on GroupsColumn's internal selected-row requester - that requester
+    // isn't exposed outside GroupsColumn, and SettingsScreen.kt's own doc comment already found
+    // cross-branch `requestFocus()` calls unreliable; default `moveFocus` crossing into GroupsColumn
+    // is what its own onFocusChanged entry-redirect (GroupsColumn.kt) is built to catch and correct
+    // to the actually-selected group, so this reuses that instead of a second mechanism. Disabled
+    // whenever fullscreen owns Back (PlayerScreen's own BackHandler) or focus isn't in Channels at
+    // all (AppShell's Home-jump BackHandler takes over then, kept mutually exclusive the same way
+    // via onChannelsFocusChanged).
+    BackHandler(enabled = !isFullscreen && channelsHasFocus) {
+        focusManager.moveFocus(FocusDirection.Left)
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Column proportions from references/streamvault/LiveTV.png: ~28 / 34 / 30 with 20dp
         // gutters. Gutters live here, not as trailing padding inside each column, so every
@@ -190,6 +226,7 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
                     focusedChannelId = focusedChannel?.streamId,
                     onChannelFocused = { focusedChannel = it },
                     returnFocusRequester = channelReturnFocus,
+                    onFocusStateChanged = { channelsHasFocus = it },
                     onChannelOpen = { channel ->
                         focusedChannel = channel
                         // Bypass the 500ms browse-debounce above: opening is a deliberate action,
@@ -236,9 +273,21 @@ fun LiveTvScreen(viewModel: MainViewModel, onFullscreenChanged: (Boolean) -> Uni
                     // the "duplicate 2-step" bug that debounce-bypass already fixed once.
                     previewUrl = channel.streamId
                     recordRecent(channel)
+                    // BACKLOG_SWEEP.md #7: a channel change originating from inside the player
+                    // (ordinary zapping stays within the same group, so this is a no-op; picking a
+                    // recent-channel tile from a *different* category doesn't) must also move
+                    // selectedGroup, not just focusedChannel - otherwise Categories keeps
+                    // whatever group was selected before fullscreen, and Back after a
+                    // cross-category tile pick lands on the wrong category (GroupsColumn's own
+                    // entry-redirect, see its doc comment, faithfully returns to that stale
+                    // selection instead of the new channel's actual group).
+                    val newGroup = GroupKey(channel.playlistId, channel.groupName)
+                    if (newGroup != selectedGroup) selectedGroup = newGroup
                 },
                 breadcrumb = breadcrumb,
                 recentChannels = recentChannels.filter { it.streamId != focusedChannel?.streamId },
+                blackScreenBetweenZaps = blackScreenBetweenZaps,
+                showRawResolution = showRawResolution,
                 modifier = Modifier.fillMaxSize(),
             )
         }

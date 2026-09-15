@@ -21,7 +21,7 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 export PATH="$ANDROID_HOME/platform-tools:$PATH"
 D="${REDSURF_DEVICE:-192.172.7.160:35631}"
 ADB() { adb -s "$D" "$@"; }
-LOG_TAGS="${REDSURF_LOG_TAGS:-SettingsScreen|PlayerScreen|LiveTvScreen|MainViewModel}"
+LOG_TAGS="${REDSURF_LOG_TAGS:-SettingsScreen|PlayerScreen|LiveTvScreen|MainViewModel|PlayerHost}"
 
 focused_info() {
   ADB shell uiautomator dump /sdcard/window_dump.xml >/dev/null 2>&1

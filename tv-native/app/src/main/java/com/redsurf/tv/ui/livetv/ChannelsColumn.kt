@@ -69,6 +69,10 @@ fun ChannelsColumn(
     // focus on the NavStrip's "Live TV" pill instead of back on the channel just watched, since
     // nothing claims focus explicitly once the fullscreen overlay that held it is torn down).
     returnFocusRequester: FocusRequester,
+    // Lets LiveTvScreen know whether real focus currently lives in this column at all
+    // (BACKLOG_SWEEP.md #8) - not just which channel - so Back can be scoped to "leave Channels
+    // for Categories first, then Home on the next Back" instead of always flat-hopping to Home.
+    onFocusStateChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // State/focus discipline (AGENTS.md, user directive 2026-09-12): pressing LEFT into
@@ -78,6 +82,15 @@ fun ChannelsColumn(
     // *outside* this column (e.g. LEFT-then-RIGHT from Categories) - never during ordinary
     // up/down movement within it - so this never fights normal in-column navigation.
     var hadFocus by remember { mutableStateOf(false) }
+
+    // First-channel redirect (BACKLOG_SWEEP.md #6): entering a category that's never been
+    // browsed has focusedChannelId == null (LiveTvScreen resets it on every real group switch),
+    // so the returnFocusRequester redirect above never fires and RIGHT/OK used to fall through to
+    // whatever Compose's default directional search picked - not necessarily this group's first
+    // channel by `num` order, the TiviMate-matching invariant the acceptance criteria want.
+    // Attached to index 0's row alongside (never both at once - focusedChannelId and "no
+    // focusedChannelId" are mutually exclusive) so entry is always deterministic either way.
+    val firstChannelFocus = remember { FocusRequester() }
 
     // Keeps the list scrolled to whatever channel is focused even while real D-pad focus lives
     // elsewhere (fullscreen zapping) - found live, 2026-09-12, reported as Back "not landing on
@@ -105,10 +118,15 @@ fun ChannelsColumn(
             .fillMaxHeight()
             .padding(top = 14.dp)
             .onFocusChanged { state ->
-                if (state.hasFocus && !hadFocus && focusedChannelId != null) {
-                    runCatching { returnFocusRequester.requestFocus() }
+                if (state.hasFocus && !hadFocus) {
+                    if (focusedChannelId != null) {
+                        runCatching { returnFocusRequester.requestFocus() }
+                    } else if (channels.itemCount > 0) {
+                        runCatching { firstChannelFocus.requestFocus() }
+                    }
                 }
                 hadFocus = state.hasFocus
+                onFocusStateChanged(state.hasFocus)
             },
     ) {
         Text(
@@ -129,12 +147,17 @@ fun ChannelsColumn(
                 val channel = channels[index]
                 if (channel != null) {
                     val selected = channel.streamId == focusedChannelId
+                    val rowModifier = when {
+                        selected -> Modifier.focusRequester(returnFocusRequester)
+                        focusedChannelId == null && index == 0 -> Modifier.focusRequester(firstChannelFocus)
+                        else -> Modifier
+                    }
                     ChannelRow(
                         channel = channel,
                         selected = selected,
                         onFocused = { onChannelFocused(channel) },
                         onOpen = { onChannelOpen(channel) },
-                        modifier = if (selected) Modifier.focusRequester(returnFocusRequester) else Modifier,
+                        modifier = rowModifier,
                     )
                 } else {
                     ChannelRowPlaceholder()

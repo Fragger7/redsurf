@@ -124,6 +124,10 @@ fun PlayerScreen(
     // until #2.5's real `recent_channels` table lands; the tile row and History picker both read
     // this same list. Excludes the channel currently playing - the caller's job, not this one's.
     recentChannels: List<ChannelEntity> = emptyList(),
+    // BACKLOG_SWEEP.md #11/#12, AppPreferences-backed (Settings -> Playback/Appearance) - both
+    // default false, matching this screen's pre-toggle behavior exactly.
+    blackScreenBetweenZaps: Boolean = false,
+    showRawResolution: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -405,6 +409,7 @@ fun PlayerScreen(
             streamUrl = streamUrl,
             fullscreen = true,
             modifier = Modifier.fillMaxSize(),
+            blackScreenBetweenZaps = blackScreenBetweenZaps,
             onStreamInfo = { streamInfo = it },
         )
 
@@ -459,7 +464,12 @@ fun PlayerScreen(
             // of it, not new behavior).
             if (overlay == PlayerOverlay.ZapBanner || overlay is PlayerOverlay.Controls) {
                 Column(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
-                    PlayerInfoBlock(channel = currentChannel, streamInfo = streamInfo, modifier = Modifier.fillMaxWidth())
+                    PlayerInfoBlock(
+                        channel = currentChannel,
+                        streamInfo = streamInfo,
+                        showRawResolution = showRawResolution,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     val controlsOverlay = overlay as? PlayerOverlay.Controls
                     if (controlsOverlay != null) {
                         Spacer(modifier = Modifier.height(12.dp))
@@ -666,7 +676,12 @@ private fun HistoryPicker(channels: List<ChannelEntity>, onSelect: (ChannelEntit
  * (never a placeholder) when [StreamInfo] hasn't reported that field yet.
  */
 @Composable
-private fun PlayerInfoBlock(channel: ChannelEntity?, streamInfo: StreamInfo, modifier: Modifier = Modifier) {
+private fun PlayerInfoBlock(
+    channel: ChannelEntity?,
+    streamInfo: StreamInfo,
+    showRawResolution: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     if (channel == null) return
     Row(
         modifier = modifier.padding(horizontal = 24.dp, vertical = 20.dp),
@@ -702,8 +717,11 @@ private fun PlayerInfoBlock(channel: ChannelEntity?, streamInfo: StreamInfo, mod
                 )
                 Text(channel.name, style = RedSurfType.heroTitle, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            // BACKLOG_SWEEP.md #12: literal WxH instead of the derived SD/HD/FHD/4K class when the
+            // Appearance toggle is on - StreamInfo already captures rawResolution unconditionally
+            // (see its own doc comment), so this is purely which field the badge row reads.
             val badges = listOfNotNull(
-                streamInfo.resolutionClass,
+                if (showRawResolution) streamInfo.rawResolution else streamInfo.resolutionClass,
                 streamInfo.frameRate?.let { "$it FPS" },
                 streamInfo.audioChannels,
                 streamInfo.audioCodec,

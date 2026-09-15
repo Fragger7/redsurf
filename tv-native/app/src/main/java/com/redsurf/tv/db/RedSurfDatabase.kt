@@ -90,11 +90,13 @@ interface ChannelDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChannels(channels: List<ChannelEntity>)
 
-    @Query("UPDATE channels SET isFavorite = :isFavorite WHERE streamId = :streamId")
-    suspend fun updateFavorite(streamId: String, isFavorite: Boolean)
+    // Scoped by playlistId too (BACKLOG_SWEEP.md #13) - streamId alone is only unique within one
+    // provider, matching ChannelEntity's own composite primary key.
+    @Query("UPDATE channels SET isFavorite = :isFavorite WHERE playlistId = :playlistId AND streamId = :streamId")
+    suspend fun updateFavorite(playlistId: String, streamId: String, isFavorite: Boolean)
 
-    @Query("UPDATE channels SET isHidden = :isHidden WHERE streamId = :streamId")
-    suspend fun updateHidden(streamId: String, isHidden: Boolean)
+    @Query("UPDATE channels SET isHidden = :isHidden WHERE playlistId = :playlistId AND streamId = :streamId")
+    suspend fun updateHidden(playlistId: String, streamId: String, isHidden: Boolean)
 
     @Query("DELETE FROM channels WHERE playlistId = :playlistId")
     suspend fun deleteChannelsByPlaylist(playlistId: String)
@@ -148,9 +150,11 @@ interface PlaylistDao {
     EpgProgramEntity::class,
     PlaylistEntity::class,
     ChannelGroupEntity::class
-], version = 6, exportSchema = false)
-// v6: added the (playlistId, streamType, groupName) index (PHASE_1.md #2b). Destructive
-// migration is acceptable - no user data exists yet to preserve.
+], version = 7, exportSchema = false)
+// v6: added the (playlistId, streamType, groupName) index (PHASE_1.md #2b).
+// v7: ChannelEntity's primary key is now composite (playlistId, streamId) - see EpgEntities.kt's
+// doc comment on ChannelEntity (BACKLOG_SWEEP.md #13). Destructive migration is acceptable - no
+// user data exists yet to preserve.
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao
