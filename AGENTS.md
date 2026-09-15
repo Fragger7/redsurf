@@ -195,6 +195,42 @@ with more than one focusable region, not just these.
 
 ## Backlog - explicitly logged, not forgotten
 
+- **Live TV loses its category/channel/recent-tiles on leaving and returning** - **no longer
+  backlog: fixed and verified live, 2026-09-15** (user report, three examples: category resets
+  every time you leave Live TV, recent-channel tiles disappear, no relaunch-resume). The
+  navigate-away-and-back third of this is fixed: `selectedGroup`/`focusedChannel`/`recentChannels`
+  hoisted to `AppShell` (same conditional-composition-trap fix `selectedSettingsCategory` already
+  needed). **Still open, needs real disk persistence, not just hoisting** - two related pieces,
+  not yet scoped in detail:
+  1. **Resume last channel across a real app relaunch/process death** - the General category's
+     "Resume last channel on launch" row (`SettingsCategory.kt`) is still grey/unbuilt. Open
+     question: does "resume" mean auto-play straight into fullscreen on launch, or land on Live TV
+     with that channel merely pre-selected/ready to open? (TiviMate's real behavior: configurable,
+     defaults to auto-play.) Needs a user decision before building.
+  2. **Recent-channel tiles surviving relaunch, not just tab-switching** - needs #2.5's real
+     `recent_channels` table (Room), not the in-memory stand-in - a real schema addition like the
+     BACKLOG_SWEEP.md #13 composite-key migration, not a quick fix. Whether to pull this forward
+     now (like the black-screen fix) or hold for the Player sprint is an open question too.
+- **EPG data source, for when Phase 3 (EPG sync + the merged Live TV/Guide screen, see the
+  dedicated entry below) is underway** - user request, 2026-09-15, researched (not built): most
+  Xtream providers already ship their own EPG endpoint, which is the first and most accurate
+  source for real playlists like the user's - these are the fallback/supplement path for M3U-only
+  providers or channels the provider itself doesn't list.
+  - [iptv-org/epg](https://github.com/iptv-org/epg) - open-source, self-hosted (you run the
+    scraper yourself via Node.js/Docker, it's not a hosted static URL), pulls from hundreds of
+    source sites into standard XMLTV, channel data from the iptv-org/database project. Broadest
+    coverage, most setup.
+  - [EPGSHARE01](https://epgshare01.online/) - free, hosted, static XMLTV files by country/source,
+    no self-hosting needed - explicitly "for LEGAL use only," updated roughly daily (uses
+    WebGrab+Plus). Closest to a drop-in URL.
+  - [open-epg.com](https://www.open-epg.com/app/epgguide.php) - free public XMLTV guides by
+    country, plus an editor tool for fixing channel-ID mismatches.
+  - "EPG Genius"/"EPG Genie" specifically (as named in the request) didn't turn up as a real,
+    distinct service in this research - likely misremembered; closest real matches were EPG.lat
+    (frequently cited as integrating well with TiviMate specifically) and the sources above.
+  - Integration note for later: XMLTV channel `id` attributes must match the M3U's `tvg-id` (or
+    the Xtream `epg_channel_id`) for a source to actually line up with RedSurf's channel rows -
+    worth an editor/mapping pass, not just picking a URL.
 - **Optional black-screen between channel zaps** - **no longer backlog: built and machine-swept,
   BACKLOG_SWEEP.md #11, 2026-09-15.** Live toggle, Settings → Playback; `AppPreferences`-backed,
   `PlayerHost` reads it and inverts `setKeepContentOnPlayerReset`. `SPRINT_LOG.md` has the sweep
