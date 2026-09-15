@@ -237,11 +237,15 @@ before the report comes in, not after.
   flows child-to-parent today), so this needs a new `LiveTvScreen` input (e.g.
   `autoPlayOnLaunch: Boolean`) it reads itself, the same "bypass the browse-debounce, set
   `previewUrl` directly" pattern `onChannelOpen`/`onChannelChanged` already use, guarded so it only
-  fires once per cold launch, not on every later focus change; (3) rename the Settings row - "Resume
-  last channel on launch" no longer accurately describes a toggle that's now specifically about
-  auto-play (resuming/pre-selecting is unconditional) - something like "Auto-play last channel on
-  launch" is more honest copy. **Not yet built** - logged in detail so next session doesn't have to
-  re-derive the design.
+  fires once per cold launch, not on every later focus change; (3) **rename the Settings row to
+  "Auto-play last channel on launch"** (user approved renaming freely, 2026-09-15) - "Resume last
+  channel on launch" no longer describes what the toggle does once resuming/pre-selecting is
+  unconditional; the toggle is specifically about auto-play now, so the label should say that.
+  Update the row's key/getter/setter names in `AppPreferences.kt` to match
+  (`autoPlayLastChannelOnLaunch` or similar) while at it, for the same honesty-in-naming reason -
+  purely a rename, `SETTINGS_GREY_ROWS`/`SettingsCategory.kt` and `SettingsScreen.kt`'s
+  `generalContent` already have the right shape, just the wrong label/names. **Not yet built** -
+  this whole entry (spec + fix shape + the rename) is what to pick up first next session.
 
   **Still open regardless**: recent-channel tiles surviving a relaunch (not just tab-switching)
   needs #2.5's real `recent_channels` table (Room), not the in-memory stand-in - user decision
