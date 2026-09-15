@@ -364,26 +364,41 @@ with more than one focusable region, not just these.
      buffering/playbackState UI in it). Decision 13's "no black screen" zap deliberately keeps the
      old frame up, which is right, but it needs a small, unobtrusive "tuning" indicator so a slow
      stream reads as loading rather than dead. Same component as 1 and 2, smallest form.
-- **Zap UP/DOWN order still wrong for the user - open investigation, not yet understood**
-  (user, 2026-09-13, after sprint 1): channel numbers in the list are sequential, but zapping is
-  "random, and sometimes UP decreases while DOWN increases." Two rounds have already gone at
-  this (provider-gap theory - wrong; then the real `tvg-chno`-never-parsed bug, fixed in
-  v0.25.4 - a fresh import is required for it to apply). The user's latest report is *after*
-  that fix, so either it wasn't enough or the tested data predates it. Hypotheses to eliminate,
-  in order, before touching code again: (a) **stale data** - was the zap test on a playlist
-  imported after v0.25.4? Sprint 1 wiped the device, so anything added now is fresh; (b)
-  **mixed numbering within one group** - `num = channel.chno ?: fallbackNum`; if the provider
-  sets `tvg-chno` on *some* entries in a group but not others, real numbers (e.g. 101, 102) and
-  0-based fallback counters interleave under `ORDER BY num`, which would look exactly like
-  "random" - check by inspecting `num` across one group in the DB (debug build + `run-as` is
-  broken on this Chromecast; use a `Log.d` of the group's first 20 `num` values instead); (c)
-  **wrap-around at group edges** - `nextChannel` wraps to `firstInGroup` past the end and
-  `prevChannel` to `lastInGroup` past the start, which at a boundary reads as UP going *up* in
-  number - could explain "sometimes inverted" if the test group is small; (d) **direction
-  convention itself** - decision 3 maps UP → previous (lower num), DOWN → next; confirm against
-  the user's TiviMate that this is the expected direction and not itself the "inverted" half of
-  the report. Needs the user's answers to (a) and the source type (Xtream vs M3U) before a
-  third code attempt - see the questions asked 2026-09-13.
+- **Zap UP/DOWN order - "total chaos", still wrong on v0.27.0 - next: instrument, don't guess**
+  (user, 2026-09-13/14). Two rounds already: the provider-gap theory (wrong), then the real
+  `tvg-chno`-never-parsed bug (fixed v0.25.4 - **but that fix is M3U-only, and the user's
+  provider is Xtream Codes**, where `num` comes straight from the provider's JSON. So round two
+  was correct and irrelevant to this report). Answers on record (2026-09-14): tested on data
+  imported after v0.25.4; Xtream, never M3U; both apps show numbers next to channels; TiviMate
+  steps them in order, RedSurf doesn't; and in TiviMate **UP → higher number, DOWN → lower.**
+
+  **Two facts now certain, one still unknown:**
+  1. *Certain - direction is inverted by design:* Phase 2 decision 3 mapped UP → `prevChannel`
+     (lower `num`). Flip it (`PlayerScreen.zap`: UP → `nextChannel`, DOWN → `prevChannel`).
+     Decision 3 in `PHASE_2.md` amended. This alone explains "up means down."
+  2. *Certain - the numbering fix never applied to this user:* see above. Don't count it.
+  3. *Unknown - the "no predictable increment" part.* Every query path has been read twice
+     (`nextInGroup`/`prevInGroup` are `num > :num ORDER BY num, name LIMIT 1` scoped to the same
+     `playlistId`+`groupName`+`streamType='live'` the visible list uses) and nothing in the code
+     explains chaos. Remaining suspects, none confirmable by reading: mixed real/fallback `num`
+     within one Xtream category (`num ?: fallbackNum` when the provider omits or non-numerics a
+     `num`); duplicate `num` across a category; wrap-around at group edges on a small test group
+     (`nextChannel` → `firstInGroup` past the end, reads as a jump); or `currentChannel` at
+     key-press time not being the channel actually playing (e.g. after a recent-tile pick - see
+     the `selectedGroup` bug above).
+
+  **The mini-sprint (Sonnet, one debug build, no third code guess first):**
+  - Apply the direction flip (1).
+  - Instrument, debug builds only: on entering fullscreen log the current group's first 30
+    `(num, name)` in list order; on every zap log
+    `zap dir=<up|down> from=(<num> <name>) -> to=(<num> <name>) group=<groupName>`.
+    (`run-as` is broken on this Chromecast, so logcat is the only DB window.)
+  - Machine test, `scripts/tv-test.sh`: seed via Xtream API, open the first channel of a group
+    with ≥ 30 channels, press UP 10× then DOWN 10× with 1s settles, read the log. Expected:
+    each UP → the next higher `num` in that group's list order, each DOWN → the next lower;
+    the 20 lines must trace a clean ascending-then-descending path with no repeats, skips, or
+    reversals. Any deviation is the bug, and the log shows exactly which suspect it is.
+  - Only then fix, one build, re-run the same 20-press test. Hand the user the two logs.
 
 ## The one rule that matters
 

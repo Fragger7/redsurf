@@ -82,6 +82,11 @@ if wrong. Build to the decision as written.
    - **UP / DOWN** → zap to previous / next channel *in the current group by `num`* and show
      `ZapBanner`. Zap on the first key-down only: ignore `nativeKeyEvent.repeatCount > 0` -
      a held button must not machine-gun through channels. **(confirm at A)**
+     **Confirmed at A - and corrected (user, 2026-09-14):** the direction was wrong. As built,
+     UP → *previous* (lower `num`). The user checked TiviMate: **UP → higher number (1→2→3),
+     DOWN → lower (3→2→1).** Flip it - `PlayerScreen.zap(goingUp)` currently calls
+     `prevChannel` for UP; it must call `nextChannel`. Not yet applied; part of the zap-order
+     mini-sprint in `AGENTS.md`'s backlog.
    - **LEFT** → `ChannelList`. **RIGHT** → zap to the *previous channel watched* (last-channel
      zap). The vision makes RIGHT configurable between this and a mini-EPG; the mini-EPG needs
      EPG data and comes in Phase 3. Ship the half that's real.
