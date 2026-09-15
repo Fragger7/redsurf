@@ -193,6 +193,20 @@ All three are backlog items - pick up whichever is most relevant when next touch
 or do all three together as their own small pass; apply the same discipline to any future screen
 with more than one focusable region, not just these.
 
+**Widened, user directive 2026-09-15 - apply this intuitively, not just when reported.** Everything
+above is about focus (where the cursor lands); the same discipline covers *state* more broadly -
+what the user last selected, what they were doing, what they'd reasonably expect still be true
+when they come back - build it in by default on any new flow, not just fix it reactively once
+someone notices it's missing. The model to follow is this session's Live TV fixes: hoisting
+`selectedGroup`/`focusedChannel`/`recentChannels` to `AppShell` so leaving for Settings and coming
+back doesn't reset to the first category (state/focus discipline, applied), and "Resume last
+channel on launch" persisting across a real relaunch, not just a session (real disk persistence,
+one level up from in-memory hoisting). Ask this by default when building anything new with
+meaningful state: does leaving and returning - to another destination, or a full relaunch - lose
+something the user would expect kept? Search's future query/results, a VOD/Series
+season-and-episode position, a scroll position in a long list - all the same question, asked
+before the report comes in, not after.
+
 ## Backlog - explicitly logged, not forgotten
 
 - **Live TV loses its category/channel/recent-tiles on leaving and returning** - **no longer
@@ -229,6 +243,27 @@ with more than one focusable region, not just these.
   - Integration note for later: XMLTV channel `id` attributes must match the M3U's `tvg-id` (or
     the Xtream `epg_channel_id`) for a source to actually line up with RedSurf's channel rows -
     worth an editor/mapping pass, not just picking a URL.
+  - **Resolution order - user decision, 2026-09-15, default behavior:** per channel, provider EPG
+    first (already the most accurate for that specific channel/provider pairing); only when the
+    provider has no listing for that channel, fill the gap from a free public source above. Not
+    an either/or per playlist - a per-channel fallback, since a real playlist can have provider
+    listings for some channels and gaps for others (found true of the user's own Ghana/Senegal/etc.
+    test data this session - EPG entirely absent everywhere so far, but that's Phase 1/2 not
+    having EPG at all yet, not evidence either way about the provider's own coverage once EPG
+    sync exists).
+  - **Supplemented-data indicator, on by default** - when a program's schedule line comes from a
+    public fallback source rather than the provider, show a small, honest marker (a tag/badge
+    next to the programme title, matching `RedSurfType.badge`'s existing visual language for
+    exactly this kind of "here's where this came from" label - see the player's resolution/codec
+    badges) so the user can tell provider data from supplemented data at a glance. Same
+    "never claim something works without showing it's real" principle as grey Settings rows.
+  - **Settings control for this, not just a fixed default** - a user may not want supplemental EPG
+    at all (accuracy concerns, a provider whose own listings are already complete, or simply
+    preferring "no data" over "possibly wrong data"). Needs an off switch - open question whether
+    that's one global toggle (Settings → EPG) or per-playlist (since coverage quality can differ
+    provider to provider) - lean per-playlist given `PlaylistEntity` already carries per-playlist
+    config (`epgOffsetHours`, `userAgent`), but confirm with the user when this is actually built
+    rather than assuming.
 - **Optional black-screen between channel zaps** - **no longer backlog: built and machine-swept,
   BACKLOG_SWEEP.md #11, 2026-09-15.** Live toggle, Settings → Playback; `AppPreferences`-backed,
   `PlayerHost` reads it and inverts `setKeepContentOnPlayerReset`. `SPRINT_LOG.md` has the sweep
