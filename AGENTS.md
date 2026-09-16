@@ -632,6 +632,17 @@ before the report comes in, not after.
     behavior per this file's focus-discipline rule) rather than just its content - don't default
     to the flat-list approach without discussing it first.
 
+- **Cold-launch resume: lands in the right category/channel *area* but D-pad focus itself isn't
+  actually on the resumed channel** (user, 2026-09-16, not yet confirmed exactly where focus
+  really lands - first press seems to jump to either the top category or the Live TV nav pill;
+  needs a real device test to pin down before fixing). This is the same class of bug this file's
+  own "State and focus discipline" binding rule exists to catch - `AppShell`'s cold-launch restore
+  `LaunchedEffect` (see the auto-play-on-launch entry above) sets `selectedGroup`/`focusedChannel`
+  as *data*, but apparently nothing is claiming actual D-pad focus onto that channel's row via a
+  `FocusRequester`, so the very next key press falls back to wherever Compose's default focus
+  landing resolves to instead. The user should be able to land cold, exactly on the last-watched
+  channel, and press OK immediately to resume it - not have to re-navigate to find it first.
+
 ## The one rule that matters
 
 **Never claim something works because you wrote plausible code for it.**
