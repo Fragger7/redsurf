@@ -97,12 +97,24 @@ merging.
     onboarding/welcome screen, the web portal's pages, and **Settings' category rail tiles**
     (replacing the plain initial-letter tiles).
 
-    **Design decisions locked, 2026-09-16 - assets produced and verified, not yet wired into the
-    app.** Everything below lives in `docs/vision/branding/` (source JPEGs, extracted transparent
-    PNGs, font files, per-icon SVGs and PNG tiles - `settings-icons/` for the Settings set
-    specifically). Implementation (Android adaptive icon XML, banner, nav strip, About, Settings
-    `CategoryTile`, loading screen, wiring the font as a real typeface resource) is the next
-    session's actual work - nothing below is in the app yet.
+    **Design decisions locked 2026-09-16, implementation wired in and device-verified same day
+    (commit `0fce206`).** Everything below lives in `docs/vision/branding/` (source JPEGs,
+    extracted transparent PNGs, font files, per-icon SVGs and PNG tiles - `settings-icons/` for
+    the Settings set specifically) as the design record; the real app resources are under
+    `tv-native/app/src/main/res/` (adaptive icon `drawable/ic_launcher_background.xml` +
+    `drawable-xxxhdpi/ic_launcher_foreground.png`, banner `drawable-xxhdpi/tv_banner.png`, mark
+    `drawable-xhdpi/ic_mark.png`, the nine `drawable-xhdpi/ic_settings_*.png`, font
+    `font/poppins_black.ttf`). Also new this pass: `WaveSpinner`
+    (`ui/theme/RedSurfSpinner.kt`) - a custom rotating wave-crest arc (gradient-swept `Canvas`
+    `drawArc`, not the generic Material `CircularProgressIndicator`) on the app's own loading
+    screen (`MainActivity.kt`'s `AppState.Loading` branch), with the mark shown above it.
+    **Verification note:** confirmed via a temporary logcat/text marker that the new
+    `CategoryTile`/`Loading` composables are what's actually executing on-device (an early debug
+    build install appeared to still show old letter tiles; traced to a stale leftover
+    `uiautomator dump` file being read, not real app state - both `adb screencap` and
+    `screenrecord` return solid black / fail entirely on this Chromecast with Google TV device,
+    confirmed even for the system launcher, so no pixel-level screenshot exists for this pass).
+    Open: the web portal branding pass and one Opus taste check on the nav strip.
     - **The mark**: the "ultra-flat minimalist" silhouette concept from
       `Gemini_Generated_Image_mecnz9mecnz9mecn.jpeg`'s right side (solid-filled surfer on a
       surfboard riding a red crescent wave, with play/TV/remote/music icons integrated into the
@@ -142,8 +154,6 @@ merging.
       "solved-shape" icon need going forward; hand-drawing from scratch is the fallback only when
       no suitable existing shape exists, and should be visually verified at true render size before
       presenting, the same way every asset above was.
-    - Web portal branding pass and one Opus taste check on the nav strip are still open, not
-      addressed by this pass.
 
 - **Cloud pairing: revive** (user, 2026-09-10). Background: `pairingSessions` was locked down for
   security, which surfaced that nothing reads it — the TV app moved to local NanoHttpd pairing and
