@@ -1,5 +1,26 @@
 # Phase 2 — The Player
 
+**Engineering foundation:** `docs/plans/PLAYER_ENGINEERING_BRIEF.md` (Opus, 2026-09-16) is a
+lead-architect audit of the player engine underneath this UI/interaction plan — codec/container/DRM
+compatibility, buffer/memory strategy against the real ~449MB free-RAM ceiling, error handling
+(currently zero - a dead channel just freezes silently forever), and what's already right vs.
+actually broken in `PlayerHost.kt`/`TrackManager.kt`/`AfrManager.kt`/`IptvNetworkModule.kt`. Its
+P0 item #1 (hoisting the player into a `PlayerController`) is a prerequisite for this plan's own
+2.3 Actions-row slice (which already independently identified needing `TrackManager` access inside
+`PlayerScreen` - same refactor, do it once). **Read the brief before starting 2.3's remaining work
+or any of 2.4/2.5** - its punch list (P0/P1/P2/P3) is meant to be worked alongside this file's
+tasks, not after them. Rejected there and not to be re-proposed: a second player engine (libVLC -
+the dead `PlayerEngineType.LIB_VLC` enum in `player/PlayerEngine.kt` gets deleted, not revived),
+next-channel prefetch, software AV1.
+
+**Error UX (user directive, 2026-09-16):** as the brief's error handling (its §4.4) gets built, it
+must ship with real user-facing UX, not just a `Log.e`. See "Error UX mapping" at the end of the
+brief for the concrete design - a single `PlayerErrorMapper` translating ExoPlayer error
+codes/HTTP statuses into short, plain-language messages (never a raw code or exception name as the
+primary text), shown non-blocking in the OSD. This pattern (a central mapper, friendly copy,
+non-blocking on-screen feedback) is the standing expectation for error handling anywhere else in
+the app too, not just the player - note it when touching other screens' error paths.
+
 ## Status board (update as you go)
 
 | # | Task | State |
@@ -7,6 +28,7 @@
 | 2.1 | `PlayerScreen`: key router, overlay state machine, Back peeling, scrim | ✅ done & build-verified |
 | 2.2 | Zap: neighbour queries, UP/DOWN, zap banner, stream badges, no-black-screen | ✅ done & device-verified (multiple live-bug rounds through 2026-09-12/14, incl. real tvg-chno numbering and the 2026-09-14 UP/DOWN direction flip) |
 | **A** | **Checkpoint — user tests entry, zap, OK overlay skeleton, Back** | 🟡 in progress - several real bugs found + fixed live 2026-09-12 (focus loss, zap dead-stop, channel numbering); awaiting a clean pass to close |
+| **P0** | **Player engineering foundation** (`PLAYER_ENGINEERING_BRIEF.md` §10) - `PlayerController` hoist, renderer/extractor config, error handling + UX mapping, buffer byte ceiling, track defaults, stall watchdog, shared OkHttp client | ⬜ not started - do this before/alongside 2.3's remaining slice |
 | 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | 🟡 info block + tile row + History picker done; actions/other pickers remain |
 | 2.4 | LEFT channel-list overlay, RIGHT last-channel zap, long-press context menu | ⬜ not started |
 | 2.5 | Recents + last-channel: table, real migration 6→7, History tile, resume setting | ⬜ not started |
