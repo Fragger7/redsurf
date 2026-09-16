@@ -1,6 +1,7 @@
 package com.redsurf.tv.ui.livetv
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -243,11 +244,19 @@ private fun GroupRow(
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // D-pad focus, not `selected` (the active group, which can differ from where focus currently
+    // is - e.g. browsing Channels while a group remains selected on the left). Marquee (BACKLOG_
+    // SWEEP-adjacent decision, AGENTS.md 2026-09-15: "only the focused row marquees") needs the
+    // former.
+    var isFocused by remember { mutableStateOf(false) }
     Surface(
         onClick = {},
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged { if (it.isFocused) onFocused() },
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) onFocused()
+            },
         shape = RedSurfFocus.shape(8.dp),
         colors = RedSurfFocus.rowColors(selected = selected),
         scale = RedSurfFocus.scale(),
@@ -273,7 +282,7 @@ private fun GroupRow(
                 color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).let { if (isFocused) it.basicMarquee() else it },
             )
             Text(
                 group.count.toString(),

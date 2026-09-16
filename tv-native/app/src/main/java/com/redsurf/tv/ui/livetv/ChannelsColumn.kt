@@ -1,6 +1,7 @@
 package com.redsurf.tv.ui.livetv
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -210,6 +211,7 @@ private fun ChannelRow(
                         color = TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = if (selected) Modifier.basicMarquee() else Modifier,
                     )
                 }
                 Text(
