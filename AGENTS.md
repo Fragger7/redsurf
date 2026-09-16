@@ -596,6 +596,29 @@ before the report comes in, not after.
   suspects are still real possibilities for some category, just not this one) - the same
   instrumentation makes that a fast diagnosis, not a new investigation from zero.
 
+- **Channel-switch loading state: branded spinner + timeout + real error feedback, TiviMate-style**
+  (user, 2026-09-16). Not a new item - this is `PLAYER_ENGINEERING_BRIEF.md`'s §4.4
+  (`PlaybackErrorController`), §4.5 (15s stall watchdog, "give up" after a second stall within
+  60s), and §11 (`PlayerErrorMapper` - friendly non-technical copy, never a raw code) all together,
+  applied to the zap/tune path specifically. Confirming explicitly, since the user asked for it by
+  name: the loading visual for this should be the branded `WaveSpinner`
+  (`ui/theme/RedSurfSpinner.kt`, already built for the app's cold-start loading screen), not a
+  generic spinner - same component, same OSD badge slot the existing "tuning" indicator ask
+  (backlog below, Progress feedback #3) already calls for.
+- **Test playlist may be dead as of 2026-09-16** (user report, end of session) - the
+  `infinitytv-mgm.online` Xtream credentials in `~/.redsurf/test-playlist.url` stopped returning
+  live content. Before seeding a fresh install/debug session with it next time, ask the user for
+  new credentials or confirm whether they loaded a working list themselves that session - don't
+  assume the file's contents are still valid.
+- **Playlist management: edit existing credentials, and a real detail view (server/user/type -
+  not just the name)** (user, 2026-09-16). Today Settings → Playlists only shows the name and a
+  Remove action (`PLAYLIST_GREY_ROWS` already has "Rename" as a grey row, `SETTINGS.md`) - there's
+  no way to see what's actually configured for a loaded playlist, or to fix credentials that
+  changed/expired (exactly the situation the dead test list above just created) without deleting
+  and re-adding it from scratch. Needs a real edit flow (reuse the onboarding Xtream/M3U forms,
+  pre-filled) and a detail/view surface showing server, username, type, and content-type scope per
+  playlist - not scoped further than that yet, next session's job to flesh out.
+
 ## The one rule that matters
 
 **Never claim something works because you wrote plausible code for it.**
