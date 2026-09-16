@@ -214,38 +214,19 @@ before the report comes in, not after.
   every time you leave Live TV, recent-channel tiles disappear, no relaunch-resume).
   Navigate-away-and-back: `selectedGroup`/`focusedChannel`/`recentChannels` hoisted to `AppShell`
   (same conditional-composition-trap fix `selectedSettingsCategory` already needed). Resume across
-  a real relaunch: **shipped 2026-09-15, then corrected same day - what's live in v0.28.0 has the
-  wrong default and needs a follow-up fix before this line can say "done."**
-
-  **What v0.28.0 actually does** (wrong): pre-selecting the last-watched channel/category on cold
-  launch only happens when the "Resume last channel on launch" toggle is On (default Off) - so
-  the *default*, out-of-the-box experience is landing on the first category every time, exactly
-  the behavior the user's whole report this session was about.
-
-  **Corrected spec (user, 2026-09-15, second pass) - build this next:** pre-selecting the exact
-  channel/category last left on is the **unconditional default**, no toggle needed to turn it on -
-  the only time it's expected to land on the first category is a genuinely fresh state (no
-  playlist ever watched yet), which falls out naturally already (`getLastWatchedChannel()` returns
-  null, `ChannelRepository.getChannel` returns null for a stale/removed reference after a Reset -
-  no special-casing needed for either case, already verified by how the lookup is written). The
-  toggle's job changes: it no longer gates *whether* to restore selection - it gates whether that
-  restored channel should **also auto-play** on launch (open fullscreen immediately) on top of the
-  always-on pre-select. Needs: (1) drop the `if (!resumeLastChannelOnLaunch) return` gate in
-  `AppShell.kt`'s restore `LaunchedEffect` so the seed always runs when there's something to
-  restore; (2) a new way for that seeded channel to also auto-play when the toggle is on -
-  `AppShell` can't just set `liveTvFullscreen` and have `LiveTvScreen` obey it (that flag only
-  flows child-to-parent today), so this needs a new `LiveTvScreen` input (e.g.
-  `autoPlayOnLaunch: Boolean`) it reads itself, the same "bypass the browse-debounce, set
-  `previewUrl` directly" pattern `onChannelOpen`/`onChannelChanged` already use, guarded so it only
-  fires once per cold launch, not on every later focus change; (3) **rename the Settings row to
-  "Auto-play last channel on launch"** (user approved renaming freely, 2026-09-15) - "Resume last
-  channel on launch" no longer describes what the toggle does once resuming/pre-selecting is
-  unconditional; the toggle is specifically about auto-play now, so the label should say that.
-  Update the row's key/getter/setter names in `AppPreferences.kt` to match
-  (`autoPlayLastChannelOnLaunch` or similar) while at it, for the same honesty-in-naming reason -
-  purely a rename, `SETTINGS_GREY_ROWS`/`SettingsCategory.kt` and `SettingsScreen.kt`'s
-  `generalContent` already have the right shape, just the wrong label/names. **Not yet built** -
-  this whole entry (spec + fix shape + the rename) is what to pick up first next session.
+  a real relaunch: **shipped 2026-09-15, corrected same day, fix verified and shipped 2026-09-16 -
+  done.** Pre-selecting the exact channel/category last left on is now the unconditional default
+  on cold launch - no toggle needed - via `AppShell`'s restore `LaunchedEffect`, which always seeds
+  `selectedGroup`/`focusedChannel` when there's a valid last-watched reference (falls out to the
+  normal "first group" default on genuinely fresh state or a stale reference, no special-casing).
+  "Auto-play last channel on launch" (renamed from "Resume last channel on launch") now controls
+  only whether that pre-selected channel also starts playing immediately - an explicit one-shot
+  `liveTvAutoPlayTrigger`, set only from the restore effect alongside the seed (not inferred from
+  `focusedChannel` changing generically, which would've misfired on a user's first ordinary
+  browse-focus after a truly fresh launch), consumed back to false by `LiveTvScreen` so it can't
+  refire mid-session. Verified live via real `force-stop` + relaunch, both paths: toggle off lands
+  pre-selected/not-playing; toggle on lands directly in fullscreen playing (a brief pre-select
+  frame visible first while the async restore completes, then auto-play - expected, not a bug).
 
   **Still open regardless**: recent-channel tiles surviving a relaunch (not just tab-switching)
   needs #2.5's real `recent_channels` table (Room), not the in-memory stand-in - user decision
