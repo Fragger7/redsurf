@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -120,8 +121,14 @@ class MainActivity : ComponentActivity() {
                     when (val s = state) {
                         is AppState.Loading -> {
                             androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                androidx.compose.material3.CircularProgressIndicator(color = Accent)
-                                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(16.dp))
+                                androidx.compose.foundation.Image(
+                                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_mark),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(72.dp),
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                com.redsurf.tv.ui.theme.WaveSpinner()
+                                Spacer(modifier = Modifier.height(16.dp))
                                 Text(s.message, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
                             }
                         }

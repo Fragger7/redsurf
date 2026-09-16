@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Real branded adaptive icon (docs/vision/branding, decided 2026-09-16) - replaces the
+     placeholder red dot. Foreground is the brand mark (a raster extraction from the chosen
+     Gemini concept, background-removed via HSV threshold - see AGENTS.md's Branding entry for
+     the full account), sized to stay inside the ~66% mask-safe zone so it survives circle/
+     squircle masking on any launcher. Background matches the app's own Background token, not an
+     arbitrary color, so the icon reads as continuous with the app itself. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@android:color/black"/>
-    <foreground android:drawable="@android:color/white"/>
+    <background android:drawable="@drawable/ic_launcher_background"/>
+    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
 </adaptive-icon>

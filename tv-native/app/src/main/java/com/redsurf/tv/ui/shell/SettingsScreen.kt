@@ -2,6 +2,7 @@ package com.redsurf.tv.ui.shell
 
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
@@ -46,6 +48,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.redsurf.tv.BuildConfig
+import com.redsurf.tv.R
 import com.redsurf.tv.UpdateCheckStatus
 import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.ui.theme.Accent
@@ -299,7 +302,7 @@ private fun CategoryRow(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CategoryTile(category.label.first())
+            CategoryTile(category.iconRes)
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 category.label,
@@ -312,13 +315,19 @@ private fun CategoryRow(
     }
 }
 
+/** Real branded icon (AGENTS.md Branding entry, 2026-09-16), replacing the old initial-letter
+ * tile - see [SettingsCategory.iconRes] for which icon and why. */
 @Composable
-private fun CategoryTile(letter: Char) {
+private fun CategoryTile(@androidx.annotation.DrawableRes iconRes: Int) {
     Box(
         modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(SurfaceRaised),
         contentAlignment = Alignment.Center,
     ) {
-        Text(letter.uppercase(), style = RedSurfType.badge, color = TextPrimary)
+        Image(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
@@ -581,6 +590,16 @@ private fun TvLazyListScope.aboutContent(
     onCheckForUpdates: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
+    // The real mark (AGENTS.md Branding entry, 2026-09-16) - the one place in the app it's shown
+    // at full detail and full size, where the play/TV/remote/music icons woven into the wave
+    // actually read clearly (unlike the small Settings-rail tile use of the same asset).
+    item {
+        Image(
+            painter = painterResource(R.drawable.ic_settings_about),
+            contentDescription = null,
+            modifier = Modifier.padding(start = 4.dp, bottom = 16.dp).size(96.dp),
+        )
+    }
     item {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),

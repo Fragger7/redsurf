@@ -1,5 +1,7 @@
 package com.redsurf.tv.ui.shell
 
+import com.redsurf.tv.R
+
 /**
  * The nine categories, in TiviMate's order (`docs/plans/SETTINGS.md`) - the taxonomy half of
  * "TiviMate decides what's there and where; StreamVault decides what it looks like." Only
@@ -7,17 +9,23 @@ package com.redsurf.tv.ui.shell
  * its own module lands - see [SETTINGS_GREY_ROWS], which must stay in sync with `SETTINGS.md`'s
  * table (a flipped-live row moves out of that map into real composable content, and out of
  * `AGENTS.md`'s Backlog).
+ *
+ * [iconRes] (branding, decided 2026-09-16 - see AGENTS.md's Branding entry) replaces the rail's
+ * old initial-letter tiles: six are real vector icons from Phosphor Icons (MIT-licensed),
+ * recolored to the brand red; EPG and Remote control are custom (a "7" + guide-grid bars on a
+ * blank calendar; the remote glyph hand-extracted from the brand mark itself, since no library
+ * has a literal remote icon); About reuses the full mark.
  */
-enum class SettingsCategory(val label: String) {
-    General("General"),
-    Playlists("Playlists"),
-    Epg("EPG"),
-    Appearance("Appearance"),
-    Playback("Playback"),
-    RemoteControl("Remote control"),
-    ParentalControls("Parental controls"),
-    Other("Other"),
-    About("About"),
+enum class SettingsCategory(val label: String, val iconRes: Int) {
+    General("General", R.drawable.ic_settings_general),
+    Playlists("Playlists", R.drawable.ic_settings_playlists),
+    Epg("EPG", R.drawable.ic_settings_epg),
+    Appearance("Appearance", R.drawable.ic_settings_appearance),
+    Playback("Playback", R.drawable.ic_settings_playback),
+    RemoteControl("Remote control", R.drawable.ic_settings_remote),
+    ParentalControls("Parental controls", R.drawable.ic_settings_parental),
+    Other("Other", R.drawable.ic_settings_other),
+    About("About", R.drawable.ic_settings_about),
 }
 
 /**

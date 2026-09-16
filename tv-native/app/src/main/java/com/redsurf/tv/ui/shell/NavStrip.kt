@@ -1,14 +1,12 @@
 package com.redsurf.tv.ui.shell
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -23,12 +21,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.redsurf.tv.R
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
@@ -76,15 +74,22 @@ fun NavStrip(current: NavDestination, onSelect: (NavDestination) -> Unit, modifi
     }
 }
 
+/** The real mark (docs/vision/branding, decided 2026-09-16) replaces the placeholder red-dot
+ * box - see AGENTS.md's Branding entry for the full account. Wordmark is set in
+ * [RedSurfType.wordmark] (Poppins Black), not the general UI type roles - this is the one place
+ * in the strip that's allowed to look like a logo instead of a label. */
 @Composable
 private fun Wordmark(modifier: Modifier = Modifier) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(10.dp).background(Accent, RoundedCornerShape(3.dp)))
-        Spacer(modifier = Modifier.width(8.dp))
+        Image(
+            painter = painterResource(R.drawable.ic_mark),
+            contentDescription = null,
+            modifier = Modifier.size(32.dp),
+        )
         Text(
             "RedSurf",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = TextPrimary,
+            style = RedSurfType.wordmark,
+            color = Accent,
             maxLines = 1,
             softWrap = false,
         )

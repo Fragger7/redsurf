@@ -2,8 +2,23 @@ package com.redsurf.tv.ui.theme
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
+import com.redsurf.tv.R
+
+/**
+ * The wordmark typeface (branding, decided 2026-09-16 - see AGENTS.md's Branding entry): Poppins
+ * Black, picked by matching the concept art's letterforms against several real Google Fonts at
+ * high resolution - its circular, geometric bowls (the "e"/"d"/"S") were the closest structural
+ * match, not just "a bold font." Deliberately scoped to the wordmark only - every other UI role
+ * below stays on tv-material3's own default typography, chosen for TV-viewing-distance
+ * readability, not brand expression. An earlier pass picked Fredoka; re-examined and corrected
+ * same session after finding the concept art's terminals read as geometric, not playful/rounded.
+ */
+val PoppinsBlack = FontFamily(Font(R.font.poppins_black, FontWeight.Black))
 
 /**
  * The handful of text roles the app actually uses, named by job rather than by Material tier so
@@ -39,4 +54,9 @@ object RedSurfType {
     /** Tiny uppercase tags: the LIVE badge. */
     val badge: TextStyle
         @Composable get() = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+
+    /** The "RedSurf" wordmark specifically - nav strip, loading screen, About. Not a general text
+     * role; nothing else in the app should reach for this. */
+    val wordmark: TextStyle
+        @Composable get() = TextStyle(fontFamily = PoppinsBlack, fontWeight = FontWeight.Black, fontSize = 22.sp)
 }
