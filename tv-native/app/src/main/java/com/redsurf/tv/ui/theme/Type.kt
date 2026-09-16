@@ -10,15 +10,18 @@ import androidx.tv.material3.MaterialTheme
 import com.redsurf.tv.R
 
 /**
- * The wordmark typeface (branding, decided 2026-09-16 - see AGENTS.md's Branding entry): Poppins
- * Black, picked by matching the concept art's letterforms against several real Google Fonts at
- * high resolution - its circular, geometric bowls (the "e"/"d"/"S") were the closest structural
- * match, not just "a bold font." Deliberately scoped to the wordmark only - every other UI role
- * below stays on tv-material3's own default typography, chosen for TV-viewing-distance
- * readability, not brand expression. An earlier pass picked Fredoka; re-examined and corrected
- * same session after finding the concept art's terminals read as geometric, not playful/rounded.
+ * The wordmark typeface (branding, decided 2026-09-16, weight corrected 2026-09-16 - see
+ * AGENTS.md's Branding entry): Poppins SemiBold (600), picked by matching the concept art's
+ * letterforms against several real Google Fonts at high resolution - its circular, geometric
+ * bowls (the "e"/"d"/"S") were the closest structural match, not just "a bold font." Weight
+ * corrected from an initial Black (900) pick, which the user correctly called too heavy/fat once
+ * seen live - Black and even Bold choke the bowls' open counters; SemiBold is the closest match
+ * to the reference's actual stroke weight, confirmed side-by-side against a high-res crop of the
+ * concept art. Deliberately scoped to the wordmark only - every other UI role below stays on
+ * tv-material3's own default typography, chosen for TV-viewing-distance readability, not brand
+ * expression.
  */
-val PoppinsBlack = FontFamily(Font(R.font.poppins_black, FontWeight.Black))
+val PoppinsSemiBold = FontFamily(Font(R.font.poppins_semibold, FontWeight.SemiBold))
 
 /**
  * The handful of text roles the app actually uses, named by job rather than by Material tier so
@@ -58,5 +61,5 @@ object RedSurfType {
     /** The "RedSurf" wordmark specifically - nav strip, loading screen, About. Not a general text
      * role; nothing else in the app should reach for this. */
     val wordmark: TextStyle
-        @Composable get() = TextStyle(fontFamily = PoppinsBlack, fontWeight = FontWeight.Black, fontSize = 22.sp)
+        @Composable get() = TextStyle(fontFamily = PoppinsSemiBold, fontWeight = FontWeight.SemiBold, fontSize = 22.sp)
 }

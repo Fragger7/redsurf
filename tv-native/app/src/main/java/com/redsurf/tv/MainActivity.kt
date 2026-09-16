@@ -121,14 +121,15 @@ class MainActivity : ComponentActivity() {
                     when (val s = state) {
                         is AppState.Loading -> {
                             androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                androidx.compose.foundation.Image(
-                                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_mark),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(72.dp),
-                                )
-                                Spacer(modifier = Modifier.height(24.dp))
-                                com.redsurf.tv.ui.theme.WaveSpinner()
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Box(contentAlignment = Alignment.Center) {
+                                    com.redsurf.tv.ui.theme.WaveSpinner(size = 96.dp, strokeWidth = 4.dp)
+                                    androidx.compose.foundation.Image(
+                                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_mark),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(52.dp),
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(20.dp))
                                 Text(s.message, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
                             }
                         }

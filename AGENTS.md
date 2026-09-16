@@ -98,23 +98,65 @@ merging.
     (replacing the plain initial-letter tiles).
 
     **Design decisions locked 2026-09-16, implementation wired in and device-verified same day
-    (commit `0fce206`).** Everything below lives in `docs/vision/branding/` (source JPEGs,
-    extracted transparent PNGs, font files, per-icon SVGs and PNG tiles - `settings-icons/` for
-    the Settings set specifically) as the design record; the real app resources are under
+    (commit `0fce206`), corrected same day after user nitpicks on the first pass (commit
+    pending).** Everything below lives in `docs/vision/branding/` (source JPEGs, extracted
+    transparent PNGs, font files, per-icon SVGs and PNG tiles - `settings-icons/` for the
+    Settings set specifically) as the design record; the real app resources are under
     `tv-native/app/src/main/res/` (adaptive icon `drawable/ic_launcher_background.xml` +
     `drawable-xxxhdpi/ic_launcher_foreground.png`, banner `drawable-xxhdpi/tv_banner.png`, mark
-    `drawable-xhdpi/ic_mark.png`, the nine `drawable-xhdpi/ic_settings_*.png`, font
-    `font/poppins_black.ttf`). Also new this pass: `WaveSpinner`
+    `drawable-xhdpi/ic_mark.png`, six Settings icons as real `drawable/ic_settings_*.xml` vector
+    drawables, three (`about`, `epg`, `remote`) as `drawable-xhdpi/*.png`, font
+    `font/poppins_semibold.ttf`). Also new this pass: `WaveSpinner`
     (`ui/theme/RedSurfSpinner.kt`) - a custom rotating wave-crest arc (gradient-swept `Canvas`
     `drawArc`, not the generic Material `CircularProgressIndicator`) on the app's own loading
-    screen (`MainActivity.kt`'s `AppState.Loading` branch), with the mark shown above it.
-    **Verification note:** confirmed via a temporary logcat/text marker that the new
-    `CategoryTile`/`Loading` composables are what's actually executing on-device (an early debug
-    build install appeared to still show old letter tiles; traced to a stale leftover
-    `uiautomator dump` file being read, not real app state - both `adb screencap` and
-    `screenrecord` return solid black / fail entirely on this Chromecast with Google TV device,
-    confirmed even for the system launcher, so no pixel-level screenshot exists for this pass).
-    Open: the web portal branding pass and one Opus taste check on the nav strip.
+    screen (`MainActivity.kt`'s `AppState.Loading` branch), with the mark centered *inside* the
+    spinner ring (concentric, not stacked above it - reads as one loading glyph, closer to how
+    e.g. an avatar-with-progress-ring pattern reads, and keeps the wave motif literally orbiting
+    the brand mark rather than sitting as two separate stacked elements).
+
+    **Correction pass, same day, from real user nitpicks after seeing it live:**
+    1. *Mark color read as pink, not red* - root cause found by sampling actual pixels: the mark's
+       fill was `(191,41,45)`, visibly short on red and high on blue relative to `Accent`
+       (`0xDC2626` = `(220,38,38)`), while every Phosphor-sourced Settings icon was already exact
+       `Accent`. Fixed by recoloring the master `mark-transparent.png` and every derived asset
+       (`ic_mark`, `ic_launcher_foreground`, legacy `ic_launcher`, `ic_settings_about`, banner) to
+       flat exact `Accent`, not a hue-preserving shift (the master had JPEG-artifact color noise
+       that a hue remap would have kept).
+    2. *Wordmark still too heavy* - swapped Poppins Black (900) for **Poppins SemiBold (600)**,
+       chosen by rendering "RedSurf" at Medium/SemiBold/Bold/ExtraBold/Black side by side against
+       a high-res crop of the Gemini concept art's own wordmark and matching stroke-to-counter
+       proportions directly, not by eye on the full concept image. `docs/vision/branding/fonts/`
+       and the app's `font/` resource both updated; `Poppins-Black.ttf` removed as unused.
+    3. *Icons "pixelated in practice"* - real root cause, found by sampling alpha channels: the
+       master mark (from the original HSV-threshold background removal) and most derived
+       Settings-icon PNGs had **zero anti-aliasing** - pure 0/255 binary alpha, hard stair-step
+       edges - not a resolution or density-bucket problem (the assets were already correctly sized
+       for this device's actual 320dpi/xhdpi). `ic_mark.png` and `ic_launcher_foreground.png`
+       happened to look fine only because their generation path *downscaled* enough (LANCZOS) to
+       pick up smoothing as a byproduct; anything reused near full-res (About icon, banner, legacy
+       launcher) or generated via a hard luminance-threshold recolor (all 8 Settings PNG icons)
+       stayed jagged. **The fix, and the actual "right way" here:** for the six Settings icons
+       sourced from real Phosphor SVGs, convert directly to Android `VectorDrawable` XML
+       (`res/drawable/ic_settings_*.xml`, `pathData` taken straight from the SVG's own `d`
+       attribute) instead of rasterizing to PNG at all - vector rendering is exact at any size on
+       any device, permanently immune to this whole class of bug, and is genuinely the correct
+       Android-native answer for anything that started as a clean vector shape. For everything
+       raster-only (the mark itself, and the two custom-built icons, Remote and EPG, which aren't
+       simple single-path shapes) the fix is supersample-then-downsample: render/compose at a
+       large intermediate size, do all masking/punching there, then resize down once with LANCZOS
+       - that resize is what actually produces the smooth alpha gradient at edges; drawing
+       "cleanly" at the final small size does not, regardless of care taken. Remote control was
+       re-extracted from the (now AA-corrected) master mark by inverting its alpha within the
+       glyph's own region, rather than rebuilding the old binary connected-component mask.
+    **Verification note:** pixel-level screenshots still aren't possible this session (`adb
+    screencap`/`screenrecord` both fail device-wide on this Chromecast with Google TV, confirmed
+    even for the system launcher - a device limitation, not this app). Every corrected asset was
+    instead verified by direct pixel sampling (color match to `Accent`, partial-alpha counts
+    confirming real AA) and by viewing renders directly; on-device, confirmed via logcat that
+    navigating through Home and Settings raises no resource/inflation exceptions with the new
+    vector drawables and regenerated PNGs (a bad `pathData` or missing resource throws
+    immediately on composition). Open: the web portal branding pass and one Opus taste check on
+    the nav strip.
     - **The mark**: the "ultra-flat minimalist" silhouette concept from
       `Gemini_Generated_Image_mecnz9mecnz9mecn.jpeg`'s right side (solid-filled surfer on a
       surfboard riding a red crescent wave, with play/TV/remote/music icons integrated into the
@@ -126,21 +168,23 @@ merging.
       circle/squircle at a size text can't survive on any app - not a style choice). The 320x180
       banner - the actual primary user-facing surface on the Android TV home screen - carries the
       mark **and** the "RedSurf" wordmark together, TiviMate's own convention for their banner.
-    - **Wordmark font: Poppins (Black/900)**, not Fredoka (an earlier, wrong read of the concept
-      art's letterforms as playful/rounded - re-examined at high resolution, it's actually a bold
-      *geometric* sans with circular "e"/"d"/"S" bowls, which Poppins matches closely; Montserrat
-      Black was the close second). Font file at `docs/vision/branding/fonts/`.
+    - **Wordmark font: Poppins SemiBold (600)**, not Fredoka (an earlier, wrong read of the
+      concept art's letterforms as playful/rounded) and not Black/900 (the first correct-family
+      pick, but too heavy once seen live - see the correction pass above). Poppins's circular,
+      geometric "e"/"d"/"S" bowls were the closest structural match to the concept art; Montserrat
+      SemiBold was the close second. Font file at `docs/vision/branding/fonts/`.
     - **Settings category icons - final set, all 9, verified at true ~56dp tile size, not just
       preview size:** General (Phosphor `gear-six-fill`), Playlists (`stack-fill`), Appearance
       (`palette-fill`), Playback (`play-fill`), Parental controls (`shield-fill`), Other
       (`dots-three-fill`) - real vector icons from Phosphor Icons (MIT-licensed,
-      github.com/phosphor-icons/core), recolored to `Accent` red. Remote control and EPG are
+      github.com/phosphor-icons/core), shipped as Android `VectorDrawable` XML at exact `Accent`
+      red (see the correction pass above for why XML, not PNG). Remote control and EPG are
       custom, built from pieces already established: Remote control is the remote glyph
       hand-extracted from the mark itself (connected-component isolation on the dark silhouette,
       not a blanket color threshold - Phosphor has no literal remote icon, tried `sliders-fill`
       first, user correctly called it a weak conceptual match). EPG is Phosphor's
-      `calendar-blank-fill` with a custom "7" (set in the same Poppins Black as the wordmark, not
-      Phosphor's fused-path "12" glyph, which isn't editable) plus three staggered offset bars
+      `calendar-blank-fill` with a custom "7" (set in the same Poppins SemiBold as the wordmark,
+      not Phosphor's fused-path "12" glyph, which isn't editable) plus three staggered offset bars
       punched into the body as negative space, evoking a program-guide grid (TiviMate/DirecTV
       reference, user request) - tuned down from an initial 4-thin-bar version that muddied at
       true size to 3 thicker, more widely-spaced ones. About reuses the full mark, at reduced
@@ -150,7 +194,14 @@ merging.
       programmatic primitive drawing (weak for original illustration, confirmed live: a hand-drawn
       gear read as a flower until rebuilt with real teeth) and raster extraction/recoloring (which
       *does* work well - the mark background removal and the remote-from-mark extraction both held
-      up). Real icon libraries (fetched directly as SVG, e.g. Phosphor) are the right tool for any
+      up, once anti-aliasing is handled deliberately - see the correction pass above, this was
+      missed the first time and is the actual "right way" lesson here: PIL/threshold-based raster
+      work defaults to hard 0/255 alpha with **no** anti-aliasing, so any generated or recolored
+      icon needs either true vector output (`VectorDrawable` XML from real SVG path data - always
+      correct, no pipeline to get wrong) or an explicit supersample-render-then-LANCZOS-downsample
+      step before shipping; visual review at preview size won't catch a missing AA pass, only a
+      true-render-size check of the alpha channel itself will). Real icon libraries (fetched
+      directly as SVG, e.g. Phosphor) are the right tool for any
       "solved-shape" icon need going forward; hand-drawing from scratch is the fallback only when
       no suitable existing shape exists, and should be visually verified at true render size before
       presenting, the same way every asset above was.
