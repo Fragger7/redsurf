@@ -119,6 +119,14 @@ fun LiveTvScreen(
     // backlog).
     recentChannels: List<ChannelEntity> = emptyList(),
     onRecentChannelsChanged: (List<ChannelEntity>) -> Unit = {},
+    // AGENTS.md backlog, corrected 2026-09-15 - "Auto-play last channel on launch." An explicit
+    // one-shot signal from AppShell, not inferred from focusedChannel changing (which also fires
+    // on a user's first ordinary browse-focus after a genuinely fresh launch, with nothing to
+    // restore - inferring from that would wrongly auto-play whatever they merely focused). Only
+    // ever set true once, by AppShell's own cold-launch restore effect; consumed back to false via
+    // [onAutoPlayTriggerConsumed] so it can't refire later in the session.
+    autoPlayTrigger: Boolean = false,
+    onAutoPlayTriggerConsumed: () -> Unit = {},
 ) {
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     var isFullscreen by remember { mutableStateOf(false) }
@@ -142,6 +150,26 @@ fun LiveTvScreen(
     // Debounced: a D-pad flying down the list must not start a stream per row it passes over.
     // Only the channel the user rests on for 500ms actually loads.
     var previewUrl by remember { mutableStateOf<String?>(null) }
+
+    // Auto-play last channel on launch, the trigger's actual effect - see the parameter doc
+    // above for why this reacts to the dedicated trigger, not to focusedChannel itself. By the
+    // time this fires, AppShell has already set focusedChannel in the same coroutine/recomposition
+    // as the trigger, so it's available here already. Sets previewUrl directly rather than
+    // waiting on the debounced effect below, same reason onChannelOpen/onChannelChanged already
+    // do - this is a deliberate open, not a fly-by.
+    LaunchedEffect(autoPlayTrigger) {
+        if (autoPlayTrigger) {
+            val channel = focusedChannel
+            if (channel != null) {
+                previewUrl = channel.streamId
+                recordRecent(channel)
+                isFullscreen = true
+                onFullscreenChanged(true)
+            }
+            onAutoPlayTriggerConsumed()
+        }
+    }
+
     LaunchedEffect(focusedChannel) {
         val channel = focusedChannel
         if (channel == null) {

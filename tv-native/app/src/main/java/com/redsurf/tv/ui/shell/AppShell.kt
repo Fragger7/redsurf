@@ -83,6 +83,15 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     var liveTvFocusedChannel by remember { mutableStateOf<ChannelEntity?>(null) }
     var liveTvRecentChannels by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
 
+    // Explicit one-shot signal for "also start playing" (AGENTS.md backlog, corrected
+    // 2026-09-15) - deliberately NOT inferred from focusedChannel changing, which would also
+    // fire on a user's first ordinary browse-focus after a genuinely fresh launch (no restore to
+    // speak of) and wrongly auto-play whatever they merely focused. Only ever set true from the
+    // restore effect below, right alongside the seed it applies to (same coroutine, same
+    // recomposition, so LiveTvScreen sees the new focusedChannel and this trigger together);
+    // LiveTvScreen consumes it back to false via onAutoPlayTriggerConsumed so it can never refire.
+    var liveTvAutoPlayTrigger by remember { mutableStateOf(false) }
+
     // BACKLOG_SWEEP.md #10 - one instance for the whole shell, same lifetime as the ViewModel;
     // AppShell is the natural owner since both destinations that touch these prefs (Settings to
     // flip them, Live TV/PlayerScreen to read them) are composed from here.
@@ -90,23 +99,26 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val appPreferences = remember { AppPreferences(prefsContext) }
     val blackScreenBetweenZaps by appPreferences.blackScreenBetweenZaps.collectAsState()
     val showRawResolution by appPreferences.showRawResolution.collectAsState()
-    val resumeLastChannelOnLaunch by appPreferences.resumeLastChannelOnLaunch.collectAsState()
+    val autoPlayLastChannelOnLaunch by appPreferences.autoPlayLastChannelOnLaunch.collectAsState()
 
-    // Resume-last-channel-on-launch restore (AGENTS.md backlog, user decision 2026-09-15: land on
-    // Live TV with it pre-selected, not a forced auto-play - opening it is the same OK-on-a-
-    // focused-channel action as any other channel). LaunchedEffect(Unit) - fires exactly once,
-    // this composable's first composition (cold app launch), never again on recomposition, so a
+    // Resume-last-channel-on-launch restore (AGENTS.md backlog, user decision 2026-09-15,
+    // corrected same day from an earlier pass that had this gated behind the toggle - it's
+    // **unconditional** now: landing on Live TV with the last-watched channel/category
+    // pre-selected happens every cold launch, not just when a setting is on. The only time this
+    // is expected to be a no-op is genuinely fresh state - nothing ever watched yet
+    // (`getLastWatchedChannel()` returns null), or the persisted channel no longer exists, e.g.
+    // after a Reset (`viewModel.repository.getChannel` returns null for a stale composite-key
+    // reference) - both already fall out of this exact lookup with no special-casing needed;
+    // LiveTvScreen's own "first group" default applies either way, same as any other
+    // stale-reference case in this app. LaunchedEffect(Unit) - fires exactly once, this
+    // composable's first composition (cold app launch), never again on recomposition, so a
     // deliberate category/channel change later in the session is never overwritten by this.
-    // Looks the persisted (playlistId, streamId) pair up against the real channel table rather
-    // than trusting it blindly - the channel may be gone (playlist re-imported, provider dropped
-    // it), in which case this is a no-op and LiveTvScreen's own "first group" default applies,
-    // same as any other stale-reference case in this app.
     LaunchedEffect(Unit) {
-        if (!resumeLastChannelOnLaunch) return@LaunchedEffect
         val (playlistId, streamId) = appPreferences.getLastWatchedChannel() ?: return@LaunchedEffect
         val channel = viewModel.repository.getChannel(playlistId, streamId) ?: return@LaunchedEffect
         liveTvSelectedGroup = GroupKey(channel.playlistId, channel.groupName)
         liveTvFocusedChannel = channel
+        if (autoPlayLastChannelOnLaunch) liveTvAutoPlayTrigger = true
     }
 
     // The write side of the same feature - records whatever channel is actually playing
@@ -156,6 +168,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     onFocusedChannelChanged = { liveTvFocusedChannel = it },
                     recentChannels = liveTvRecentChannels,
                     onRecentChannelsChanged = { liveTvRecentChannels = it },
+                    autoPlayTrigger = liveTvAutoPlayTrigger,
+                    onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
                 )
             destination == NavDestination.LiveTv ->
                 PlaceholderScreen("Live TV", "No active playlist")
@@ -180,9 +194,9 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     onToggleShowRawResolution = {
                         appPreferences.setShowRawResolution(!showRawResolution)
                     },
-                    resumeLastChannelOnLaunch = resumeLastChannelOnLaunch,
-                    onToggleResumeLastChannelOnLaunch = {
-                        appPreferences.setResumeLastChannelOnLaunch(!resumeLastChannelOnLaunch)
+                    autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
+                    onToggleAutoPlayLastChannelOnLaunch = {
+                        appPreferences.setAutoPlayLastChannelOnLaunch(!autoPlayLastChannelOnLaunch)
                     },
                 )
             }

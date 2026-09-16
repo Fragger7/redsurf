@@ -105,8 +105,8 @@ fun SettingsScreen(
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
     // AGENTS.md backlog, 2026-09-15 - same AppPreferences pattern as the two above.
-    resumeLastChannelOnLaunch: Boolean,
-    onToggleResumeLastChannelOnLaunch: () -> Unit,
+    autoPlayLastChannelOnLaunch: Boolean,
+    onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
 ) {
     val railFocus = remember { FocusRequester() }
     val paneFirstRowFocus = remember { FocusRequester() }
@@ -206,8 +206,8 @@ fun SettingsScreen(
             onToggleBlackScreenBetweenZaps = onToggleBlackScreenBetweenZaps,
             showRawResolution = showRawResolution,
             onToggleShowRawResolution = onToggleShowRawResolution,
-            resumeLastChannelOnLaunch = resumeLastChannelOnLaunch,
-            onToggleResumeLastChannelOnLaunch = onToggleResumeLastChannelOnLaunch,
+            autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
+            onToggleAutoPlayLastChannelOnLaunch = onToggleAutoPlayLastChannelOnLaunch,
             firstRowFocus = paneFirstRowFocus,
             onFocusChanged = { focusInPane = it },
             modifier = Modifier.weight(1.8f),
@@ -356,8 +356,8 @@ private fun SettingsPane(
     onToggleBlackScreenBetweenZaps: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
-    resumeLastChannelOnLaunch: Boolean,
-    onToggleResumeLastChannelOnLaunch: () -> Unit,
+    autoPlayLastChannelOnLaunch: Boolean,
+    onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
     firstRowFocus: FocusRequester,
     onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -385,8 +385,8 @@ private fun SettingsPane(
         TvLazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             when (category) {
                 SettingsCategory.General -> generalContent(
-                    resumeLastChannelOnLaunch = resumeLastChannelOnLaunch,
-                    onToggle = onToggleResumeLastChannelOnLaunch,
+                    autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
+                    onToggle = onToggleAutoPlayLastChannelOnLaunch,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.Playlists -> playlistsContent(
@@ -620,18 +620,20 @@ private fun TvLazyListScope.aboutContent(
     items(ABOUT_GREY_ROWS) { GreyRowContent(it) }
 }
 
-/** General (`AGENTS.md` backlog, 2026-09-15): one live toggle - land on Live TV with the last-
- * watched channel pre-selected on launch, not a forced auto-play - ahead of its remaining grey
- * rows, same layering as every other category's live-rows-then-grey-rows shape. */
+/** General (`AGENTS.md` backlog, 2026-09-15, corrected same day): landing on Live TV with the
+ * last-watched channel/category pre-selected is the *unconditional* default now (see
+ * `AppShell.kt`'s restore effect) - this one live toggle only controls whether that pre-selected
+ * channel also starts playing immediately on launch, ahead of its remaining grey rows, same
+ * layering as every other category's live-rows-then-grey-rows shape. */
 private fun TvLazyListScope.generalContent(
-    resumeLastChannelOnLaunch: Boolean,
+    autoPlayLastChannelOnLaunch: Boolean,
     onToggle: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
         LiveRow(
-            label = "Resume last channel on launch",
-            value = if (resumeLastChannelOnLaunch) "On" else "Off",
+            label = "Auto-play last channel on launch",
+            value = if (autoPlayLastChannelOnLaunch) "On" else "Off",
             onClick = onToggle,
             modifier = Modifier.focusRequester(firstRowFocus),
         )
