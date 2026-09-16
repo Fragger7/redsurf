@@ -406,9 +406,11 @@ before the report comes in, not after.
   current in-memory stand-in already clears itself every process restart, so a manual clear
   button for it would be low-value. Build alongside #2.5, not before.
 - **Long channel/category names: marquee (scrolling text) on the focused row, not a hover
-  tooltip** - **built 2026-09-16, not yet device-verified** (builds clean; the device's wireless
-  adb connection was unreachable this session after an unrelated reboot changed its ephemeral
-  port - verify live before considering this closed). `ChannelsColumn.kt`/`GroupsColumn.kt` apply
+  tooltip** - **built and device-verified 2026-09-16** (installed on the Chromecast, navigated
+  Live TV's Categories and Channels columns with the real playlist live - no crash, real data
+  renders correctly through both changed files; pixel-level confirmation of the scroll animation
+  itself isn't possible on this device, screencap/screenrecord both fail device-wide, but the
+  code paths that own it are confirmed running). `ChannelsColumn.kt`/`GroupsColumn.kt` apply
   `Modifier.basicMarquee()` (Compose Foundation's built-in, not a hand-rolled animation) to the
   channel/category name `Text` only when that row has real D-pad focus - `ChannelRow` already had
   a focus-driven `selected`; `GroupRow`'s `selected` meant the *active* category instead (can
