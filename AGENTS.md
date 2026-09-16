@@ -174,22 +174,33 @@ merging.
       geometric "e"/"d"/"S" bowls were the closest structural match to the concept art; Montserrat
       SemiBold was the close second. Font file at `docs/vision/branding/fonts/`.
     - **Settings category icons - final set, all 9, verified at true ~56dp tile size, not just
-      preview size:** General (Phosphor `gear-six-fill`), Playlists (`stack-fill`), Appearance
-      (`palette-fill`), Playback (`play-fill`), Parental controls (`shield-fill`), Other
-      (`dots-three-fill`) - real vector icons from Phosphor Icons (MIT-licensed,
-      github.com/phosphor-icons/core), shipped as Android `VectorDrawable` XML at exact `Accent`
-      red (see the correction pass above for why XML, not PNG). Remote control and EPG are
-      custom, built from pieces already established: Remote control is the remote glyph
-      hand-extracted from the mark itself (connected-component isolation on the dark silhouette,
-      not a blanket color threshold - Phosphor has no literal remote icon, tried `sliders-fill`
-      first, user correctly called it a weak conceptual match). EPG is Phosphor's
-      `calendar-blank-fill` with a custom "7" (set in the same Poppins SemiBold as the wordmark,
-      not Phosphor's fused-path "12" glyph, which isn't editable) plus three staggered offset bars
-      punched into the body as negative space, evoking a program-guide grid (TiviMate/DirecTV
-      reference, user request) - tuned down from an initial 4-thin-bar version that muddied at
-      true size to 3 thicker, more widely-spaced ones. About reuses the full mark, at reduced
-      legibility at true size (a known, accepted trade-off - it reads as "a red emblem," not as
-      "the surfer," but the row's own label already says what it is).
+      preview size:** Playlists (`stack-fill`), Appearance (`palette-fill`), Playback
+      (`play-fill`), Parental controls (`shield-fill`), Other (`dots-three-fill`) - real vector
+      icons from Phosphor Icons (MIT-licensed, github.com/phosphor-icons/core), shipped as Android
+      `VectorDrawable` XML at exact `Accent` red (see the correction pass above for why XML, not
+      PNG). **General and Remote control were swapped again same day** after a second user
+      nitpick round on the corrected-AA pass: Phosphor's `gear-six-fill` reads as a flower at
+      small size (very rounded, petal-like teeth, no real mechanical notches - confirmed by
+      rendering it in isolation, not just at a glance) - replaced with the **classic Material
+      Design "Settings" gear** (`google/material-design-icons`, `src/action/settings/
+      materialicons/24px.svg` - the same glyph as `Icons.Filled.Settings` already used on the
+      Settings nav pill, per the user's own suggestion), which has real trapezoidal teeth and
+      reads unambiguously as a gear. The mark-extracted Remote control glyph held too much fine
+      internal detail (5-6 tiny button holes) to survive real-render-size legibility even with
+      correct anti-aliasing - the fix wasn't AA, it was the source shape being wrong for the size.
+      Replaced with Material Symbols' own purpose-built `settings_remote` icon (a simple
+      rounded-rect body + one circle + two signal arcs - literally Android's own "TV remote"
+      glyph), also shipped as a `VectorDrawable`. EPG is Phosphor's `calendar-blank-fill` with a
+      custom "7" (set in the same Poppins SemiBold as the wordmark, not Phosphor's fused-path "12"
+      glyph, which isn't editable) plus three staggered offset bars punched into the body as
+      negative space, evoking a program-guide grid (TiviMate/DirecTV reference, user request) -
+      tuned down from an initial 4-thin-bar version that muddied at true size to 3 thicker, more
+      widely-spaced ones; still raster (not a simple single-path vector source), fixed via the
+      supersample-downsample technique from the correction pass above. About reuses the full mark,
+      at reduced legibility at true size (a known, accepted trade-off - it reads as "a red emblem,"
+      not as "the surfer," but the row's own label already says what it is) - re-verified exact
+      `Accent` red after the color-correction pass, still correctly wired to
+      `R.drawable.ic_settings_about` in `aboutContent()`.
     - **Capability note for future asset work**: no image-generation tool is available - only
       programmatic primitive drawing (weak for original illustration, confirmed live: a hand-drawn
       gear read as a flower until rebuilt with real teeth) and raster extraction/recoloring (which
