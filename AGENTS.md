@@ -618,6 +618,19 @@ before the report comes in, not after.
   and re-adding it from scratch. Needs a real edit flow (reuse the onboarding Xtream/M3U forms,
   pre-filled) and a detail/view surface showing server, username, type, and content-type scope per
   playlist - not scoped further than that yet, next session's job to flesh out.
+  - **Bug found same day: the content-type shown (Live/VOD/Live+VOD, and Stalker's own params)
+    isn't dynamic or accurate** - it needs to actually reflect what's really configured per
+    playlist, not a static/wrong value. Fix this as part of the same work, not separately -
+    building a detail view on top of already-wrong data would just move the bug somewhere more
+    visible.
+  - **Open design question, not yet decided: does this become a real third-level page per
+    playlist** (TiviMate's own pattern - tap a playlist, drill into its own dedicated screen for
+    edit/remove/Stalker params/expiration date/etc.), **instead of cramming all of that into the
+    Settings → Playlists list view itself?** The user's instinct is that the list view is already
+    getting cluttered trying to hold it all. Decide this explicitly before building the detail
+    view above, since it changes the navigation shape (a new drill-down level, its own Back-peel
+    behavior per this file's focus-discipline rule) rather than just its content - don't default
+    to the flat-list approach without discussing it first.
 
 ## The one rule that matters
 
