@@ -91,19 +91,59 @@ merging.
     server timestamps, global enable/disable first; shape the account doc so favourites/recents/
     settings can ride the same rails later. Prerequisite: the web portal must build locally
     again (the `@tailwindcss/oxide` issue below) before that sprint starts.
-  - *Branding before the Player sprint*, not after Cloud Sync: the user has a logo/icon ready;
-    the point is that everything built afterwards carries it, so it goes as early as possible.
-    Scope: Android TV launcher banner (320x180) + adaptive icon, the mark in the nav strip, the
-    loading screen, About - **and the already-built surfaces**: the onboarding/welcome screen
-    (where lists get added), the web portal's pages (dashboard, pairing), and **Settings'
-    category rail tiles** (user idea, 2026-09-13, feel/vision review of the Settings shell - the
-    rail's plain initial-letter tiles read as close to StreamVault's own reference but obviously
-    missing its per-category coloring; rather than patch that in, hold for real branded icons once
-    the kit exists). Assets go in `docs/vision/branding/` (SVG + high-res PNG + source) before the
-    sprint starts - one logo already there (`Gemini_Generated_Image_mecnz9mecnz9mecn.jpeg`), user
-    says they don't love it but it's usable; a typographic wordmark rendered in code is the
-    fallback if so. One Opus
-    taste check on the nav strip.
+  - *Branding before the Player sprint*, not after Cloud Sync: the point is that everything built
+    afterwards carries it, so it goes as early as possible. Scope: Android TV launcher banner
+    (320x180) + adaptive icon, the mark in the nav strip, the loading screen, About, the
+    onboarding/welcome screen, the web portal's pages, and **Settings' category rail tiles**
+    (replacing the plain initial-letter tiles).
+
+    **Design decisions locked, 2026-09-16 - assets produced and verified, not yet wired into the
+    app.** Everything below lives in `docs/vision/branding/` (source JPEGs, extracted transparent
+    PNGs, font files, per-icon SVGs and PNG tiles - `settings-icons/` for the Settings set
+    specifically). Implementation (Android adaptive icon XML, banner, nav strip, About, Settings
+    `CategoryTile`, loading screen, wiring the font as a real typeface resource) is the next
+    session's actual work - nothing below is in the app yet.
+    - **The mark**: the "ultra-flat minimalist" silhouette concept from
+      `Gemini_Generated_Image_mecnz9mecnz9mecn.jpeg`'s right side (solid-filled surfer on a
+      surfboard riding a red crescent wave, with play/TV/remote/music icons integrated into the
+      wave itself - user's read: "we're surfing on content," keep these everywhere, never strip
+      for a simplified variant). Background removed cleanly via HSV threshold (saturated red mark
+      vs. desaturated textured background) - `mark-transparent.png`, verified edge-clean against
+      both a checkerboard and the app's real `Background` color.
+    - **Icon vs. banner split**: the small adaptive icon is mark-only (Android masks it into a
+      circle/squircle at a size text can't survive on any app - not a style choice). The 320x180
+      banner - the actual primary user-facing surface on the Android TV home screen - carries the
+      mark **and** the "RedSurf" wordmark together, TiviMate's own convention for their banner.
+    - **Wordmark font: Poppins (Black/900)**, not Fredoka (an earlier, wrong read of the concept
+      art's letterforms as playful/rounded - re-examined at high resolution, it's actually a bold
+      *geometric* sans with circular "e"/"d"/"S" bowls, which Poppins matches closely; Montserrat
+      Black was the close second). Font file at `docs/vision/branding/fonts/`.
+    - **Settings category icons - final set, all 9, verified at true ~56dp tile size, not just
+      preview size:** General (Phosphor `gear-six-fill`), Playlists (`stack-fill`), Appearance
+      (`palette-fill`), Playback (`play-fill`), Parental controls (`shield-fill`), Other
+      (`dots-three-fill`) - real vector icons from Phosphor Icons (MIT-licensed,
+      github.com/phosphor-icons/core), recolored to `Accent` red. Remote control and EPG are
+      custom, built from pieces already established: Remote control is the remote glyph
+      hand-extracted from the mark itself (connected-component isolation on the dark silhouette,
+      not a blanket color threshold - Phosphor has no literal remote icon, tried `sliders-fill`
+      first, user correctly called it a weak conceptual match). EPG is Phosphor's
+      `calendar-blank-fill` with a custom "7" (set in the same Poppins Black as the wordmark, not
+      Phosphor's fused-path "12" glyph, which isn't editable) plus three staggered offset bars
+      punched into the body as negative space, evoking a program-guide grid (TiviMate/DirecTV
+      reference, user request) - tuned down from an initial 4-thin-bar version that muddied at
+      true size to 3 thicker, more widely-spaced ones. About reuses the full mark, at reduced
+      legibility at true size (a known, accepted trade-off - it reads as "a red emblem," not as
+      "the surfer," but the row's own label already says what it is).
+    - **Capability note for future asset work**: no image-generation tool is available - only
+      programmatic primitive drawing (weak for original illustration, confirmed live: a hand-drawn
+      gear read as a flower until rebuilt with real teeth) and raster extraction/recoloring (which
+      *does* work well - the mark background removal and the remote-from-mark extraction both held
+      up). Real icon libraries (fetched directly as SVG, e.g. Phosphor) are the right tool for any
+      "solved-shape" icon need going forward; hand-drawing from scratch is the fallback only when
+      no suitable existing shape exists, and should be visually verified at true render size before
+      presenting, the same way every asset above was.
+    - Web portal branding pass and one Opus taste check on the nav strip are still open, not
+      addressed by this pass.
 
 - **Cloud pairing: revive** (user, 2026-09-10). Background: `pairingSessions` was locked down for
   security, which surfaced that nothing reads it — the TV app moved to local NanoHttpd pairing and
