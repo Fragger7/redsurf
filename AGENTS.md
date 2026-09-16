@@ -406,7 +406,14 @@ before the report comes in, not after.
   current in-memory stand-in already clears itself every process restart, so a manual clear
   button for it would be low-value. Build alongside #2.5, not before.
 - **Long channel/category names: marquee (scrolling text) on the focused row, not a hover
-  tooltip** - user decision, 2026-09-15, superseding the tooltip idea this replaces. Pushed back
+  tooltip** - **built 2026-09-16, not yet device-verified** (builds clean; the device's wireless
+  adb connection was unreachable this session after an unrelated reboot changed its ephemeral
+  port - verify live before considering this closed). `ChannelsColumn.kt`/`GroupsColumn.kt` apply
+  `Modifier.basicMarquee()` (Compose Foundation's built-in, not a hand-rolled animation) to the
+  channel/category name `Text` only when that row has real D-pad focus - `ChannelRow` already had
+  a focus-driven `selected`; `GroupRow`'s `selected` meant the *active* category instead (can
+  differ from where focus currently is), so it gained its own local `isFocused` via
+  `onFocusChanged`. User decision, 2026-09-15, superseding the tooltip idea this replaces. Pushed back
   on tooltip-on-dwell deliberately: a hover/dwell tooltip is a desktop-mouse pattern ported onto a
   D-pad, needs a timing decision (how long is "resting"?) with no clean answer, and reveals
   nothing until the user waits. Marquee is the actual TV-native convention for this (TiviMate,
