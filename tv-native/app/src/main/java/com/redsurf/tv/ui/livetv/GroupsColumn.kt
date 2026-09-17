@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.items
+import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.redsurf.tv.db.GroupCount
@@ -117,10 +118,28 @@ fun GroupsColumn(
     // put focus on it - after a frame, so the lazy row is attached. runCatching because a row
     // that isn't attached yet throws rather than no-ops; losing initial focus is harmless,
     // crashing the screen is not.
+    //
+    // Scroll-to-selected (user-found bug, 2026-09-17): this column had no equivalent of
+    // ChannelsColumn's own scroll-to-selected effect at all - it relied entirely on Compose's
+    // automatic "bring the newly-focused row into view" behavior, which silently does nothing if
+    // that row isn't composed yet (a `TvLazyColumn` only composes rows near its current scroll
+    // position). With a real playlist's categories rarely starting near the top, the selected
+    // category's row almost never existed yet when `initialFocus.requestFocus()` ran, so it threw
+    // (swallowed by `runCatching`), landing the visible list at the top with focus nowhere near
+    // the actual selection - correct data, wrong screen. Unlike `ChannelsColumn`'s Paging-backed
+    // list, `rows` here is already a fully-realized in-memory list (no async load to race), so a
+    // short bounded retry (not the channel fix's longer one) is enough margin for the scroll to
+    // actually land before the focus claim.
+    val listState = rememberTvLazyListState()
     val initialFocus = remember { FocusRequester() }
     var initialFocusDone by remember { mutableStateOf(false) }
-    LaunchedEffect(selectedGroup, groups.isNotEmpty()) {
-        if (!initialFocusDone && selectedGroup != null && groups.isNotEmpty()) {
+    LaunchedEffect(selectedGroup, rows) {
+        if (initialFocusDone || selectedGroup == null) return@LaunchedEffect
+        val index = rows.indexOfFirst { it is GroupsRow.Item && it.group.key() == selectedGroup }
+        if (index < 0) return@LaunchedEffect
+        runCatching { listState.scrollToItem(index) }
+        repeat(5) {
+            if (initialFocusDone) return@repeat
             delay(100)
             initialFocusDone = runCatching { initialFocus.requestFocus() }.isSuccess
         }
@@ -154,7 +173,7 @@ fun GroupsColumn(
             color = TextPrimary,
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
-        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        TvLazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             items(
                 rows,
                 key = { row ->
