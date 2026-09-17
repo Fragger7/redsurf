@@ -95,6 +95,14 @@ private fun audioCodecOf(mimeType: String?): String? = when (mimeType) {
     else -> null
 }
 
+private fun stateName(state: Int): String = when (state) {
+    Player.STATE_IDLE -> "IDLE"
+    Player.STATE_BUFFERING -> "BUFFERING"
+    Player.STATE_READY -> "READY"
+    Player.STATE_ENDED -> "ENDED"
+    else -> "UNKNOWN($state)"
+}
+
 private fun videoCodecOf(mimeType: String?): String? = when (mimeType) {
     MimeTypes.VIDEO_H264 -> "H.264"
     MimeTypes.VIDEO_H265 -> "H.265"
@@ -304,6 +312,11 @@ class PlayerController(
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                // Diagnostic for the "freezes forever, no spinner/error" report (2026-09-17) -
+                // the one piece of ground truth that tells the two stall watchdogs' own coverage
+                // apart: did ExoPlayer ever actually report BUFFERING for this freeze, or did it
+                // stay READY the whole time (only the position watchdog would ever catch that)?
+                Log.d(TAG, "playbackState -> ${stateName(playbackState)}")
                 if (playbackState == Player.STATE_BUFFERING) {
                     armStallWatchdog()
                 } else {
@@ -406,8 +419,10 @@ class PlayerController(
      * - one mechanism instead of chasing each separately. */
     private fun armStallWatchdog() {
         if (stallWatchdogJob?.isActive == true) return
+        Log.d(TAG, "stallWatchdog armed (STATE_BUFFERING)")
         stallWatchdogJob = scope.launch {
             delay(15_000)
+            Log.d(TAG, "stallWatchdog fired after 15s of continuous buffering")
             onStallDetected()
         }
     }
@@ -426,6 +441,8 @@ class PlayerController(
             stallCountInWindow = 0
         }
         stallCountInWindow++
+        Log.d(TAG, "onStallDetected count=$stallCountInWindow state=${stateName(exoPlayer.playbackState)} " +
+            "position=${exoPlayer.currentPosition} bufferedPct=${exoPlayer.bufferedPercentage}")
         if (stallCountInWindow >= 2) {
             _errorPresentation.value = PlayerErrorMapper.stalled()
         } else {
@@ -444,14 +461,18 @@ class PlayerController(
         positionWatchdogJob = scope.launch {
             while (true) {
                 delay(5_000)
+                val position = exoPlayer.currentPosition
+                val delta = position - lastObservedPositionMs
+                Log.d(TAG, "positionWatchdog tick state=${stateName(exoPlayer.playbackState)} " +
+                    "playWhenReady=${exoPlayer.playWhenReady} position=$position delta=$delta " +
+                    "bufferedPct=${exoPlayer.bufferedPercentage}")
                 if (exoPlayer.playWhenReady && exoPlayer.playbackState == Player.STATE_READY) {
-                    val position = exoPlayer.currentPosition
-                    if (kotlin.math.abs(position - lastObservedPositionMs) < 500) {
+                    if (kotlin.math.abs(delta) < 500) {
                         onStallDetected()
                     }
                     lastObservedPositionMs = position
                 } else {
-                    lastObservedPositionMs = exoPlayer.currentPosition
+                    lastObservedPositionMs = position
                 }
             }
         }

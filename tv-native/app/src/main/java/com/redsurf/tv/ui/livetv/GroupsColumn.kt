@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.items
+import androidx.tv.foundation.lazy.list.itemsIndexed
 import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -62,6 +63,8 @@ internal fun formatGroupName(raw: String): String = raw.replace(";", " › ")
 data class GroupKey(val playlistId: String, val groupName: String)
 
 internal fun GroupCount.key() = GroupKey(playlistId, groupName)
+
+private const val TAG = "GroupsColumn"
 
 /** One row in the rendered list: either a collapsible playlist header or a group beneath one. */
 private sealed class GroupsRow {
@@ -138,10 +141,11 @@ fun GroupsColumn(
         val index = rows.indexOfFirst { it is GroupsRow.Item && it.group.key() == selectedGroup }
         if (index < 0) return@LaunchedEffect
         runCatching { listState.scrollToItem(index) }
-        repeat(5) {
+        repeat(5) { attempt ->
             if (initialFocusDone) return@repeat
             delay(100)
             initialFocusDone = runCatching { initialFocus.requestFocus() }.isSuccess
+            Log.d(TAG, "initialFocus attempt=$attempt success=$initialFocusDone selectedGroup=$selectedGroup")
         }
     }
 
@@ -154,6 +158,19 @@ fun GroupsColumn(
     // leaves true for that. That transition is exactly "just re-entered from a sibling," and is
     // the only time this redirects - it never fights normal in-column navigation afterward.
     var hadFocus by remember { mutableStateOf(false) }
+
+    // Real fix for the fast-scroll bug (user correction, 2026-09-17: not the focus ring lagging -
+    // "the list does not follow the focus... instead it waits for the focus to stop, then jumps
+    // the scroll to where it landed"). Root cause: this relied entirely on Compose's own default
+    // bring-focused-item-into-view behavior, which animates - each new focus event during a held
+    // key's repeat stream cancels the prior in-flight animation and starts a new one, so under
+    // rapid repeat the scroll position never finishes catching up until the key stops. This tracks
+    // the focused row's index explicitly and jumps to it with `scrollToItem` (immediate, no
+    // animation to outrun) on every single focus change, independent of Compose's own mechanism.
+    var focusedIndex by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(focusedIndex) {
+        focusedIndex?.let { runCatching { listState.scrollToItem(it) } }
+    }
 
     Column(
         modifier = modifier
@@ -174,15 +191,15 @@ fun GroupsColumn(
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
         TvLazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            items(
+            itemsIndexed(
                 rows,
-                key = { row ->
+                key = { _, row ->
                     when (row) {
                         is GroupsRow.Header -> "hdr:${row.playlistId}"
                         is GroupsRow.Item -> "grp:${row.group.playlistId}:${row.group.groupName}"
                     }
                 },
-            ) { row ->
+            ) { index, row ->
                 when (row) {
                     is GroupsRow.Header -> PlaylistHeaderRow(
                         row = row,
@@ -199,7 +216,10 @@ fun GroupsColumn(
                         GroupRow(
                             group = row.group,
                             selected = selected,
-                            onFocused = { onGroupFocused(row.group.key()) },
+                            onFocused = {
+                                onGroupFocused(row.group.key())
+                                focusedIndex = index
+                            },
                             modifier = if (selected) Modifier.focusRequester(initialFocus) else Modifier,
                         )
                     }

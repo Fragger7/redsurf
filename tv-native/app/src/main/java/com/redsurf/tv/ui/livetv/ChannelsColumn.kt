@@ -111,6 +111,14 @@ fun ChannelsColumn(
         if (index != null) runCatching { listState.scrollToItem(index) }
     }
 
+    // Real fix for the fast-scroll bug (same reasoning as GroupsColumn's own copy of this fix -
+    // see its doc comment) - explicit index-tracked, non-animated jump on every focus change,
+    // independent of Compose's own animated bring-into-view which a held key's repeat rate outruns.
+    var focusedIndex by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(focusedIndex) {
+        focusedIndex?.let { runCatching { listState.scrollToItem(it) } }
+    }
+
     // 14dp top padding matches the inner padding of the two panel cards either side, so all three
     // column headers sit on one baseline. groupTitle arrives pre-formatted (";" -> "›", and
     // playlist-name-prefixed when more than one playlist is loaded - GroupsColumn.kt) so both
@@ -157,7 +165,10 @@ fun ChannelsColumn(
                     ChannelRow(
                         channel = channel,
                         selected = selected,
-                        onFocused = { onChannelFocused(channel) },
+                        onFocused = {
+                            onChannelFocused(channel)
+                            focusedIndex = index
+                        },
                         onOpen = { onChannelOpen(channel) },
                         modifier = rowModifier,
                     )

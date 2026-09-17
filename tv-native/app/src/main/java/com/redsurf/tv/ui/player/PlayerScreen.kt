@@ -148,6 +148,7 @@ fun PlayerScreen(
     var overlay by remember { mutableStateOf<PlayerOverlay>(PlayerOverlay.None) }
     val tilesFloorFocus = remember { FocusRequester() }
     val actionsFloorFocus = remember { FocusRequester() }
+    var favoriteToast by remember { mutableStateOf<String?>(null) }
 
     // PLAYER_ENGINEERING_BRIEF.md §6/§9: [playlistUserAgent] is resolved by the caller
     // (LiveTvScreen, reactively, well before this screen is ever composed - see its own doc
@@ -436,18 +437,20 @@ fun PlayerScreen(
                     PlayerOverlay.ChannelList -> return@onKeyEvent false // real focusable content now (#2.4) - only Back is handled here.
                     PlayerOverlay.ContextMenu -> {
                         // The long-press that opens this menu is one continuous key-down/up
-                        // sequence (user-found bug, 2026-09-17: "disappears before I can choose...
-                        // doesn't stick") - this branch used to let every key through unconsumed,
-                        // so the *same* press's terminating KeyUp reached the menu's own
-                        // just-focused "Add to favourites" row and triggered its click immediately,
-                        // before the user ever had a chance to navigate. Swallow only that one
-                        // release (`okWasLongPress` is still true only for it - a fresh press
-                        // resets it on its own first KeyDown); every other key still passes through
-                        // for the menu's own real focusable content.
-                        if ((event.key == Key.DirectionCenter || event.key == Key.Enter) &&
-                            event.type == KeyEventType.KeyUp && okWasLongPress
-                        ) {
-                            okWasLongPress = false
+                        // sequence, and holding a D-pad key generates repeat KeyDown ticks the
+                        // whole time it's physically down, same as any held key elsewhere in this
+                        // screen. First fix (2026-09-17) only swallowed the terminating KeyUp,
+                        // which stopped the menu closing itself instantly - but every repeat
+                        // KeyDown tick *before* that release was still unconsumed, each one
+                        // independently reaching the menu's just-focused row and firing its click
+                        // (found live: "toggles between remove/add if I keep pressing OK" - not
+                        // repeated taps, the *same* held press's own repeat stream). Swallow every
+                        // DirectionCenter/Enter event for as long as `okWasLongPress` stays true -
+                        // covers the whole gesture regardless of how long it's held - and only
+                        // clear it on that gesture's own KeyUp, so a genuinely new subsequent press
+                        // (which starts with `okWasLongPress` already false) still clicks normally.
+                        if ((event.key == Key.DirectionCenter || event.key == Key.Enter) && okWasLongPress) {
+                            if (event.type == KeyEventType.KeyUp) okWasLongPress = false
                         } else {
                             return@onKeyEvent false
                         }
@@ -563,6 +566,7 @@ fun PlayerScreen(
                             // a disabled tile is hollow UI).
                             PlayerOverlay.Controls.Floor.Actions -> ActionRow(
                                 resizeMode = resizeMode,
+                                rawResolution = streamInfo.rawResolution,
                                 initialFocus = actionsFloorFocus,
                                 onChannels = { overlay = PlayerOverlay.ChannelList },
                                 onAudio = { overlay = PlayerOverlay.Picker(PickerKind.Audio) },
@@ -604,7 +608,6 @@ fun PlayerScreen(
                     channel = currentChannel,
                     streamInfo = streamInfo,
                     networkStats = networkStats,
-                    showRawResolution = showRawResolution,
                     repository = repository,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -635,8 +638,30 @@ fun PlayerScreen(
                 repository = repository,
                 onDismiss = { overlay = PlayerOverlay.None },
                 onHidden = onExitFullscreen, // a hidden channel can't keep playing here (decision 12)
+                onFavoriteToggled = { nowFavorite -> favoriteToast = if (nowFavorite) "Added to favourites" else "Removed from favourites" },
                 modifier = Modifier.align(Alignment.Center),
             )
+        }
+
+        // user-found gap, 2026-09-17: "I couldn't verify where to check if it was added to
+        // favorites" - there's no favourites list UI yet (AGENTS.md backlog), so this is the only
+        // feedback the toggle gets right now. Same transient-badge language as errorPresentation
+        // above, not a native Android Toast (this whole screen is custom Compose chrome).
+        favoriteToast?.let { message ->
+            LaunchedEffect(message) {
+                delay(1_500)
+                favoriteToast = null
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(24.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Surface.copy(alpha = 0.9f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(message, style = RedSurfType.rowSecondary, color = TextPrimary)
+            }
         }
     }
 }
@@ -651,6 +676,7 @@ private fun ContextMenuPanel(
     repository: ChannelRepository,
     onDismiss: () -> Unit,
     onHidden: () -> Unit,
+    onFavoriteToggled: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -682,6 +708,7 @@ private fun ContextMenuPanel(
                 val newValue = !isFavorite
                 isFavorite = newValue
                 scope.launch { repository.setFavorite(channel.playlistId, channel.streamId, newValue) }
+                onFavoriteToggled(newValue)
                 onDismiss()
             },
             modifier = Modifier.fillMaxWidth().focusRequester(firstFocus),
@@ -759,14 +786,34 @@ private fun TileRow(
     }
 }
 
+/** "1920x1080" -> "16:9", reduced by GCD - generic, not a lookup table, so any source ratio
+ * (4:3, 16:9, 21:9, an odd provider crop) reads correctly, not just the common ones. */
+private fun aspectRatioOf(rawResolution: String?): String? {
+    val (w, h) = rawResolution?.split("x")?.takeIf { it.size == 2 }
+        ?.let { (a, b) -> a.toIntOrNull() to b.toIntOrNull() }
+        ?.let { (a, b) -> if (a != null && b != null && a > 0 && b > 0) a to b else null }
+        ?: return null
+    var a = w
+    var b = h
+    while (b != 0) { val t = b; b = a % b; a = t }
+    val gcd = a.takeIf { it != 0 } ?: 1
+    return "${w / gcd}:${h / gcd}"
+}
+
 /**
  * Level 2 / Actions floor (decision 9). Only actions that work - no greyed tiles for Multiview,
  * PiP, Recordings, Search (separate features, a disabled tile is hollow UI). [resizeMode] drives
- * the Aspect tile's label so it always shows the mode that's actually applied, not a static name.
+ * the Aspect tile's label so it always shows the mode that's actually applied, not a static name;
+ * [rawResolution] adds the actual detected source ratio alongside it (user request, 2026-09-17:
+ * "include the aspect ratios on the tile, not just Fit, Zoom" - after confirming the mode itself
+ * was cycling correctly, "nothing changes on the video" was the channel's own content already
+ * matching the screen's ratio, not broken wiring - this makes that visible instead of a bare mode
+ * name giving no clue why).
  */
 @Composable
 private fun ActionRow(
     resizeMode: Int,
+    rawResolution: String?,
     initialFocus: FocusRequester,
     onChannels: () -> Unit,
     onAudio: () -> Unit,
@@ -775,11 +822,13 @@ private fun ActionRow(
     onVideoInfo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val aspectLabel = when (resizeMode) {
-        AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Aspect: Fill"
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Aspect: Zoom"
-        else -> "Aspect: Fit"
+    val modeLabel = when (resizeMode) {
+        AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Fill"
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Zoom"
+        else -> "Fit"
     }
+    val ratio = aspectRatioOf(rawResolution)
+    val aspectLabel = if (ratio != null) "$modeLabel ($ratio)" else modeLabel
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Tile(icon = Icons.Filled.List, label = "Channels", onClick = onChannels, modifier = Modifier.focusRequester(initialFocus))
         // VolumeUp/Subtitles/AspectRatio aren't in this project's icon set (material-icons-core
@@ -1113,7 +1162,6 @@ private fun VideoInfoOverlay(
     channel: ChannelEntity?,
     streamInfo: StreamInfo,
     networkStats: NetworkStats,
-    showRawResolution: Boolean,
     repository: ChannelRepository,
     modifier: Modifier = Modifier,
 ) {
@@ -1127,8 +1175,13 @@ private fun VideoInfoOverlay(
         providerInfo = XtreamApi.getUserInfo(server, user, pass, playlist.userAgent)
     }
 
+    // Both the class and the literal pixel size, always (user request, 2026-09-17: "real
+    // resolution size... whatever else could be helpful and advance") - unlike the zap-banner's
+    // brief badges, this is the deep-dive screen, so the Appearance toggle only decides the zap
+    // banner's own badge now, not what's available here.
     val streamRows = listOfNotNull(
-        (if (showRawResolution) streamInfo.rawResolution else streamInfo.resolutionClass)?.let { "Resolution" to it },
+        streamInfo.resolutionClass?.let { "Resolution" to it },
+        streamInfo.rawResolution?.let { "Pixel size" to it },
         streamInfo.frameRate?.let { "Frame rate" to "$it FPS" },
         streamInfo.videoCodec?.let { "Video codec" to it },
         streamInfo.videoBitrateBps?.let { "Video bitrate" to formatBitrate(it) },
@@ -1140,13 +1193,17 @@ private fun VideoInfoOverlay(
         networkStats.bitrateEstimateBps?.let { "Network speed" to formatBitrate(it) },
         "Buffer" to "${networkStats.bufferedMs / 1000}s (${networkStats.bufferedPercentage}%)",
     )
-    val providerRows = providerInfo?.let { info ->
-        if (info.activeConnections != null && info.maxConnections != null) {
-            listOf("Provider connections" to "${info.activeConnections}/${info.maxConnections}")
-        } else {
-            emptyList()
+    // Server host only, deliberately - not the full stream URL (it embeds the provider password,
+    // and this is an on-screen overlay, not a copy-to-clipboard field; showing it plaintext isn't
+    // worth the exposure for what it'd add here).
+    val providerRows = buildList {
+        parseXtreamCredentials(channel?.streamId ?: "")?.first?.let { add("Server" to it.removePrefix("https://").removePrefix("http://")) }
+        providerInfo?.let { info ->
+            if (info.activeConnections != null && info.maxConnections != null) {
+                add("Connections" to "${info.activeConnections}/${info.maxConnections}")
+            }
         }
-    } ?: emptyList()
+    }
 
     Box(
         modifier = modifier.background(Color.Black.copy(alpha = 0.72f)).padding(48.dp),
@@ -1177,7 +1234,9 @@ private fun InfoSection(title: String, rows: List<Pair<String, String>>) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(label, style = RedSurfType.rowSecondary, color = TextSecondary)
-            Text(value, style = RedSurfType.rowTitle, color = TextPrimary)
+            // Thinner than rowTitle's Medium weight (user request, 2026-09-17) - this screen is
+            // dense data, not a row of channel names competing for attention.
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
         }
     }
 }

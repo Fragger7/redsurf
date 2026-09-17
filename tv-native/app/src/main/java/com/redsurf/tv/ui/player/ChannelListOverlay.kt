@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.player
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +30,8 @@ import com.redsurf.tv.ui.livetv.formatGroupName
 import com.redsurf.tv.ui.livetv.key
 import com.redsurf.tv.ui.theme.Background
 import kotlinx.coroutines.delay
+
+private const val TAG = "ChannelListOverlay"
 
 /**
  * PHASE_2.md decision 11 - LEFT's real overlay: Categories + Channels as *new* composable
@@ -75,10 +78,14 @@ fun ChannelListOverlay(
     // `GroupsColumn`'s claim fires first (fast, in-memory), this one fires later and correctly
     // wins, landing on the channel as decision 11 asks for.
     LaunchedEffect(currentChannel.streamId) {
-        repeat(20) {
+        repeat(20) { attempt ->
             delay(300)
-            if (runCatching { channelReturnFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+            val result = runCatching { channelReturnFocus.requestFocus() }
+            Log.d(TAG, "channelReturnFocus attempt=$attempt success=${result.isSuccess} " +
+                "exception=${result.exceptionOrNull()?.javaClass?.simpleName}")
+            if (result.isSuccess) return@LaunchedEffect
         }
+        Log.d(TAG, "channelReturnFocus gave up after 20 attempts")
     }
 
     Box(
@@ -128,6 +135,8 @@ fun ChannelListOverlay(
                     } else {
                         0
                     }
+                    Log.d(TAG, "seedOffset resolved to $seedOffset for channel=${currentChannel.name} " +
+                        "num=${currentChannel.num} isHomeGroup=$isHomeGroup")
                 }
                 val resolvedSeed = seedOffset
                 if (resolvedSeed != null) {
