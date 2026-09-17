@@ -3,6 +3,8 @@ package com.redsurf.tv.db
 import android.content.Context
 import androidx.paging.PagingSource
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -117,6 +119,49 @@ interface ChannelDao {
     suspend fun searchChannels(query: String): List<ChannelEntity>
 }
 
+/**
+ * PHASE_2.md decision 14 - see [RecentChannelEntity]'s own doc comment for the composite-key
+ * deviation from the brief's literal text. Every read here joins back to `channels` so callers get
+ * a real `ChannelEntity` (name, num, icon, ...) in one query, not just the two ids this table
+ * actually stores - `recent_channels` is purely a recency index, `channels` stays the one source
+ * of truth for everything else about a channel.
+ */
+@Dao
+interface RecentChannelDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: RecentChannelEntity)
+
+    /** Keeps the newest 50 (decision 14), across every playlist combined - not per playlist.
+     * `rowid` (SQLite's own, always-unique-per-row implicit column) rather than the composite
+     * primary key, since a composite-key `NOT IN` subquery isn't reliably supported by the SQLite
+     * versions bundled with Android. Call after every [upsert]. */
+    @Query(
+        "DELETE FROM recent_channels WHERE rowid NOT IN " +
+            "(SELECT rowid FROM recent_channels ORDER BY watchedAt DESC LIMIT 50)"
+    )
+    suspend fun trim()
+
+    @Query(
+        "SELECT c.* FROM recent_channels r JOIN channels c " +
+            "ON c.playlistId = r.playlistId AND c.streamId = r.streamId " +
+            "WHERE c.isHidden = 0 ORDER BY r.watchedAt DESC LIMIT :limit"
+    )
+    fun getRecentChannels(limit: Int = 30): Flow<List<ChannelEntity>>
+
+    /** RIGHT's "last channel" zap (decision 14: "RIGHT reads the second-newest row") - the newest
+     * row is whatever's actually playing right now, so the *previous* channel is one row back. */
+    @Query(
+        "SELECT c.* FROM recent_channels r JOIN channels c " +
+            "ON c.playlistId = r.playlistId AND c.streamId = r.streamId " +
+            "WHERE c.isHidden = 0 ORDER BY r.watchedAt DESC LIMIT 1 OFFSET 1"
+    )
+    suspend fun getSecondMostRecentChannel(): ChannelEntity?
+
+    /** Testing-enablement, matching every other table's own reset path. */
+    @Query("DELETE FROM recent_channels")
+    suspend fun deleteAll()
+}
+
 @Dao
 interface GroupDao {
     @Query("SELECT * FROM channel_groups WHERE playlistId = :playlistId AND groupType = :groupType AND isHidden = 0 ORDER BY groupName")
@@ -153,24 +198,44 @@ interface PlaylistDao {
 }
 
 @Database(entities = [
-    ChannelEntity::class, 
+    ChannelEntity::class,
     EpgProgramEntity::class,
     PlaylistEntity::class,
-    ChannelGroupEntity::class
-], version = 7, exportSchema = false)
+    ChannelGroupEntity::class,
+    RecentChannelEntity::class,
+], version = 8, exportSchema = false)
 // v6: added the (playlistId, streamType, groupName) index (PHASE_1.md #2b).
 // v7: ChannelEntity's primary key is now composite (playlistId, streamId) - see EpgEntities.kt's
-// doc comment on ChannelEntity (BACKLOG_SWEEP.md #13). Destructive migration is acceptable - no
-// user data exists yet to preserve.
+// doc comment on ChannelEntity (BACKLOG_SWEEP.md #13). Destructive migration was acceptable then -
+// no user data existed yet to preserve.
+// v8: recent_channels (PHASE_2.md decision 14). A REAL migration this time, not destructive -
+// decision 14 is explicit about why: real playlists exist now (unlike v7's migration), and "the
+// playlist vanished after an update" is a bug the user has already reported once. See
+// MIGRATION_7_8 below.
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao
     abstract fun groupDao(): GroupDao
     abstract fun playlistDao(): PlaylistDao
+    abstract fun recentChannelDao(): RecentChannelDao
 
     companion object {
         @Volatile
         private var INSTANCE: RedSurfDatabase? = null
+
+        /** Additive only - matches [RecentChannelEntity]'s own shape exactly, including the
+         * composite primary key (Room enforces the declared PK via SQL constraints identically
+         * whether the class is annotated or the DDL is written by hand here). */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `recent_channels` (" +
+                        "`streamId` TEXT NOT NULL, `playlistId` TEXT NOT NULL, " +
+                        "`watchedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`playlistId`, `streamId`))"
+                )
+            }
+        }
 
         fun getDatabase(context: Context): RedSurfDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -178,7 +243,14 @@ abstract class RedSurfDatabase : RoomDatabase() {
                     context.applicationContext,
                     RedSurfDatabase::class.java,
                     "redsurf_tv_database"
-                ).fallbackToDestructiveMigration().build()
+                )
+                    .addMigrations(MIGRATION_7_8)
+                    // Still the fallback for any *other* version jump this app doesn't carry an
+                    // explicit migration for (e.g. a real install predating v6) - decision 14's
+                    // protection is specifically for this release's own upgrade path (v7 -> v8),
+                    // which now has a real migration above and will never hit this fallback.
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +49,7 @@ import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * The screen this whole phase is built to prove (docs/plans/PHASE_1.md #1.4/#1.5). Three columns
@@ -111,14 +113,6 @@ fun LiveTvScreen(
     onSelectedGroupChanged: (GroupKey?) -> Unit = {},
     focusedChannel: ChannelEntity? = null,
     onFocusedChannelChanged: (ChannelEntity?) -> Unit = {},
-    // Stand-in for PHASE_2.md #2.5's real recent_channels table (decision 8) - most recent first,
-    // capped at 8, deduped by streamId. Recorded on every deliberate channel change (open or zap)
-    // so the player's tile row and History picker have real content before the real table lands.
-    // Hoisted to AppShell now (see above) - survives switching destinations within this app
-    // session; still lost on process death/relaunch until #2.5's real table exists (AGENTS.md
-    // backlog).
-    recentChannels: List<ChannelEntity> = emptyList(),
-    onRecentChannelsChanged: (List<ChannelEntity>) -> Unit = {},
     // AGENTS.md backlog, corrected 2026-09-15 - "Auto-play last channel on launch." An explicit
     // one-shot signal from AppShell, not inferred from focusedChannel changing (which also fires
     // on a user's first ordinary browse-focus after a genuinely fresh launch, with nothing to
@@ -144,12 +138,18 @@ fun LiveTvScreen(
     // entry is possible (the user has to browse/focus/press OK first), not inside PlayerScreen
     // itself - see PlayerScreen.kt's own doc comment for why the timing matters.
     val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
+    // PHASE_2.md decision 14's real table now, not the old in-memory stand-in - reactive, and
+    // (unlike the stand-in) survives a real relaunch, not just switching destinations within one
+    // session. No longer hoisted to AppShell: Room is already the single source of truth across
+    // recompositions, so there's nothing left for AppShell to preserve on this screen's behalf.
+    val recentChannels by viewModel.repository.recentChannels().collectAsState(initial = emptyList())
     var isFullscreen by remember { mutableStateOf(false) }
     var channelsHasFocus by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
 
     fun recordRecent(channel: ChannelEntity) {
-        onRecentChannelsChanged((listOf(channel) + recentChannels.filter { it.streamId != channel.streamId }).take(8))
+        scope.launch { viewModel.repository.recordRecentChannel(channel.playlistId, channel.streamId) }
     }
 
     LaunchedEffect(groups) {

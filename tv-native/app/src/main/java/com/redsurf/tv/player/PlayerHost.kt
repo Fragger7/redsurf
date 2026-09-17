@@ -158,12 +158,20 @@ fun PlayerHost(
         showBlackOverlay = false
     }
 
+    // Decision 9's Aspect action (#2.3) - the View itself lives here, one layer away from the
+    // controller that owns the state it cycles through.
+    val resizeMode by controller.resizeMode.collectAsState()
+
     AndroidView(
         factory = {
             PlayerView(context).apply {
                 player = exoPlayer
                 useController = false
-                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                // Qualified `this.` - found by the compiler, not guessed: an unqualified
+                // `resizeMode` here resolved to the outer `val resizeMode` (decision 9's Aspect
+                // state, line 163) instead of this View's own settable property, once that val
+                // was added to this scope.
+                this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -185,7 +193,10 @@ fun PlayerHost(
                 keepScreenOn = true
             }
         },
-        update = { view -> view.setKeepContentOnPlayerReset(!blackScreenBetweenZaps) },
+        update = { view ->
+            view.setKeepContentOnPlayerReset(!blackScreenBetweenZaps)
+            view.resizeMode = resizeMode
+        },
         modifier = modifier.fillMaxSize(),
     )
 

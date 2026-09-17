@@ -81,7 +81,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // separate, bigger piece - AGENTS.md backlog).
     var liveTvSelectedGroup by remember { mutableStateOf<GroupKey?>(null) }
     var liveTvFocusedChannel by remember { mutableStateOf<ChannelEntity?>(null) }
-    var liveTvRecentChannels by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
+    // Recent channels no longer hoisted here (PHASE_2.md decision 14, 2026-09-17) - they're a
+    // real Room table now (`ChannelRepository.recentChannels()`), which is already reactive and
+    // already survives a relaunch, not just a tab switch - there's nothing left for AppShell to
+    // preserve on this screen's behalf.
 
     // Explicit one-shot signal for "also start playing" (AGENTS.md backlog, corrected
     // 2026-09-15) - deliberately NOT inferred from focusedChannel changing, which would also
@@ -176,8 +179,6 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     onSelectedGroupChanged = { liveTvSelectedGroup = it },
                     focusedChannel = liveTvFocusedChannel,
                     onFocusedChannelChanged = { liveTvFocusedChannel = it },
-                    recentChannels = liveTvRecentChannels,
-                    onRecentChannelsChanged = { liveTvRecentChannels = it },
                     autoPlayTrigger = liveTvAutoPlayTrigger,
                     onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
                     claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,

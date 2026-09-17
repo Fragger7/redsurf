@@ -70,3 +70,23 @@ data class EpgProgramEntity(
     val startTime: Long,
     val endTime: Long
 )
+
+/**
+ * PHASE_2.md decision 14 - real backing for the tile row / History picker / RIGHT's "last channel
+ * zap", replacing `LiveTvScreen`'s in-memory stand-in. Upserted on every deliberate tune (browse
+ * OK, zap, a tile, the LEFT overlay), newest 50 kept.
+ *
+ * **Deviates from decision 14's literal text on purpose:** the brief specified `streamId PK`
+ * alone, written before `ChannelEntity` itself was given a composite `(playlistId, streamId)`
+ * primary key (`BACKLOG_SWEEP.md` #13) for exactly the same reason this table needs it too - a
+ * bare `streamId` is only unique *within* one provider, so two loaded playlists can collide on
+ * the same id. Applying that already-established, more-informed fix here rather than the earlier
+ * spec's stale shape, per this file's own precedent for correcting a decision found wrong mid-
+ * build rather than building the wrong thing silently (see `PlayerScreen.kt`'s decision-4 fix).
+ */
+@Entity(tableName = "recent_channels", primaryKeys = ["playlistId", "streamId"])
+data class RecentChannelEntity(
+    val streamId: String,
+    val playlistId: String,
+    val watchedAt: Long,
+)

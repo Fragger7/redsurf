@@ -8,6 +8,8 @@ import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.GroupCount
 import com.redsurf.tv.db.PlaylistDao
 import com.redsurf.tv.db.PlaylistEntity
+import com.redsurf.tv.db.RecentChannelDao
+import com.redsurf.tv.db.RecentChannelEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.Flow
 class ChannelRepository(
     private val channelDao: ChannelDao,
     private val playlistDao: PlaylistDao,
+    private val recentChannelDao: RecentChannelDao,
 ) {
     fun playlists(): Flow<List<PlaylistEntity>> = playlistDao.getAllPlaylists()
 
@@ -59,4 +62,30 @@ class ChannelRepository(
     /** Resume-last-channel-on-launch (AGENTS.md backlog, 2026-09-15) - see `ChannelDao.getChannel`. */
     suspend fun getChannel(playlistId: String, streamId: String): ChannelEntity? =
         channelDao.getChannel(playlistId, streamId)
+
+    /** PHASE_2.md decision 14 - call on every deliberate tune (browse OK, zap, a tile, the LEFT
+     * overlay), from anywhere. Upsert + trim in one call so no caller can upsert and forget to
+     * trim. */
+    suspend fun recordRecentChannel(playlistId: String, streamId: String) {
+        recentChannelDao.upsert(RecentChannelEntity(streamId, playlistId, System.currentTimeMillis()))
+        recentChannelDao.trim()
+    }
+
+    /** Newest-first, real `ChannelEntity` rows (joined, not just ids) - the tile row and History
+     * picker's shared source now that decision 14's real table exists. */
+    fun recentChannels(limit: Int = 30): Flow<List<ChannelEntity>> =
+        recentChannelDao.getRecentChannels(limit)
+
+    /** RIGHT's last-channel zap (decision 14) - the second-newest row, since the newest one is
+     * whatever's actually playing right now. */
+    suspend fun secondMostRecentChannel(): ChannelEntity? = recentChannelDao.getSecondMostRecentChannel()
+
+    /** PHASE_2.md decision 12's context menu - both DAO methods already existed (dead, unused
+     * until now). Hiding takes effect immediately end-to-end: every live query already filters
+     * `isHidden = 0`. */
+    suspend fun setFavorite(playlistId: String, streamId: String, isFavorite: Boolean) =
+        channelDao.updateFavorite(playlistId, streamId, isFavorite)
+
+    suspend fun setHidden(playlistId: String, streamId: String, isHidden: Boolean) =
+        channelDao.updateHidden(playlistId, streamId, isHidden)
 }

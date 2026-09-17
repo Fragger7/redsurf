@@ -140,7 +140,7 @@ class MainViewModel : ViewModel() {
     fun setDatabase(db: RedSurfDatabase, context: Context) {
         localDb = db
         appContext = context.applicationContext
-        repository = ChannelRepository(db.channelDao(), db.playlistDao())
+        repository = ChannelRepository(db.channelDao(), db.playlistDao(), db.recentChannelDao())
         checkLocalCache(context)
     }
 

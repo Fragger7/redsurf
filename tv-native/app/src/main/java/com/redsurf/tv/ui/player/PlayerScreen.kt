@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,7 +18,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -44,6 +49,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface as TvSurface
 import androidx.tv.material3.Text
@@ -138,6 +144,7 @@ fun PlayerScreen(
     val scope = rememberCoroutineScope()
     var overlay by remember { mutableStateOf<PlayerOverlay>(PlayerOverlay.None) }
     val tilesFloorFocus = remember { FocusRequester() }
+    val actionsFloorFocus = remember { FocusRequester() }
 
     // PLAYER_ENGINEERING_BRIEF.md §6/§9: [playlistUserAgent] is resolved by the caller
     // (LiveTvScreen, reactively, well before this screen is ever composed - see its own doc
@@ -148,6 +155,7 @@ fun PlayerScreen(
     val controller = rememberPlayerController(playlistUserAgent)
     val streamInfo by controller.streamInfo.collectAsState()
     val errorPresentation by controller.errorPresentation.collectAsState()
+    val resizeMode by controller.resizeMode.collectAsState()
 
     // Shared by Level 0's zap and the Controls elevator's ceiling/floor fallback below (user
     // decision, 2026-09-12, after comparing against real TiviMate behavior: TiviMate stops UP/DOWN
@@ -182,6 +190,18 @@ fun PlayerScreen(
         }
     }
 
+    // RIGHT's last-channel zap (PHASE_2.md decision 3/14) - the second-newest recent_channels
+    // row, since the newest one is whatever's actually playing right now (decision 14's own
+    // note). Previously a state transition only (ZapBanner with no real channel change); now that
+    // #2.5's real table exists, this is real.
+    fun lastChannelZap() {
+        overlay = PlayerOverlay.ZapBanner
+        scope.launch {
+            val previous = repository.secondMostRecentChannel()
+            previous?.let(onChannelChanged)
+        }
+    }
+
     // Zap-order diagnostics (AGENTS.md, 2026-09-14 mini-sprint) - logs the group's own num/name
     // sequence once, on entering fullscreen, in the exact order the visible channel list and the
     // zap queries both use (`ORDER BY num, name`) - the reference the machine test compares zap's
@@ -200,36 +220,33 @@ fun PlayerScreen(
 
     // Opening the Tiles floor focuses the first recent channel if any, else TV guide (decision 8)
     // - re-fires every genuine transition into Controls(Tiles), not just once ever, since the
-    // user can leave and re-open this floor repeatedly within one fullscreen session.
+    // user can leave and re-open this floor repeatedly within one fullscreen session. Opening the
+    // Actions floor focuses its first tile the same way, now that #2.3 gives it real content.
     LaunchedEffect(overlay) {
         if (overlay == PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)) {
             delay(50)
             runCatching { tilesFloorFocus.requestFocus() }
+        } else if (overlay == PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)) {
+            delay(50)
+            runCatching { actionsFloorFocus.requestFocus() }
         }
     }
 
     // Reclaim focus onto this composable's own root whenever `overlay` collapses back to
-    // "nothing with real descendant content" (None/ZapBanner, and for now, Controls' Actions
-    // floor too - see below) - found live, 2026-09-12, reported as "the whole button engine
-    // seems to crash": tuning a tile from the Controls floor tears down the tile row that held
-    // real D-pad focus, and without this, Compose's fallback focus-picking after a torn-down
-    // focused descendant is unpredictable - sometimes landing nowhere, silently breaking all
-    // further key routing (this screen's onKeyEvent needs real focus to receive anything) until
-    // Back is pressed, since Back's dispatcher is a separate mechanism that doesn't require focus
-    // at all - exactly why it was the only way out.
+    // "nothing with real descendant content" (None/ZapBanner) - found live, 2026-09-12, reported
+    // as "the whole button engine seems to crash": tuning a tile from the Controls floor tears
+    // down the tile row that held real D-pad focus, and without this, Compose's fallback focus-
+    // picking after a torn-down focused descendant is unpredictable - sometimes landing nowhere,
+    // silently breaking all further key routing (this screen's onKeyEvent needs real focus to
+    // receive anything) until Back is pressed, since Back's dispatcher is a separate mechanism
+    // that doesn't require focus at all - exactly why it was the only way out.
     //
-    // The Actions floor is included here too - found live, 2026-09-12, reported as UP from
-    // Actions "remaining at that Actions coming soon screen" instead of returning to Tiles: its
-    // content is still just a plain, non-focusable Text placeholder (#2.3's real action items
-    // aren't built yet), so swapping Tiles -> Actions tears down the tile that held focus with
-    // nothing in the new floor to claim it - the exact same dead end as None/ZapBanner above, just
-    // reached via the elevator instead of a tune. Revisit this condition once #2.3 gives Actions
-    // real focusable content of its own; unconditionally reclaiming onto the root would then steal
-    // focus away from it.
+    // Controls(Actions) used to be included here too, back when its content was a plain,
+    // non-focusable Text placeholder - removed now that #2.3 gives it real focusable tiles of its
+    // own (the effect above claims `actionsFloorFocus` for it instead); leaving this condition in
+    // would now steal focus away from those tiles the instant the floor opens.
     LaunchedEffect(overlay) {
-        if (overlay == PlayerOverlay.None || overlay == PlayerOverlay.ZapBanner ||
-            overlay == PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Actions)
-        ) {
+        if (overlay == PlayerOverlay.None || overlay == PlayerOverlay.ZapBanner) {
             delay(50)
             runCatching { focusRequester.requestFocus() }
         }
@@ -408,13 +425,12 @@ fun PlayerScreen(
                                 // machine-gun through channels.
                                 if (isFirstDown) zap(goingUp = event.key == Key.DirectionUp)
                             Key.DirectionLeft -> if (isFirstDown) overlay = PlayerOverlay.ChannelList
-                            Key.DirectionRight ->
-                                // Last-channel zap is #2.4 - state transition only for now.
-                                if (isFirstDown) overlay = PlayerOverlay.ZapBanner
+                            Key.DirectionRight -> if (isFirstDown) lastChannelZap()
                             else -> {}
                         }
                     }
-                    else -> {} // ChannelList, ContextMenu: no real content yet (#2.4) - only Back acts.
+                    PlayerOverlay.ChannelList -> return@onKeyEvent false // real focusable content now (#2.4) - only Back is handled here.
+                    PlayerOverlay.ContextMenu -> return@onKeyEvent false // real focusable content now (#2.4) - only Back is handled here.
                 }
                 true
             },
@@ -521,15 +537,18 @@ fun PlayerScreen(
                                 },
                                 modifier = Modifier.padding(horizontal = 24.dp),
                             )
-                            // The five real actions (Channels/Audio/Subtitles/Aspect/Video info,
-                            // decision 9) are #2.3's next slice - needs TrackManager access and an
-                            // aspect-ratio command channel into PlayerHost, deliberately not
-                            // pulled into this round.
-                            PlayerOverlay.Controls.Floor.Actions -> Text(
-                                "Actions - coming soon",
-                                style = RedSurfType.rowSecondary,
-                                color = TextSecondary,
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                            // The five real actions (decision 9) - only ones that work, no
+                            // greyed tiles for Multiview/PiP/Recordings/Search (separate features,
+                            // a disabled tile is hollow UI).
+                            PlayerOverlay.Controls.Floor.Actions -> ActionRow(
+                                resizeMode = resizeMode,
+                                initialFocus = actionsFloorFocus,
+                                onChannels = { overlay = PlayerOverlay.ChannelList },
+                                onAudio = { overlay = PlayerOverlay.Picker(PickerKind.Audio) },
+                                onSubtitles = { overlay = PlayerOverlay.Picker(PickerKind.Subtitles) },
+                                onAspect = { controller.cycleResizeMode() },
+                                onVideoInfo = { overlay = PlayerOverlay.Picker(PickerKind.Info) },
+                                modifier = Modifier.padding(horizontal = 24.dp),
                             )
                         }
                     }
@@ -537,14 +556,137 @@ fun PlayerScreen(
             }
         }
 
-        if (overlay is PlayerOverlay.Picker && (overlay as PlayerOverlay.Picker).kind == PickerKind.History) {
-            HistoryPicker(
-                channels = recentChannels,
-                onSelect = { channel ->
+        // Decision 10's narrow bottom-right panel, one kind at a time - History (#2.3's first
+        // slice) plus Audio/Subtitles/Info (this slice). All four share the same dismiss path:
+        // Back, routed by the BackHandler above back to whichever floor opened them.
+        (overlay as? PlayerOverlay.Picker)?.let { picker ->
+            when (picker.kind) {
+                PickerKind.History -> HistoryPicker(
+                    channels = recentChannels,
+                    onSelect = { channel ->
+                        onChannelChanged(channel)
+                        overlay = PlayerOverlay.ZapBanner
+                    },
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                )
+                PickerKind.Audio -> AudioPicker(
+                    controller = controller,
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                )
+                PickerKind.Subtitles -> SubtitlePicker(
+                    controller = controller,
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                )
+                PickerKind.Info -> VideoInfoPicker(
+                    streamInfo = streamInfo,
+                    showRawResolution = showRawResolution,
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                )
+            }
+        }
+
+        // LEFT overlay (decision 11) - new Categories/Channels instances over a scrim, video
+        // still visible on the right. OK tunes and closes (via onChannelChanged, same bridge
+        // every other tune path uses); Back closing it is handled by the BackHandler above
+        // (ChannelList -> None, decision 4), not anything in here.
+        if (overlay == PlayerOverlay.ChannelList) {
+            ChannelListOverlay(
+                repository = repository,
+                currentChannel = currentChannel,
+                onChannelSelected = { channel ->
                     onChannelChanged(channel)
                     overlay = PlayerOverlay.ZapBanner
                 },
-                modifier = Modifier.align(Alignment.BottomEnd),
+                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(0.62f),
+            )
+        }
+
+        // Long-press OK's context menu (decision 12) - favourite toggle + hide, the two DAO
+        // methods that already existed, dead, until now.
+        if (overlay == PlayerOverlay.ContextMenu && currentChannel != null) {
+            ContextMenuPanel(
+                channel = currentChannel,
+                repository = repository,
+                onDismiss = { overlay = PlayerOverlay.None },
+                onHidden = onExitFullscreen, // a hidden channel can't keep playing here (decision 12)
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+    }
+}
+
+/**
+ * Decision 12's small centred panel. Two items only - favourite/hide, per the brief; "Programme
+ * description" and "Lock" wait for EPG and parental controls respectively.
+ */
+@Composable
+private fun ContextMenuPanel(
+    channel: ChannelEntity,
+    repository: ChannelRepository,
+    onDismiss: () -> Unit,
+    onHidden: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+    var isFavorite by remember(channel.streamId) { mutableStateOf(channel.isFavorite) }
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(50)
+        runCatching { firstFocus.requestFocus() }
+    }
+    Column(
+        modifier = modifier
+            .width(240.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Surface)
+            .padding(12.dp),
+    ) {
+        Text(
+            channel.name,
+            style = RedSurfType.sectionTitle,
+            color = TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
+        )
+        TvSurface(
+            onClick = {
+                val newValue = !isFavorite
+                isFavorite = newValue
+                scope.launch { repository.setFavorite(channel.playlistId, channel.streamId, newValue) }
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth().focusRequester(firstFocus),
+            shape = RedSurfFocus.shape(8.dp),
+            colors = RedSurfFocus.rowColors(),
+            scale = RedSurfFocus.scale(),
+            border = RedSurfFocus.border(),
+            glow = RedSurfFocus.glow(),
+        ) {
+            Text(
+                if (isFavorite) "Remove from favourites" else "Add to favourites",
+                style = RedSurfType.rowTitle,
+                color = TextPrimary,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+            )
+        }
+        TvSurface(
+            onClick = {
+                scope.launch { repository.setHidden(channel.playlistId, channel.streamId, true) }
+                onHidden()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RedSurfFocus.shape(8.dp),
+            colors = RedSurfFocus.rowColors(),
+            scale = RedSurfFocus.scale(),
+            border = RedSurfFocus.border(),
+            glow = RedSurfFocus.glow(),
+        ) {
+            Text(
+                "Hide channel",
+                style = RedSurfType.rowTitle,
+                color = TextPrimary,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             )
         }
     }
@@ -586,6 +728,40 @@ private fun TileRow(
                 modifier = if (!focusGuide && index == 0) Modifier.focusRequester(initialFocus) else Modifier,
             )
         }
+    }
+}
+
+/**
+ * Level 2 / Actions floor (decision 9). Only actions that work - no greyed tiles for Multiview,
+ * PiP, Recordings, Search (separate features, a disabled tile is hollow UI). [resizeMode] drives
+ * the Aspect tile's label so it always shows the mode that's actually applied, not a static name.
+ */
+@Composable
+private fun ActionRow(
+    resizeMode: Int,
+    initialFocus: FocusRequester,
+    onChannels: () -> Unit,
+    onAudio: () -> Unit,
+    onSubtitles: () -> Unit,
+    onAspect: () -> Unit,
+    onVideoInfo: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val aspectLabel = when (resizeMode) {
+        AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Aspect: Fill"
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Aspect: Zoom"
+        else -> "Aspect: Fit"
+    }
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Tile(icon = Icons.Filled.List, label = "Channels", onClick = onChannels, modifier = Modifier.focusRequester(initialFocus))
+        // VolumeUp/Subtitles/AspectRatio aren't in this project's icon set (material-icons-core
+        // only, no -extended dependency - same constraint as History's DateRange stand-in above).
+        // Call/Create/Build are the closest available shapes; the label text is what actually
+        // carries the meaning here, same reasoning as that earlier substitution.
+        Tile(icon = Icons.Filled.Call, label = "Audio", onClick = onAudio)
+        Tile(icon = Icons.Filled.Create, label = "Subtitles", onClick = onSubtitles)
+        Tile(icon = Icons.Filled.Build, label = aspectLabel, onClick = onAspect)
+        Tile(icon = Icons.Filled.Info, label = "Video info", onClick = onVideoInfo)
     }
 }
 
@@ -700,6 +876,218 @@ private fun HistoryPicker(channels: List<ChannelEntity>, onSelect: (ChannelEntit
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+        }
+    }
+}
+
+private fun channelsLabelOf(channelCount: Int): String? = when {
+    channelCount <= 0 -> null
+    channelCount == 2 -> "Stereo"
+    channelCount == 6 -> "5.1"
+    else -> "$channelCount ch"
+}
+
+private fun languageLabelOf(format: androidx.media3.common.Format, fallbackIndex: Int): String {
+    val code = format.language
+    val displayName = code?.let { runCatching { Locale(it).displayLanguage }.getOrNull()?.takeIf { name -> name.isNotBlank() } }
+    return displayName ?: "Track ${fallbackIndex + 1}"
+}
+
+/**
+ * Decision 9/10's Audio picker: one row per track across every audio group ExoPlayer currently
+ * reports, language name (falling back to "Track N") plus channel count, current selection
+ * marked. Selecting persists the language via [TrackManager] (§2.8) and re-reads
+ * [controller]'s tracks so the checkmark moves immediately - `currentTracks` doesn't push
+ * updates on its own the way a Flow would.
+ */
+@Composable
+private fun AudioPicker(controller: com.redsurf.tv.player.PlayerController, modifier: Modifier = Modifier) {
+    var refreshTick by remember { mutableStateOf(0) }
+    val rows = remember(refreshTick) {
+        controller.getAudioTracks().flatMap { group ->
+            (0 until group.length).map { index -> Triple(group, index, group.isTrackSelected(index)) }
+        }
+    }
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(50)
+        runCatching { firstFocus.requestFocus() }
+    }
+    Column(
+        modifier = modifier
+            .padding(24.dp)
+            .width(280.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Surface)
+            .padding(12.dp),
+    ) {
+        Text("Audio", style = RedSurfType.sectionTitle, color = TextPrimary, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
+        if (rows.isEmpty()) {
+            Text("No alternate audio tracks", style = RedSurfType.rowSecondary, color = TextSecondary, modifier = Modifier.padding(8.dp))
+        }
+        rows.forEachIndexed { index, (group, trackIndex, isSelected) ->
+            val format = group.getTrackFormat(trackIndex)
+            val channels = channelsLabelOf(format.channelCount)
+            val label = languageLabelOf(format, trackIndex) + (channels?.let { " ($it)" } ?: "")
+            TvSurface(
+                onClick = {
+                    controller.selectAudioTrack(group, trackIndex)
+                    refreshTick++
+                },
+                modifier = Modifier.fillMaxWidth().let { if (index == 0) it.focusRequester(firstFocus) else it },
+                shape = RedSurfFocus.shape(8.dp),
+                colors = RedSurfFocus.rowColors(),
+                scale = RedSurfFocus.scale(),
+                border = RedSurfFocus.border(),
+                glow = RedSurfFocus.glow(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(36.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        label,
+                        style = RedSurfType.rowTitle,
+                        color = if (isSelected) TextPrimary else TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (isSelected) Text("Selected", style = RedSurfType.badge, color = TextPrimary)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Decision 9/10's Subtitles picker: an explicit "Off" row first (disables the text renderer
+ * entirely, §2.8's corrected default), then one row per subtitle track. "Off" reads as selected
+ * whenever none of ExoPlayer's own tracks report selected - the same signal covers both "user
+ * chose Off" and "nothing available yet", which is the correct display either way.
+ */
+@Composable
+private fun SubtitlePicker(controller: com.redsurf.tv.player.PlayerController, modifier: Modifier = Modifier) {
+    var refreshTick by remember { mutableStateOf(0) }
+    val rows = remember(refreshTick) {
+        controller.getSubtitleTracks().flatMap { group ->
+            (0 until group.length).map { index -> Triple(group, index, group.isTrackSelected(index)) }
+        }
+    }
+    val offSelected = rows.none { it.third }
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(50)
+        runCatching { firstFocus.requestFocus() }
+    }
+    Column(
+        modifier = modifier
+            .padding(24.dp)
+            .width(280.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Surface)
+            .padding(12.dp),
+    ) {
+        Text("Subtitles", style = RedSurfType.sectionTitle, color = TextPrimary, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
+        TvSurface(
+            onClick = {
+                controller.disableSubtitles()
+                refreshTick++
+            },
+            modifier = Modifier.fillMaxWidth().focusRequester(firstFocus),
+            shape = RedSurfFocus.shape(8.dp),
+            colors = RedSurfFocus.rowColors(),
+            scale = RedSurfFocus.scale(),
+            border = RedSurfFocus.border(),
+            glow = RedSurfFocus.glow(),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(36.dp).padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Off",
+                    style = RedSurfType.rowTitle,
+                    color = if (offSelected) TextPrimary else TextSecondary,
+                    modifier = Modifier.weight(1f),
+                )
+                if (offSelected) Text("Selected", style = RedSurfType.badge, color = TextPrimary)
+            }
+        }
+        if (rows.isEmpty()) {
+            Text("No subtitle tracks available", style = RedSurfType.rowSecondary, color = TextSecondary, modifier = Modifier.padding(8.dp))
+        }
+        rows.forEach { (group, trackIndex, isSelected) ->
+            val format = group.getTrackFormat(trackIndex)
+            val label = languageLabelOf(format, trackIndex)
+            TvSurface(
+                onClick = {
+                    controller.selectSubtitleTrack(group, trackIndex)
+                    refreshTick++
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RedSurfFocus.shape(8.dp),
+                colors = RedSurfFocus.rowColors(),
+                scale = RedSurfFocus.scale(),
+                border = RedSurfFocus.border(),
+                glow = RedSurfFocus.glow(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(36.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        label,
+                        style = RedSurfType.rowTitle,
+                        color = if (isSelected) TextPrimary else TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (isSelected) Text("Selected", style = RedSurfType.badge, color = TextPrimary)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Decision 9/10's Video info picker: read-only rows from [StreamInfo], the same source as the
+ * zap-banner badges (rawResolution vs. resolutionClass follows the same Appearance toggle). No
+ * focusable rows - nothing to select - so whatever already held D-pad focus underneath (the
+ * Actions floor's "Video info" tile) simply stays focused, harmlessly hidden behind this panel;
+ * the root Box's focus trap (decision 4/9's own note) keeps the D-pad from wandering elsewhere,
+ * and Back (a separate dispatcher) still dismisses normally.
+ */
+@Composable
+private fun VideoInfoPicker(streamInfo: StreamInfo, showRawResolution: Boolean, modifier: Modifier = Modifier) {
+    val rows = listOfNotNull(
+        (if (showRawResolution) streamInfo.rawResolution else streamInfo.resolutionClass)?.let { "Resolution" to it },
+        streamInfo.frameRate?.let { "Frame rate" to "$it FPS" },
+        streamInfo.videoCodec?.let { "Video codec" to it },
+        streamInfo.audioCodec?.let { "Audio codec" to it },
+        streamInfo.audioChannels?.let { "Audio channels" to it },
+    )
+    Column(
+        modifier = modifier
+            .padding(24.dp)
+            .width(280.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Surface)
+            .padding(12.dp),
+    ) {
+        Text("Video info", style = RedSurfType.sectionTitle, color = TextPrimary, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
+        if (rows.isEmpty()) {
+            Text("Not available yet", style = RedSurfType.rowSecondary, color = TextSecondary, modifier = Modifier.padding(8.dp))
+        }
+        rows.forEach { (label, value) ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(label, style = RedSurfType.rowSecondary, color = TextSecondary)
+                Text(value, style = RedSurfType.rowTitle, color = TextPrimary)
             }
         }
     }

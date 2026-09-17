@@ -19,6 +19,7 @@ import androidx.media3.exoplayer.source.BehindLiveWindowException
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import androidx.media3.ui.AspectRatioFrameLayout
 import com.redsurf.tv.network.IptvNetworkModule
 import com.redsurf.tv.player.tracks.TrackManager
 import com.redsurf.tv.player.tuning.AfrManager
@@ -177,6 +178,33 @@ class PlayerController(
     fun setFullscreen(enabled: Boolean) {
         afrManager.isEnabled = enabled
         if (!enabled) afrManager.restoreOriginalMode()
+    }
+
+    // PHASE_2.md decision 9's Actions row (#2.3) - the brief's own note that this needed
+    // "TrackManager access inside PlayerScreen and a new command path into PlayerHost" is exactly
+    // what this hoist was for. Thin wrappers rather than exposing `trackManager` itself: every
+    // TrackManager method already takes the player it acts on as a parameter (a holdover from
+    // before this class existed to own that relationship), so wrapping it here means call sites
+    // in PlayerScreen never need to know `exoPlayer` exists.
+    fun getAudioTracks() = trackManager.getAudioTracks(exoPlayer)
+    fun getSubtitleTracks() = trackManager.getSubtitleTracks(exoPlayer)
+    fun selectAudioTrack(group: Tracks.Group, trackIndex: Int) = trackManager.selectAudioTrack(exoPlayer, group, trackIndex)
+    fun selectSubtitleTrack(group: Tracks.Group, trackIndex: Int) = trackManager.selectSubtitleTrack(exoPlayer, group, trackIndex)
+    fun disableSubtitles() = trackManager.disableSubtitles(exoPlayer)
+
+    // Decision 9's Aspect action - cycles FIT -> FILL -> ZOOM, remembers per session (this
+    // controller's own lifetime, which is exactly one fullscreen session - brief §3.3). Exposed
+    // as state (not a direct PlayerView call) since the View lives in PlayerHost, one layer away;
+    // PlayerHost's own AndroidView `update` block applies whatever this says.
+    private val _resizeMode = MutableStateFlow(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+    val resizeMode: StateFlow<Int> = _resizeMode.asStateFlow()
+
+    fun cycleResizeMode() {
+        _resizeMode.value = when (_resizeMode.value) {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+            AspectRatioFrameLayout.RESIZE_MODE_FILL -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
     }
 
     private val _streamInfo = MutableStateFlow(StreamInfo())
