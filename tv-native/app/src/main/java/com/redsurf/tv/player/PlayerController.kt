@@ -23,6 +23,7 @@ import com.redsurf.tv.network.IptvNetworkModule
 import com.redsurf.tv.player.tracks.TrackManager
 import com.redsurf.tv.player.tuning.AfrManager
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -100,7 +101,14 @@ class PlayerController(
     context: Context,
     playlistUserAgent: String? = null,
 ) {
-    private val scope = CoroutineScope(SupervisorJob())
+    // Main.immediate, not the default background dispatcher (user-found crash, 2026-09-17):
+    // every retry path below (the stall watchdog, error backoff, the 456 race retry) eventually
+    // calls exoPlayer.prepare(), and ExoPlayer hard-crashes if that happens off its own creation
+    // thread ("Player is accessed on the wrong thread") - confirmed via the device's own crash
+    // dropbox, not guessed. A bare `CoroutineScope(SupervisorJob())` defaults to
+    // `Dispatchers.Default` (a background pool), which every one of those calls was silently
+    // violating.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val trackManager = TrackManager(context)
 
