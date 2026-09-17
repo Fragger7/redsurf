@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +48,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -60,6 +62,7 @@ import com.redsurf.tv.player.NetworkStats
 import com.redsurf.tv.player.PlayerHost
 import com.redsurf.tv.player.StreamInfo
 import com.redsurf.tv.player.rememberPlayerController
+import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.Background
 import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
@@ -67,6 +70,7 @@ import com.redsurf.tv.ui.theme.Surface
 import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
+import com.redsurf.tv.ui.theme.WaveSpinner
 import com.redsurf.tv.vod.XtreamApi
 import com.redsurf.tv.vod.XtreamUserInfo
 import kotlinx.coroutines.delay
@@ -160,6 +164,7 @@ fun PlayerScreen(
     val streamInfo by controller.streamInfo.collectAsState()
     val networkStats by controller.networkStats.collectAsState()
     val errorPresentation by controller.errorPresentation.collectAsState()
+    val isBuffering by controller.isBuffering.collectAsState()
     val resizeMode by controller.resizeMode.collectAsState()
 
     // Shared by Level 0's zap and the Controls elevator's ceiling/floor fallback below (user
@@ -467,25 +472,45 @@ fun PlayerScreen(
             blackScreenBetweenZaps = blackScreenBetweenZaps,
         )
 
-        // PLAYER_ENGINEERING_BRIEF.md §11 - non-blocking, never a modal that steals D-pad focus.
-        // Shown regardless of overlay state (unlike the chrome below, which only shows when an
-        // overlay is up) since a dead/reconnecting channel is exactly when Level 0's pure-video
-        // view most needs *some* feedback that something is happening - the badge the brief's
-        // "tuning indicator" ask (AGENTS.md backlog) and this share the same slot.
-        errorPresentation?.let { presentation ->
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(24.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Surface.copy(alpha = if (presentation.isTerminal) 0.95f else 0.7f))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-            ) {
-                Text(
-                    presentation.message,
-                    style = RedSurfType.rowSecondary,
-                    color = if (presentation.isTerminal) TextPrimary else TextSecondary,
-                )
+        // Branded, centered feedback (user request, 2026-09-17, after comparing directly against
+        // TiviMate: a spinner front-and-center while genuinely loading/buffering/reconnecting, a
+        // full branded error treatment only once retries are exhausted - replacing the old subtle
+        // top-left text badge entirely, not supplementing it). PLAYER_ENGINEERING_BRIEF.md §11's
+        // "non-blocking, never steals D-pad focus" still holds - this is drawn, not a dialog.
+        val terminalError = errorPresentation?.takeIf { it.isTerminal }
+        if (terminalError != null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    modifier = Modifier
+                        .width(360.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Surface.copy(alpha = 0.95f))
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(Icons.Filled.Warning, contentDescription = null, tint = Accent, modifier = Modifier.size(40.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        terminalError.message,
+                        style = RedSurfType.sectionTitle,
+                        color = TextPrimary,
+                        textAlign = TextAlign.Center,
+                    )
+                    terminalError.errorCode?.let { code ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(code, style = RedSurfType.rowSecondary, color = TextSecondary)
+                    }
+                }
+            }
+        } else if (isBuffering || errorPresentation?.isRetrying == true) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    WaveSpinner()
+                    errorPresentation?.message?.let { message ->
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(message, style = RedSurfType.rowSecondary, color = TextSecondary)
+                    }
+                }
             }
         }
 

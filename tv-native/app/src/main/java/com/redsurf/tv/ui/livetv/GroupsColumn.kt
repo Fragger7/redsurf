@@ -305,16 +305,7 @@ private fun GroupRow(
             .onFocusChanged {
                 isFocused = it.isFocused
                 if (it.isFocused) onFocused()
-            }
-            // Instant, non-animated fallback ring (user-found bug, 2026-09-17: holding UP/DOWN
-            // to fast-scroll makes the highlight "sort of disappear... only returns when the
-            // button is let go" - TvSurface's own focus ring/glow/scale all animate in over a
-            // real duration, which a fast key-repeat outruns easily, so at any given rendered
-            // frame the ring is mid-transition rather than settled, reading as gone). This paints
-            // immediately on the same recomposition that flips [isFocused] - no animation to
-            // outrun - so a position is always visible even mid-scroll; the animated ring still
-            // layers on top once the user stops and it can catch up.
-            .let { if (isFocused) it.background(Accent.copy(alpha = 0.18f), RoundedCornerShape(8.dp)) else it },
+            },
         shape = RedSurfFocus.shape(8.dp),
         colors = RedSurfFocus.rowColors(selected = selected),
         scale = RedSurfFocus.scale(),

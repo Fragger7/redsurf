@@ -15,6 +15,11 @@ data class PlayerErrorPresentation(
     val message: String,
     val isRetrying: Boolean,
     val isTerminal: Boolean,
+    // Shown alongside the plain-English message on the terminal error screen (user request,
+    // 2026-09-17: "front and center... along with the error code if it's available") - never the
+    // primary text, [message] always is; null when there's genuinely nothing to show (the stall
+    // watchdog's own give-up isn't an ExoPlayer-classified error at all).
+    val errorCode: String? = null,
 )
 
 object PlayerErrorMapper {
@@ -32,7 +37,13 @@ object PlayerErrorMapper {
                 "This channel's format isn't supported"
             else -> "Can't reach this channel — try another"
         }
-        return PlayerErrorPresentation(message = message, isRetrying = !isTerminal, isTerminal = isTerminal)
+        val code = httpStatus?.let { "HTTP $it" } ?: PlaybackException.getErrorCodeName(error.errorCode)
+        return PlayerErrorPresentation(
+            message = message,
+            isRetrying = !isTerminal,
+            isTerminal = isTerminal,
+            errorCode = if (isTerminal) code else null,
+        )
     }
 
     /** A retry in flight with no (or not yet classified) underlying [PlaybackException] to map -

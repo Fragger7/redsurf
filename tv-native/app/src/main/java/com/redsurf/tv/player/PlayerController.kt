@@ -267,6 +267,14 @@ class PlayerController(
     private val _errorPresentation = MutableStateFlow<PlayerErrorPresentation?>(null)
     val errorPresentation: StateFlow<PlayerErrorPresentation?> = _errorPresentation.asStateFlow()
 
+    // Branded centered-spinner feedback (user request, 2026-09-17: "especially for channel
+    // loading, buffering piece, use our spinner, not that subtle message on the top left") -
+    // immediate, direct from ExoPlayer's own playbackState, not gated behind the 15s stall
+    // watchdog the way `errorPresentation`'s "Reconnecting…" text is. Covers the initial channel
+    // load (ExoPlayer starts in STATE_BUFFERING right after prepare()) and any later rebuffer.
+    private val _isBuffering = MutableStateFlow(false)
+    val isBuffering: StateFlow<Boolean> = _isBuffering.asStateFlow()
+
     private var retryJob: Job? = null
     private var retryAttempt = 0
     private val retryDelaysMs = longArrayOf(500, 1_000, 2_000, 4_000)
@@ -317,6 +325,7 @@ class PlayerController(
                 // apart: did ExoPlayer ever actually report BUFFERING for this freeze, or did it
                 // stay READY the whole time (only the position watchdog would ever catch that)?
                 Log.d(TAG, "playbackState -> ${stateName(playbackState)}")
+                _isBuffering.value = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_BUFFERING) {
                     armStallWatchdog()
                 } else {
@@ -469,6 +478,18 @@ class PlayerController(
                 if (exoPlayer.playWhenReady && exoPlayer.playbackState == Player.STATE_READY) {
                     if (kotlin.math.abs(delta) < 500) {
                         onStallDetected()
+                    } else if (_errorPresentation.value?.isTerminal == false) {
+                        // Real recovery, confirmed live 2026-09-17: after onStallDetected's
+                        // prepare() call, position/buffer both came back healthy (advancing
+                        // steadily, 100% buffered) but the "Reconnecting…" spinner never cleared
+                        // - it only clears on onRenderedFirstFrame, which didn't fire even though
+                        // the stream was genuinely playing again (audio/position recovered; the
+                        // video renderer specifically never signalled a new frame). The same
+                        // signal that detects a stall (position advancing again) now also clears
+                        // it, instead of depending solely on a callback that isn't reliable here.
+                        Log.d(TAG, "positionWatchdog: position resumed advancing, clearing errorPresentation")
+                        _errorPresentation.value = null
+                        retryAttempt = 0
                     }
                     lastObservedPositionMs = position
                 } else {

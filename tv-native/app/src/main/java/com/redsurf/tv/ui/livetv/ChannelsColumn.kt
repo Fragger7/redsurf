@@ -37,7 +37,6 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.db.ChannelEntity
-import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
 import com.redsurf.tv.ui.theme.Surface as SurfaceColor
@@ -191,18 +190,11 @@ private fun ChannelRow(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var isFocused by remember { mutableStateOf(false) }
     Surface(
         onClick = onOpen,
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused()
-            }
-            // Same instant non-animated fallback as GroupsColumn's GroupRow - see its own doc
-            // comment for the fast-scroll reasoning.
-            .let { if (isFocused) it.background(Accent.copy(alpha = 0.18f), RoundedCornerShape(12.dp)) else it },
+            .onFocusChanged { if (it.isFocused) onFocused() },
         shape = RedSurfFocus.shape(12.dp),
         colors = RedSurfFocus.rowColors(selected = selected, resting = SurfaceColor),
         scale = RedSurfFocus.scale(),
