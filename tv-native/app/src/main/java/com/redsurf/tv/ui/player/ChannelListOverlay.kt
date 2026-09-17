@@ -17,7 +17,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.paging.cachedIn
 import androidx.paging.compose.collectAsLazyPagingItems
@@ -83,9 +82,12 @@ fun ChannelListOverlay(
     }
 
     Box(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.6f))
-            .background(Background.copy(alpha = 0.85f)),
+        // Single layer, lower alpha (user request, 2026-09-17: "consider displaying this menu
+        // with transparency like TiviMate does this") - the original two stacked layers
+        // (0.6 black + 0.85 Background) compounded to nearly opaque, hiding the still-playing
+        // video almost entirely instead of showing it dimmed through the panel the way TiviMate's
+        // own left rail does.
+        modifier = modifier.background(Background.copy(alpha = 0.55f)),
     ) {
         Row(
             modifier = Modifier.fillMaxHeight().fillMaxWidth().padding(20.dp),
@@ -105,24 +107,49 @@ fun ChannelListOverlay(
 
             val currentGroup = queriedGroup
             if (currentGroup != null) {
-                val channelsFlow = remember(currentGroup) {
-                    repository.liveChannels(currentGroup.playlistId, currentGroup.groupName)
-                        .cachedIn(scope)
+                // Seeds the Pager to start at the channel actually playing, not page 1 -
+                // `ChannelDao.offsetInGroup`'s own doc comment has the full reasoning. Only
+                // computed for the group this overlay opened on (the one `currentChannel` is
+                // actually in); any other group the user navigates to within this overlay starts
+                // from the top like the browse screen always has, since there's no "current
+                // channel" to seed toward there. `null` while the offset query is in flight -
+                // `ChannelsColumn` isn't rendered until it resolves, the same brief gap the Pager's
+                // own first-page load would already cost.
+                val isHomeGroup = currentGroup == GroupKey(currentChannel.playlistId, currentChannel.groupName)
+                var seedOffset by remember(currentGroup) { mutableStateOf<Int?>(null) }
+                LaunchedEffect(currentGroup) {
+                    seedOffset = if (isHomeGroup) {
+                        repository.channelOffsetInGroup(
+                            currentChannel.playlistId,
+                            currentChannel.groupName,
+                            currentChannel.num,
+                            currentChannel.name,
+                        )
+                    } else {
+                        0
+                    }
                 }
-                val pagedChannels = channelsFlow.collectAsLazyPagingItems()
-                val groupInfo = groups.firstOrNull { it.key() == currentGroup }
-                val groupTitle = groupInfo?.let { formatGroupName(it.groupName) } ?: ""
+                val resolvedSeed = seedOffset
+                if (resolvedSeed != null) {
+                    val channelsFlow = remember(currentGroup, resolvedSeed) {
+                        repository.liveChannels(currentGroup.playlistId, currentGroup.groupName, resolvedSeed)
+                            .cachedIn(scope)
+                    }
+                    val pagedChannels = channelsFlow.collectAsLazyPagingItems()
+                    val groupInfo = groups.firstOrNull { it.key() == currentGroup }
+                    val groupTitle = groupInfo?.let { formatGroupName(it.groupName) } ?: ""
 
-                ChannelsColumn(
-                    groupTitle = groupTitle,
-                    groupCount = groupInfo?.count ?: 0,
-                    channels = pagedChannels,
-                    focusedChannelId = focusedChannel?.streamId,
-                    onChannelFocused = { focusedChannel = it },
-                    returnFocusRequester = channelReturnFocus,
-                    onChannelOpen = onChannelSelected,
-                    modifier = Modifier.fillMaxHeight().fillMaxWidth(),
-                )
+                    ChannelsColumn(
+                        groupTitle = groupTitle,
+                        groupCount = groupInfo?.count ?: 0,
+                        channels = pagedChannels,
+                        focusedChannelId = focusedChannel?.streamId,
+                        onChannelFocused = { focusedChannel = it },
+                        returnFocusRequester = channelReturnFocus,
+                        onChannelOpen = onChannelSelected,
+                        modifier = Modifier.fillMaxHeight().fillMaxWidth(),
+                    )
+                }
             }
         }
     }

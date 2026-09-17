@@ -7,12 +7,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.IOException
 import java.io.InputStreamReader
 
 data class XtreamCategory(val id: String, val name: String, val parentId: String)
 data class VodMovie(val id: String, val name: String, val cover: String, val rating: String, val streamExtension: String)
 data class VodSeries(val id: String, val name: String, val cover: String, val rating: String)
+
+/** Decision 9's Video info screen (redesigned 2026-09-17, user request: "how about can you...
+ * show something like 1/1 active connections"). Both values come straight from the panel's own
+ * account object - no scraping, no guessing, and no new credential storage: every Xtream-imported
+ * channel's `streamId` already IS its full playback URL (`.../live/user/pass/id.ts`,
+ * `MainViewModel.loadXtreamCodes`), so the caller parses server/user/pass back out of whichever
+ * channel is currently playing instead of this app persisting the password a second time. */
+data class XtreamUserInfo(val activeConnections: Int?, val maxConnections: Int?)
 
 /** One live channel from Xtream's get_live_streams, with its category name already resolved. */
 data class XtreamLiveStream(
@@ -61,6 +70,25 @@ object XtreamApi {
             }
         }
         categories
+    }
+
+    /** `player_api.php` with no `action` returns the account's own `user_info` object - every
+     * real Xtream panel supports this (it's the same call VLC/TiviMate use to show "connections
+     * used"). Null on any failure (network, non-JSON body, missing object) - the caller omits the
+     * badge entirely rather than showing a placeholder, same convention as [com.redsurf.tv.player.StreamInfo]. */
+    suspend fun getUserInfo(serverUrl: String, user: String, pass: String, userAgent: String? = null): XtreamUserInfo? = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = "$serverUrl/player_api.php?username=$user&password=$pass"
+            val request = Request.Builder().url(url).build()
+            val response = IptvNetworkModule.getOkHttpClient(userAgent).newCall(request).execute()
+            if (!response.isSuccessful) return@withContext null
+            val bodyStr = response.body?.string() ?: return@withContext null
+            val userInfo = JSONObject(bodyStr).optJSONObject("user_info") ?: return@withContext null
+            XtreamUserInfo(
+                activeConnections = userInfo.optString("active_cons").toIntOrNull(),
+                maxConnections = userInfo.optString("max_connections").toIntOrNull(),
+            )
+        }.getOrNull()
     }
 
     suspend fun getMovies(serverUrl: String, user: String, pass: String, categoryId: String? = null, userAgent: String? = null): List<VodMovie> = withContext(Dispatchers.IO) {

@@ -54,6 +54,21 @@ interface ChannelDao {
     fun getLiveChannelsInGroup(playlistId: String, groupName: String): PagingSource<Int, ChannelEntity>
 
     /**
+     * This channel's 0-based position in [getLiveChannelsInGroup]'s own `ORDER BY num, name` -
+     * lets a caller seed that Pager's `initialKey` (the offset) so it loads starting at a specific
+     * channel instead of page 1 (user-found bug, 2026-09-17: `ChannelListOverlay`'s LEFT panel
+     * focused the right category but never the channel actually playing, because its
+     * `ChannelsColumn`'s own scroll-to-selected effect only searches Paging pages already loaded
+     * via `peek()`, which never happens for a channel deep in a large group nothing has scrolled
+     * to yet). Ties are broken by `name`, matching every other query's own tiebreak exactly.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM channels WHERE playlistId = :playlistId AND groupName = :groupName " +
+            "AND streamType = 'live' AND isHidden = 0 AND (num < :num OR (num = :num AND name < :name))"
+    )
+    suspend fun offsetInGroup(playlistId: String, groupName: String, num: Int, name: String): Int
+
+    /**
      * Zap neighbours (PHASE_2.md #2.2, decision 13) - two O(1) indexed lookups, never the whole
      * group loaded into memory. Each can return null at the end of the group; [firstInGroup]/
      * [lastInGroup] are the wrap-around fallback, applied by the caller (`ChannelRepository`) so

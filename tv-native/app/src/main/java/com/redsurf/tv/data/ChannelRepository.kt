@@ -36,13 +36,19 @@ class ChannelRepository(
     /**
      * Paged live channels for one group. Caller applies `.cachedIn(scope)` when collecting -
      * that's lifecycle-scoped to the consumer (e.g. a Compose screen's coroutine scope), so it
-     * doesn't belong baked in here.
+     * doesn't belong baked in here. [initialOffset] (from [channelOffsetInGroup]) seeds the first
+     * load to start at a specific channel instead of page 1 - see [ChannelDao.offsetInGroup]'s own
+     * doc comment for why `ChannelListOverlay` needs this.
      */
-    fun liveChannels(playlistId: String, groupName: String): Flow<PagingData<ChannelEntity>> =
+    fun liveChannels(playlistId: String, groupName: String, initialOffset: Int = 0): Flow<PagingData<ChannelEntity>> =
         Pager(
             config = PagingConfig(pageSize = 60, prefetchDistance = 120, enablePlaceholders = false),
+            initialKey = initialOffset.takeIf { it > 0 },
             pagingSourceFactory = { channelDao.getLiveChannelsInGroup(playlistId, groupName) },
         ).flow
+
+    suspend fun channelOffsetInGroup(playlistId: String, groupName: String, num: Int, name: String): Int =
+        channelDao.offsetInGroup(playlistId, groupName, num, name)
 
     /**
      * Zap neighbours (PHASE_2.md #2.2, decision 13), wrapping at the ends - the DAO's

@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.BehindLiveWindowException
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -54,6 +55,21 @@ data class StreamInfo(
     val audioCodec: String? = null, // "AAC" | "AC3" | "EAC3" | "MP3"
     val videoCodec: String? = null, // "H.264" | "H.265" | "VP9" - not in decision 7's badge list,
     // captured anyway since it's free here and decision 9's "Video info" picker wants it later.
+    val videoBitrateBps: Int? = null, // decision 9's "bitrate if known" - IPTV live streams often
+    val audioBitrateBps: Int? = null, // don't declare this (Format.NO_VALUE = -1), omitted then.
+)
+
+/**
+ * Live network/buffer state for decision 9's Video info screen (redesigned full-screen 2026-09-17,
+ * user request - "some live network data like speed, buffer size or time"). [bitrateEstimateBps]
+ * comes from ExoPlayer's own [DefaultBandwidthMeter] (§7's shared client isn't this - this measures
+ * the *media* connection's actual observed throughput, not a client config value) - null until it
+ * has seen enough traffic to estimate, same "omit, don't placeholder" rule as [StreamInfo].
+ */
+data class NetworkStats(
+    val bufferedMs: Long = 0,
+    val bufferedPercentage: Int = 0,
+    val bitrateEstimateBps: Long? = null,
 )
 
 private fun resolutionClassOf(height: Int): String? = when {
@@ -113,6 +129,12 @@ class PlayerController(
 
     private val trackManager = TrackManager(context)
 
+    // Video info screen's "network speed" (decision 9, redesigned 2026-09-17) - a real handle on
+    // the estimate ExoPlayer's media data source is already computing internally by default, just
+    // never previously kept. Passed into the builder below via `setBandwidthMeter` so it measures
+    // this player's actual media traffic, not a second unused instance.
+    private val bandwidthMeter = DefaultBandwidthMeter.Builder(context).build()
+
     /**
      * §2.2 (renderer fallback) + §2.6 (TS extractor flag) + §3.1 (buffer byte ceiling) + §2.4
      * (audio attributes/focus) + §6/§9 (per-playlist User-Agent threaded into the *media* data
@@ -154,6 +176,7 @@ class PlayerController(
             .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackManager.trackSelector)
             .setLoadControl(loadControl)
+            .setBandwidthMeter(bandwidthMeter)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -205,10 +228,32 @@ class PlayerController(
             AspectRatioFrameLayout.RESIZE_MODE_FILL -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
             else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
         }
+        // Diagnostic only (user report, 2026-09-17: cycling the tile's label changed but the
+        // picture didn't) - most likely explanation is a channel whose native aspect already
+        // matches the screen (FIT/FILL/ZOOM render identically with nothing to letterbox or
+        // crop), not broken wiring; this line is what tells the two apart on the next test,
+        // ideally on an SD/4:3 channel where a real difference is unmissable.
+        Log.d(TAG, "resizeMode -> ${_resizeMode.value} (video ${exoPlayer.videoFormat?.width}x${exoPlayer.videoFormat?.height})")
     }
 
     private val _streamInfo = MutableStateFlow(StreamInfo())
     val streamInfo: StateFlow<StreamInfo> = _streamInfo.asStateFlow()
+
+    private val _networkStats = MutableStateFlow(NetworkStats())
+    val networkStats: StateFlow<NetworkStats> = _networkStats.asStateFlow()
+
+    private fun startNetworkStatsPoll() {
+        scope.launch {
+            while (true) {
+                delay(2_000)
+                _networkStats.value = NetworkStats(
+                    bufferedMs = exoPlayer.totalBufferedDuration,
+                    bufferedPercentage = exoPlayer.bufferedPercentage,
+                    bitrateEstimateBps = bandwidthMeter.bitrateEstimate.takeIf { it > 0 },
+                )
+            }
+        }
+    }
 
     // §4.4/§11: null = no error/reconnect state to show. §4.5's stall watchdog also writes here.
     private val _errorPresentation = MutableStateFlow<PlayerErrorPresentation?>(null)
@@ -221,6 +266,19 @@ class PlayerController(
     private var stallWatchdogJob: Job? = null
     private var stallWindowStartMs = 0L
     private var stallCountInWindow = 0
+
+    // §4.5's watchdog above only arms on an explicit STATE_BUFFERING transition - a real gap,
+    // found live 2026-09-17 (user report: "the player quits chasing it... the frame remains
+    // frozen, no spinners, no user feedback... forever, unless the channel is changed"). A
+    // degraded connection that trickles just enough bytes to never force ExoPlayer into
+    // STATE_BUFFERING (but not enough for real playback progress) never arms that watchdog at
+    // all - it stays in STATE_READY the whole time, indefinitely. This is a second, independent
+    // watchdog: poll actual playback position every 5s while ExoPlayer believes it's playing
+    // (`playWhenReady && STATE_READY`); if position hasn't advanced, that's a genuine stall
+    // regardless of what state ExoPlayer reports, and it feeds the exact same give-up-after-two
+    // logic [armStallWatchdog] already has, via [onStallDetected].
+    private var positionWatchdogJob: Job? = null
+    private var lastObservedPositionMs = 0L
 
     private var lastUrl: String? = null
 
@@ -255,6 +313,8 @@ class PlayerController(
 
             override fun onPlayerError(error: PlaybackException) = handlePlaybackError(error)
         })
+        startPositionWatchdog()
+        startNetworkStatsPoll()
     }
 
     private fun reportStreamInfo() {
@@ -267,6 +327,8 @@ class PlayerController(
             audioChannels = audio?.channelCount?.let(::audioChannelsLabelOf),
             audioCodec = audioCodecOf(audio?.sampleMimeType),
             videoCodec = videoCodecOf(video?.sampleMimeType),
+            videoBitrateBps = video?.bitrate?.takeIf { it > 0 },
+            audioBitrateBps = audio?.bitrate?.takeIf { it > 0 },
         )
     }
 
@@ -287,6 +349,7 @@ class PlayerController(
         retryAttempt = 0
         _errorPresentation.value = null
         cancelStallWatchdog()
+        lastObservedPositionMs = 0L // a fresh channel's position must not compare against the last one's
         exoPlayer.stop()
         exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
         exoPlayer.prepare()
@@ -345,18 +408,7 @@ class PlayerController(
         if (stallWatchdogJob?.isActive == true) return
         stallWatchdogJob = scope.launch {
             delay(15_000)
-            val now = System.currentTimeMillis()
-            if (now - stallWindowStartMs > 60_000) {
-                stallWindowStartMs = now
-                stallCountInWindow = 0
-            }
-            stallCountInWindow++
-            if (stallCountInWindow >= 2) {
-                _errorPresentation.value = PlayerErrorMapper.stalled()
-            } else {
-                _errorPresentation.value = PlayerErrorMapper.reconnecting()
-                exoPlayer.prepare()
-            }
+            onStallDetected()
         }
     }
 
@@ -365,9 +417,50 @@ class PlayerController(
         stallWatchdogJob = null
     }
 
+    /** Shared give-up-after-two logic (§4.5), now fed by two independent detectors - see
+     * [positionWatchdogJob]'s own doc comment for why a second one exists. */
+    private fun onStallDetected() {
+        val now = System.currentTimeMillis()
+        if (now - stallWindowStartMs > 60_000) {
+            stallWindowStartMs = now
+            stallCountInWindow = 0
+        }
+        stallCountInWindow++
+        if (stallCountInWindow >= 2) {
+            _errorPresentation.value = PlayerErrorMapper.stalled()
+        } else {
+            _errorPresentation.value = PlayerErrorMapper.reconnecting()
+            exoPlayer.prepare()
+        }
+    }
+
+    /** See [positionWatchdogJob]'s own doc comment. Runs for this controller's whole lifetime
+     * (started once, below), not re-armed per zap like [armStallWatchdog] - [play] resets
+     * [lastObservedPositionMs] so a fresh channel's first sample never compares against the
+     * previous channel's position. 5s poll, matching the existing watchdog's own order of
+     * magnitude; 500ms of tolerance absorbs normal seek/PTS jitter without masking a real stall
+     * (a genuinely playing live stream advances close to the full 5s between samples). */
+    private fun startPositionWatchdog() {
+        positionWatchdogJob = scope.launch {
+            while (true) {
+                delay(5_000)
+                if (exoPlayer.playWhenReady && exoPlayer.playbackState == Player.STATE_READY) {
+                    val position = exoPlayer.currentPosition
+                    if (kotlin.math.abs(position - lastObservedPositionMs) < 500) {
+                        onStallDetected()
+                    }
+                    lastObservedPositionMs = position
+                } else {
+                    lastObservedPositionMs = exoPlayer.currentPosition
+                }
+            }
+        }
+    }
+
     fun release() {
         retryJob?.cancel()
         cancelStallWatchdog()
+        positionWatchdogJob?.cancel()
         afrManager.restoreOriginalMode()
         exoPlayer.release()
     }

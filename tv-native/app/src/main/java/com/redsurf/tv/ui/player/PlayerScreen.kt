@@ -56,6 +56,7 @@ import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.data.ChannelRepository
 import com.redsurf.tv.db.ChannelEntity
+import com.redsurf.tv.player.NetworkStats
 import com.redsurf.tv.player.PlayerHost
 import com.redsurf.tv.player.StreamInfo
 import com.redsurf.tv.player.rememberPlayerController
@@ -66,6 +67,8 @@ import com.redsurf.tv.ui.theme.Surface
 import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
+import com.redsurf.tv.vod.XtreamApi
+import com.redsurf.tv.vod.XtreamUserInfo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -154,6 +157,7 @@ fun PlayerScreen(
     // User-Agent have to exist together from this screen's very first frame.
     val controller = rememberPlayerController(playlistUserAgent)
     val streamInfo by controller.streamInfo.collectAsState()
+    val networkStats by controller.networkStats.collectAsState()
     val errorPresentation by controller.errorPresentation.collectAsState()
     val resizeMode by controller.resizeMode.collectAsState()
 
@@ -430,7 +434,24 @@ fun PlayerScreen(
                         }
                     }
                     PlayerOverlay.ChannelList -> return@onKeyEvent false // real focusable content now (#2.4) - only Back is handled here.
-                    PlayerOverlay.ContextMenu -> return@onKeyEvent false // real focusable content now (#2.4) - only Back is handled here.
+                    PlayerOverlay.ContextMenu -> {
+                        // The long-press that opens this menu is one continuous key-down/up
+                        // sequence (user-found bug, 2026-09-17: "disappears before I can choose...
+                        // doesn't stick") - this branch used to let every key through unconsumed,
+                        // so the *same* press's terminating KeyUp reached the menu's own
+                        // just-focused "Add to favourites" row and triggered its click immediately,
+                        // before the user ever had a chance to navigate. Swallow only that one
+                        // release (`okWasLongPress` is still true only for it - a fresh press
+                        // resets it on its own first KeyDown); every other key still passes through
+                        // for the menu's own real focusable content.
+                        if ((event.key == Key.DirectionCenter || event.key == Key.Enter) &&
+                            event.type == KeyEventType.KeyUp && okWasLongPress
+                        ) {
+                            okWasLongPress = false
+                        } else {
+                            return@onKeyEvent false
+                        }
+                    }
                 }
                 true
             },
@@ -557,8 +578,10 @@ fun PlayerScreen(
         }
 
         // Decision 10's narrow bottom-right panel, one kind at a time - History (#2.3's first
-        // slice) plus Audio/Subtitles/Info (this slice). All four share the same dismiss path:
-        // Back, routed by the BackHandler above back to whichever floor opened them.
+        // slice) plus Audio/Subtitles (this slice). Info moved to its own full-screen treatment
+        // below (user request, 2026-09-17 - "consider a lightly opaque overlay screen on top of
+        // the video, instead of that tiny box... think about VLC"). All share the same dismiss
+        // path: Back, routed by the BackHandler above back to whichever floor opened them.
         (overlay as? PlayerOverlay.Picker)?.let { picker ->
             when (picker.kind) {
                 PickerKind.History -> HistoryPicker(
@@ -577,10 +600,13 @@ fun PlayerScreen(
                     controller = controller,
                     modifier = Modifier.align(Alignment.BottomEnd),
                 )
-                PickerKind.Info -> VideoInfoPicker(
+                PickerKind.Info -> VideoInfoOverlay(
+                    channel = currentChannel,
                     streamInfo = streamInfo,
+                    networkStats = networkStats,
                     showRawResolution = showRawResolution,
-                    modifier = Modifier.align(Alignment.BottomEnd),
+                    repository = repository,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
@@ -638,7 +664,9 @@ private fun ContextMenuPanel(
         modifier = modifier
             .width(240.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(Surface)
+            // Transparent, matching TiviMate (user request, 2026-09-17) - was a fully opaque
+            // Surface, hiding the video behind it entirely.
+            .background(Surface.copy(alpha = 0.85f))
             .padding(12.dp),
     ) {
         Text(
@@ -1052,43 +1080,104 @@ private fun SubtitlePicker(controller: com.redsurf.tv.player.PlayerController, m
     }
 }
 
+private fun formatBitrate(bps: Long): String = "%.2f Mbps".format(bps / 1_000_000.0)
+private fun formatBitrate(bps: Int): String = formatBitrate(bps.toLong())
+
 /**
- * Decision 9/10's Video info picker: read-only rows from [StreamInfo], the same source as the
- * zap-banner badges (rawResolution vs. resolutionClass follows the same Appearance toggle). No
- * focusable rows - nothing to select - so whatever already held D-pad focus underneath (the
- * Actions floor's "Video info" tile) simply stays focused, harmlessly hidden behind this panel;
- * the root Box's focus trap (decision 4/9's own note) keeps the D-pad from wandering elsewhere,
- * and Back (a separate dispatcher) still dismisses normally.
+ * Every Xtream-imported channel's `streamId` already IS its full playback URL
+ * (`server/live/user/pass/id.ts`, `MainViewModel.loadXtreamCodes`) - this pulls server/user/pass
+ * back out of it rather than the app persisting the password a second time just for this screen.
+ * Null for anything that doesn't match (M3U/Stalker channels have no fixed shape here - correctly
+ * skipped, not guessed at).
+ */
+private fun parseXtreamCredentials(streamUrl: String): Triple<String, String, String>? {
+    val match = Regex("^(https?://[^/]+)/live/([^/]+)/([^/]+)/").find(streamUrl) ?: return null
+    val (server, user, pass) = match.destructured
+    return Triple(server, user, pass)
+}
+
+/**
+ * Decision 9/10's Video info screen, redesigned full-screen 2026-09-17 per direct user feedback
+ * on the first pass ("that tiny box in the bottom right... think about the VLC player when it's
+ * streaming video information" / "some live network data like speed, buffer size... technicals
+ * about the provider themselves... 1/1 active connections"). A semi-transparent scrim over the
+ * still-visible video, not a modal panel - the VLC reference the user pointed at.
+ *
+ * Provider connection count is fetched once per open (not polled - it's a live request to the
+ * user's own provider, and decision 9 doesn't need it to be real-time), only for Xtream channels
+ * (`parseXtreamCredentials` returns null for anything else) - omitted entirely on failure or for
+ * non-Xtream playlists, the same "never a placeholder" rule as every other badge on this screen.
  */
 @Composable
-private fun VideoInfoPicker(streamInfo: StreamInfo, showRawResolution: Boolean, modifier: Modifier = Modifier) {
-    val rows = listOfNotNull(
+private fun VideoInfoOverlay(
+    channel: ChannelEntity?,
+    streamInfo: StreamInfo,
+    networkStats: NetworkStats,
+    showRawResolution: Boolean,
+    repository: ChannelRepository,
+    modifier: Modifier = Modifier,
+) {
+    var providerInfo by remember(channel?.streamId) { mutableStateOf<XtreamUserInfo?>(null) }
+    LaunchedEffect(channel?.streamId) {
+        providerInfo = null
+        val ch = channel ?: return@LaunchedEffect
+        val playlist = repository.getPlaylist(ch.playlistId) ?: return@LaunchedEffect
+        if (playlist.type != "xtream") return@LaunchedEffect
+        val (server, user, pass) = parseXtreamCredentials(ch.streamId) ?: return@LaunchedEffect
+        providerInfo = XtreamApi.getUserInfo(server, user, pass, playlist.userAgent)
+    }
+
+    val streamRows = listOfNotNull(
         (if (showRawResolution) streamInfo.rawResolution else streamInfo.resolutionClass)?.let { "Resolution" to it },
         streamInfo.frameRate?.let { "Frame rate" to "$it FPS" },
         streamInfo.videoCodec?.let { "Video codec" to it },
+        streamInfo.videoBitrateBps?.let { "Video bitrate" to formatBitrate(it) },
         streamInfo.audioCodec?.let { "Audio codec" to it },
         streamInfo.audioChannels?.let { "Audio channels" to it },
+        streamInfo.audioBitrateBps?.let { "Audio bitrate" to formatBitrate(it) },
     )
-    Column(
-        modifier = modifier
-            .padding(24.dp)
-            .width(280.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Surface)
-            .padding(12.dp),
-    ) {
-        Text("Video info", style = RedSurfType.sectionTitle, color = TextPrimary, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
-        if (rows.isEmpty()) {
-            Text("Not available yet", style = RedSurfType.rowSecondary, color = TextSecondary, modifier = Modifier.padding(8.dp))
+    val networkRows = listOfNotNull(
+        networkStats.bitrateEstimateBps?.let { "Network speed" to formatBitrate(it) },
+        "Buffer" to "${networkStats.bufferedMs / 1000}s (${networkStats.bufferedPercentage}%)",
+    )
+    val providerRows = providerInfo?.let { info ->
+        if (info.activeConnections != null && info.maxConnections != null) {
+            listOf("Provider connections" to "${info.activeConnections}/${info.maxConnections}")
+        } else {
+            emptyList()
         }
-        rows.forEach { (label, value) ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(label, style = RedSurfType.rowSecondary, color = TextSecondary)
-                Text(value, style = RedSurfType.rowTitle, color = TextPrimary)
+    } ?: emptyList()
+
+    Box(
+        modifier = modifier.background(Color.Black.copy(alpha = 0.72f)).padding(48.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Column(modifier = Modifier.width(420.dp)) {
+            Text(channel?.name ?: "", style = RedSurfType.heroTitle, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(modifier = Modifier.height(20.dp))
+            InfoSection("Stream", streamRows)
+            if (networkRows.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                InfoSection("Network", networkRows)
             }
+            if (providerRows.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                InfoSection("Provider", providerRows)
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoSection(title: String, rows: List<Pair<String, String>>) {
+    Text(title, style = RedSurfType.sectionTitle, color = TextSecondary, modifier = Modifier.padding(bottom = 6.dp))
+    rows.forEach { (label, value) ->
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(label, style = RedSurfType.rowSecondary, color = TextSecondary)
+            Text(value, style = RedSurfType.rowTitle, color = TextPrimary)
         }
     }
 }
