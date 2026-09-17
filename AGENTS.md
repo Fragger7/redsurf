@@ -529,8 +529,7 @@ before the report comes in, not after.
   account.
 - **About: add a "Created by" row** - **no longer backlog: built and machine-swept,
   BACKLOG_SWEEP.md #9, 2026-09-15.** Live row, "Created by · Faraz Ahmad", styled like Version.
-  Feel/vision still open: is the wording final, or does the user want a role appended now that
-  it's live?
+  Wording confirmed final, 2026-09-16 - no role appended.
 - **Recent-channel tile selection across categories: Back returns focus to the wrong category**
   - **no longer backlog: built and machine-swept, BACKLOG_SWEEP.md #7, 2026-09-15.**
   `LiveTvScreen`'s `onChannelChanged` (the tile-pick and zap path both use it) now also updates
@@ -623,14 +622,13 @@ before the report comes in, not after.
     playlist, not a static/wrong value. Fix this as part of the same work, not separately -
     building a detail view on top of already-wrong data would just move the bug somewhere more
     visible.
-  - **Open design question, not yet decided: does this become a real third-level page per
-    playlist** (TiviMate's own pattern - tap a playlist, drill into its own dedicated screen for
-    edit/remove/Stalker params/expiration date/etc.), **instead of cramming all of that into the
-    Settings → Playlists list view itself?** The user's instinct is that the list view is already
-    getting cluttered trying to hold it all. Decide this explicitly before building the detail
-    view above, since it changes the navigation shape (a new drill-down level, its own Back-peel
-    behavior per this file's focus-discipline rule) rather than just its content - don't default
-    to the flat-list approach without discussing it first.
+  - **DECIDED, 2026-09-17: a real third-level page per playlist** (TiviMate's own pattern - tap a
+    playlist in the Settings → Playlists list, drill into its own dedicated screen for edit/
+    remove/content-type/Stalker params/expiration date/etc.), not crammed into the list view
+    itself, which was already getting cluttered trying to hold it all. This is a new navigation
+    level, not just new content - build its Back-peel behavior (Back from the playlist page
+    returns focus to that exact playlist row in the list, not just "somewhere in Settings") per
+    this file's binding focus-discipline rule, same as every other drill-down in the app.
 
 - **Cold-launch resume: lands in the right category/channel *area* but D-pad focus itself isn't
   actually on the resumed channel** (user, 2026-09-16, not yet confirmed exactly where focus
