@@ -2,6 +2,49 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-17 — Player sprint close: #2.3/#2.4/#2.5 (`docs/plans/PHASE_2.md`)
+
+**Builds this pass: 1 release cut (v0.32.0), 2 local compile-checks** (no install - this session
+also fixed the workflow doc itself, see below, so the debug-build-then-swap cap this entry used to
+track no longer applies). **Deviations: two**, both noted in `PHASE_2.md` inline where they
+happened: `RecentChannelEntity` uses a composite `(playlistId, streamId)` key, not decision 14's
+literal bare `streamId PK`, matching `ChannelEntity`'s own precedent; the real migration is
+`7→8`, not the decision's predicted `6→7` (another version bump landed in between, from an
+earlier session's resume-on-launch work).
+
+**Also this session, before the sprint work:** `.claude/commands/sprint.md` rewritten to remove
+local debug-build installs as the default iteration path - a 3rd consecutive day of the same user
+complaint, traced this time to the protocol document itself silently reintroducing the pattern
+regardless of what memory said. From here: compile-check locally, batch changes, push to cut one
+real release, verify against that exact artifact. Also fixed live and shipped as v0.31.1/v0.31.2
+this session, ahead of the sprint proper: `GroupsColumn` not scrolling to reveal the selected
+category on cold-launch resume, and a real crash (`PlayerController`'s internal `CoroutineScope`
+had no dispatcher, defaulting to `Dispatchers.Default` - any retry path calling `exoPlayer.prepare()`
+off the main thread crashed with "Player is accessed on the wrong thread", found via
+`dumpsys dropbox --print`, not guessed).
+
+**Built:** #2.3's five real Actions-row tiles (Channels/Audio/Subtitles/Aspect/Video info),
+`PlayerController` track wrappers + `resizeMode` state, three new pickers (Audio/Subtitles read
+and select `Tracks.Group`s directly; Video info is read-only off `StreamInfo`); `PlayerOsd.kt`
+deleted (confirmed dead). #2.4's `ChannelListOverlay.kt` (LEFT, fresh Categories/Channels
+instances over a scrim), real RIGHT last-channel zap, `ContextMenuPanel` (favourite/hide, both
+DAO methods that existed dead until now). #2.5's real `recent_channels` table, DAO, `Migration
+(7, 8)`, `ChannelRepository`/`LiveTvScreen`/`AppShell` swapped from the in-memory recents stub to
+the DB-backed `Flow`.
+
+**Sweep:** compiled clean both times (once after the #2.4/#2.5 chunk, once after #2.3's icon-import
+and `PlayerHost` shadowing fixes - `VolumeUp`/`Subtitles`/`AspectRatio` aren't in this project's
+`material-icons-core`-only icon set, confirmed by inspecting the jar directly rather than guessing;
+a local `val resizeMode` added to `PlayerHost` shadowed `PlayerView`'s own settable property inside
+its factory block, fixed by qualifying `this.resizeMode`). Pushed as one `feat:` commit (the
+`sprint.md` fix pushed separately, as `docs:`), CI green (regression suite, signed release-key
+verification), published as **v0.32.0**.
+
+**Not verified this session: on the actual TV.** `adb connect 192.172.7.160:35631` refused twice
+(the standing "stop after two attempts" rule) - device unreachable, port may have rotated or the
+TV was asleep. Checkpoint B (`PHASE_2.md`) is genuinely open, not just unclosed paperwork - install
+v0.32.0 via OTA and run the feel/vision list handed to the user this session.
+
 ## 2026-09-15 — Backlog sweep (`docs/plans/BACKLOG_SWEEP.md`)
 
 **Builds this pass: 1** (well under the 3-build cap). **Deviations: one** - `deviated:` added a

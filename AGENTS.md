@@ -60,6 +60,18 @@ on the device itself (screenshots only to diagnose), the user gets a short *feel
 module instead of a bug hunt, and sprints run on debug builds that are **uninstalled and replaced
 with the CI release at sprint end** so OTA keeps working.
 
+**Superseded again, 2026-09-17 (`.claude/commands/sprint.md`) - this is the current instruction,
+not the paragraph above.** The debug-build-then-swap pattern above was itself the thing generating
+a recurring user complaint (3 consecutive days) that two earlier fixes (2026-09-15's signing-key
+unification, 2026-09-16's memory-only note) each addressed a real but different problem than the
+one actually being reported. Root cause: the *protocol document* still told every `/sprint`
+invocation to build and install a separately-versioned local debug APK, regardless of what
+personal memory said. Current rule: no local test builds as a matter of routine - write the
+change, compile-check only (`./gradlew :app:compileDebugKotlin`, no install), batch related
+changes, `git push` to cut one real signed release, verify against *that* exact artifact. A tight
+live-debugging burst chasing exact device timing/logcat behavior may still use a local build, but
+only after asking the user first, kept as short as possible, and cleaned up the moment it ends.
+
 *(Historical, 2026-09-12)* stop doing per-task ADB screenshot round-trips — too expensive. Build
 + verify with compile/tests + a signed `assembleRelease` only, batch several changes together,
 hand off a build for the user to test on the real TV via OTA instead. Targeted ADB debugging of
@@ -77,7 +89,11 @@ merging.
 
 - **Roadmap order** (user, 2026-09-13): Settings shell (`SETTINGS.md`) → **Branding** → Player
   sprint (Phase 2 #2.3 Actions row, #2.4, #2.5) → EPG + Guide (Phase 3) → **Cloud Sync** →
-  VOD/Series. Two deliberate reorderings:
+  VOD/Series. Player sprint built and released as v0.32.0 on 2026-09-17 (`SPRINT_LOG.md`) -
+  release-verified, awaiting the device pass (Checkpoint B, `PHASE_2.md`) before Phase 3 starts;
+  #2.6's zap-latency measurement is still open, explicitly deferred to the end of this list per
+  user instruction (2026-09-17) rather than blocking the rest of the sprint. Two deliberate
+  reorderings:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud
     state - so every module built after it inherits that, and every module built before it

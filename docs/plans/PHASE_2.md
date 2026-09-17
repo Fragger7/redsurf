@@ -29,10 +29,10 @@ the app too, not just the player - note it when touching other screens' error pa
 | 2.2 | Zap: neighbour queries, UP/DOWN, zap banner, stream badges, no-black-screen | ✅ done & device-verified (multiple live-bug rounds through 2026-09-12/14, incl. real tvg-chno numbering and the 2026-09-14 UP/DOWN direction flip) |
 | **A** | **Checkpoint — user tests entry, zap, OK overlay skeleton, Back** | ✅ closed 2026-09-17 - machine-verifiable criteria (1/2/3/5) all confirmed clean this session (fullscreen entry/exit, UP/DOWN zap both directions, OK-overlay elevator Tiles↔Actions, Back peeling one layer per press through every state, LEFT/RIGHT placeholders don't crash), no failures since the 2026-09-12 fixes. Criterion 4 (timeout *feel*) is genuinely the user's own call, not machine-verifiable - folded into this session's feel/vision list instead of blocking closure on it |
 | **P0** | **Player engineering foundation** (`PLAYER_ENGINEERING_BRIEF.md` §10) - `PlayerController` hoist, renderer/extractor config, error handling + UX mapping, buffer byte ceiling, track defaults, stall watchdog, shared OkHttp client | ✅ done & device-verified 2026-09-17 (`SPRINT_LOG.md`), plus the cold-launch focus bug and zap connection-ordering fix folded in - error-copy/stall-watchdog negative paths not yet hit live, see log |
-| 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | 🟡 info block + tile row + History picker done; actions/other pickers remain |
-| 2.4 | LEFT channel-list overlay, RIGHT last-channel zap, long-press context menu | ⬜ not started |
-| 2.5 | Recents + last-channel: table, real migration 6→7, History tile, resume setting | ⬜ not started |
-| **B** | **Checkpoint — user tests the full matrix on the real list** | ⬜ |
+| 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | ✅ done & release-verified (v0.32.0) - the five real actions, Audio/Subtitles/Info pickers, `PlayerOsd.kt` deleted; not yet device-verified, see note below |
+| 2.4 | LEFT channel-list overlay, RIGHT last-channel zap, long-press context menu | ✅ done & release-verified (v0.32.0); not yet device-verified, see note below |
+| 2.5 | Recents + last-channel: table, real migration 6→7→8, History tile, resume setting | ✅ done & release-verified (v0.32.0) - resume-on-launch setting was already built in an earlier session under a different mechanism, not re-touched here; not yet device-verified, see note below |
+| **B** | **Checkpoint — user tests the full matrix on the real list** | ⬜ awaiting device test of v0.32.0 |
 | 2.6 | Acceptance sweep: migration from v0.20.x, zap latency, memory with overlays | ⬜ not started |
 
 **Goal:** watching live TV feels like TiviMate. Today the fullscreen player is a bare video surface
@@ -466,23 +466,58 @@ for the user's requested resolution-display toggle - the toggle itself waits on 
 actual TV - both fixes address precisely what was reported; a repeat of the same test sequence
 (zap repeatedly without waiting, pick a tile then try to zap again) is what would confirm them.
 
-## 2.4 — LEFT overlay, RIGHT last-channel, context menu
+## 2.3/2.4/2.5 — finished as one batch (2026-09-17, Sonnet)
 
-Decisions 11, 3 (RIGHT), 12.
+Built together per the re-paced "one Player sprint" plan above, compiled clean, committed as one
+`feat:` and pushed to cut **v0.32.0**. The device was unreachable this session (`adb connect`
+refused twice - the standing "stop after two attempts" rule) so this is **release-verified, not
+yet device-verified**: real code path, real signed APK, no ad-hoc local build, but Checkpoint B's
+actual button-by-button pass hasn't happened yet. See the feel/vision list handed to the user.
 
-**Acceptance:** LEFT opens the panel with focus on the current channel; OK on another tunes and
-closes; Back closes. RIGHT after zapping A→B→C lands on B, again on C. Long-press → favourite
-toggles (visible in the browse screen? not yet - favourites have no UI; verify via
-`adb shell` sqlite or by hiding a channel and seeing it gone from the list).
+**2.3 (decision 9):** `PlayerController` gained thin `TrackManager` wrappers
+(`getAudioTracks`/`getSubtitleTracks`/`selectAudioTrack`/`selectSubtitleTrack`/`disableSubtitles`)
+plus `resizeMode: StateFlow<Int>` and `cycleResizeMode()` for the Aspect action; `PlayerHost`
+applies it to the `PlayerView` each recomposition. `ActionRow` renders the five real tiles
+(Channels/Audio/Subtitles/Aspect/Video info). Audio and Subtitles pickers read
+`Tracks.Group`/`isTrackSelected` directly (no separate state - re-read on every selection via a
+local refresh counter, since `currentTracks` doesn't push updates itself); Subtitles adds an
+explicit "Off" row. Video info is read-only rows off the same `StreamInfo` the zap-banner badges
+already use. **Icon substitution, same reasoning as History's `DateRange` stand-in:** this
+project's `material-icons-core`-only dependency has none of `VolumeUp`/`Subtitles`/`AspectRatio`
+(confirmed by inspecting the jar's class list, not guessed) - used `Call`/`Create`/`Build`
+instead; the label text is what actually carries the meaning. `ui/player/PlayerOsd.kt` deleted
+(confirmed dead - grep found only its own definition, no callers).
 
-## 2.5 — Recents, migration, History, resume
+**2.4 (decisions 3, 11, 12):** new `ChannelListOverlay.kt` - fresh `GroupsColumn`/`ChannelsColumn`
+instances (not the browse screen's, which stays composed untouched underneath, decision 18) over a
+scrim, seeded on the current channel, same cold-launch-style bounded focus-retry so focus lands on
+the channel row rather than the category `GroupsColumn` would otherwise claim on its own. RIGHT now
+really zaps to `repository.secondMostRecentChannel()` instead of just flashing the banner.
+Long-press OK's `ContextMenuPanel` wires the two already-existing-but-dead DAO methods
+(`updateFavorite`/`updateHidden`).
 
-Decision 14 and 15. `RecentChannelEntity`, DAO, `Migration(6, 7)`, upsert on every tune, History
-picker, resume-on-launch setting (default off) as one toggle row in `SettingsScreen`.
+**2.5 (decision 14):** real `recent_channels` table - **composite `(playlistId, streamId)` primary
+key, not decision 14's literal bare `streamId PK`**, deliberately following `ChannelEntity`'s own
+precedent (a provider-assigned id is only unique within one playlist; two loaded playlists can
+collide) - noted per the brief's own instruction to say so when a decision needs adjusting. Real
+`Migration(7, 8)` (this session's actual current version, not the `6→7` the decision predicted -
+another version bump landed in between), `fallbackToDestructiveMigration()` kept only as the
+safety net for *other*, unhandled jumps. `LiveTvScreen`/`AppShell` swapped from the in-memory
+recents stub to the DB-backed `Flow`; History picker and the tile row now read the same source.
+Resume-on-launch was already built in an earlier session under a different name/mechanism - not
+re-touched.
 
-**Acceptance:** install this build over v0.20.x **with a playlist loaded** → playlist still there,
-recents empty, no crash. Watch three channels → History shows all three, newest first; the tile
-row shows them. Toggle resume on, relaunch → opens in the player on the last one; Back → browse.
+**Acceptance (2.4, restated):** LEFT opens the panel with focus on the current channel; OK on
+another tunes and closes; Back closes. RIGHT after zapping A→B→C lands on B, again on C.
+
+**Acceptance (2.5, restated):** install over an existing DB with a playlist loaded → playlist
+still there, recents survive/empty as appropriate, no crash. Watch three channels → History shows
+all three, newest first; the tile row shows them too.
+
+**Verified:** clean `compileDebugKotlin`, `assembleRelease` signed and published as v0.32.0
+(CI green: regression suite, signature check). **Not verified:** on the actual TV - device
+unreachable this session, see the note above. This is the first slice in this sprint genuinely
+worth a full device pass before Checkpoint B is called closed.
 
 ## Checkpoint B — user, on the device, real list
 
