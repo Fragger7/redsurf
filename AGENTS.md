@@ -337,6 +337,25 @@ before the report comes in, not after.
 
 ## Backlog - explicitly logged, not forgotten
 
+- **Provider Intelligence (unsupervised playlist fingerprinting, no brand names)** - user request,
+  2026-09-17, explicitly low priority ("not a whole useful of a feature right now") - logged, not
+  scheduled. Origin: the user wanted to identify which real-world IPTV reseller brand (e.g.
+  "Strong 8K", "T-Rex", "Dream 4K") is powering a given subscription. Two approaches researched
+  and rejected: querying `search.streamcheck.pro` live (it's a channel-health dashboard for ~10
+  already-known supplier brands, not a reverse-lookup tool, no ToS/API grant, pirate-adjacent);
+  reading the Xtream `player_api.php` response for a brand field (confirmed the standard
+  `user_info`/`server_info` fields never carry one). A third angle - public, non-scraping
+  community knowledge (forum/subreddit discussions of technical supplier-identification markers,
+  for legitimate consumer-transparency reasons) - is under research as of this entry; see that
+  session's findings before restarting this if picked back up.
+  **What's actually left as a viable, buildable idea:** unsupervised structural fingerprinting only
+  - compare category-naming conventions, resolution-suffix patterns, and panel API shape across
+  whatever playlists the user actually loads, and surface "these two look structurally identical"
+  without ever inferring a real brand name (there's no ground-truth data path from a fingerprint to
+  a name without an external reference the user doesn't have - no confirmed-brand subscriptions
+  exist to label against). Naming, if any, would be a user-assigned personal nickname on a cluster,
+  never an app-inferred brand identification. Useful but narrow - accepted as backlog, not a
+  priority.
 - **Live TV loses its category/channel/recent-tiles on leaving and returning** - **no longer
   backlog: fixed and verified live, 2026-09-15** (user report, three examples: category resets
   every time you leave Live TV, recent-channel tiles disappear, no relaunch-resume).
