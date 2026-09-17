@@ -18,25 +18,23 @@ the second.
    `$ANDROID_HOME/platform-tools/adb`; the device is `192.172.7.160:35631` - always pass `-s`.
 2. Device: `adb connect`, confirm it answers. If it doesn't within two attempts, **stop** and log
    the blocker (see "Blocked" below) - don't keep retrying.
-3. **No local test builds, as a matter of routine - user directive, repeated and finally fixed at
-   the root 2026-09-17, after two earlier attempts (2026-09-15's signing-key unification,
-   2026-09-16's own memory note) each fixed a real problem but not the actual one the user kept
-   reporting.** The pattern that costs real time and tokens isn't "debug vs. release can't
-   coexist" (that was fixed 2026-09-15 and stays fixed) - it's building *any* separately-versioned
-   local artifact at all, because it always eventually has to be walked back to whatever the real
-   CI release is, which is its own round of uninstall/reinstall/reseed. Default instead: write the
-   change, compile-check locally with no install (`./gradlew :app:compileDebugKotlin` - fast,
-   catches real errors, touches nothing on the device), batch several logically-related fixes
-   together, then `git push` to cut one real release (`gh run watch`, `gh release download <tag>`,
-   `adb install -r <path>`) and verify against *that* - the exact artifact the user will eventually
-   get via OTA, not a separate one. Slower per round-trip (~2 min CI vs ~20s local) but it's the
-   round-trip that was never the expensive part - the repeated uninstall/reseed cycle was.
-   **The one narrow exception:** a genuinely tight live-debugging burst (chasing an exact
-   timing/logcat behavior through many rapid iterations - a real CI round-trip would make it
-   impractical, not just slower) may still use a local build. Ask the user before starting one,
-   keep it as short as the debugging actually requires, and clean it up (uninstall, reinstall the
-   last real release) the moment the burst ends - never let a debugging-local build linger as the
-   thing being "handed off" or carried into the next piece of work.
+3. **Build locally with the real release signing config, then push - user directive, corrected
+   2026-09-17 (a same-day reversal of that day's own earlier CI-round-trip rule, which traded real
+   wall-clock time and token spend on `gh run watch`/`gh release download` polling for a benefit
+   that didn't materialize).** The thing that was actually expensive, across every prior version of
+   this rule, was never "local" per se - it was a *separately-versioned, debug-signed* artifact
+   that has to be walked back (uninstalled, reseeded) before OTA works again. A **local release
+   build**, signed with the same real keystore and given the *next real version number* (not a
+   `-debug`/`v0.0.0-local` placeholder), doesn't have that problem: `git push` still cuts the
+   authoritative CI release and history entry, but verification itself uses
+   `./gradlew :app:assembleRelease -PversionName=vX.Y.Z -PversionCode=N` (match whatever semantic-
+   release would assign next) and `adb install -r` that APK directly - no `gh run watch` wait, no
+   download round-trip. Batch several logically-related fixes together before building. Compile-
+   check-only (`compileDebugKotlin`, no install) is still right for anything that doesn't need a
+   real device check at all.
+   **The one thing to still avoid:** a debug-signed or arbitrarily-versioned build that would
+   out-rank or conflict with the real release history - keep the local build's version number
+   consistent with what actually gets pushed, so OTA continuity is never in question.
 4. Seed the test playlist **only if the device doesn't already have one** (check via a screenshot
    or the app's own state, not automatically) via `adb forward tcp:8080 tcp:8080` + `curl` POST to
    `http://127.0.0.1:8080/submit` (verified working, sprint 1). **Use the Xtream API path**
