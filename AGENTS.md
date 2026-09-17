@@ -346,8 +346,13 @@ before the report comes in, not after.
   reading the Xtream `player_api.php` response for a brand field (confirmed the standard
   `user_info`/`server_info` fields never carry one). A third angle - public, non-scraping
   community knowledge (forum/subreddit discussions of technical supplier-identification markers,
-  for legitimate consumer-transparency reasons) - is under research as of this entry; see that
-  session's findings before restarting this if picked back up.
+  for legitimate consumer-transparency reasons) - **researched and also rejected, 2026-09-17**: no
+  such resource exists in the open (no Reddit wiki/megathread, no enthusiast-forum guide mapping
+  markers to suppliers). The real mapping knowledge lives in gated, registration-required forums
+  built around resellers sourcing suppliers - an anti-piracy source (Friend MTS) explicitly
+  confirms illegal wholesalers operate "in the shadows of closed forums" - the same piracy-adjacent
+  category the streamcheck.pro rejection was avoiding. All three brand-identification angles are
+  now closed; don't re-attempt a fourth without genuinely new information.
   **What's actually left as a viable, buildable idea:** unsupervised structural fingerprinting only
   - compare category-naming conventions, resolution-suffix patterns, and panel API shape across
   whatever playlists the user actually loads, and surface "these two look structurally identical"
