@@ -177,3 +177,51 @@ mirror direction; deterministic redirect isn't possible here without reintroduci
 against the release key. Device was fully wiped during the sprint's debug/release swap (expected,
 per the sprint protocol) - it's back on the Onboarding screen; needs a playlist added before the
 feel/vision pass.
+
+## 2026-09-17 - Player sprint, P0 (engine foundation)
+
+**What was built:** `PLAYER_ENGINEERING_BRIEF.md`'s full P0 punch list (items 1-9), plus two items
+the user folded in on top: the cold-launch resume focus bug and the zap connection-ordering fix
+("black screen close connection fix"). Full account in commit `11618c6`'s message - not repeated
+here. Headline pieces: the `PlayerController` hoist (unblocks PHASE_2 #2.3's Actions row), real
+error handling where there was none before (`PlaybackErrorController` + `PlayerErrorMapper`, a
+15s stall watchdog), the buffer byte ceiling, and the cold-launch D-pad focus fix.
+
+**Deviated: no debug builds used at all this sprint** (`deviated:` per this file's own rule) -
+corrected a stale assumption from the previous session that debug/release builds need to stay
+apart on this device; `build.gradle.kts` has signed them with the same key since 2026-09-15
+specifically so that's never necessary. Iterated entirely on local signed `assembleRelease` builds
+(`-PversionName=vX.Y.Z-dev -PversionCode=999` to clear downgrade protection), `adb install -r -d`
+in place every time, zero uninstalls, zero data loss, zero playlist reseeding needed across the
+whole sprint. Memory corrected for future sessions.
+
+**Deviated: more device builds than a normal sweep pass** - this wasn't run as a strict
+sweep-then-fix-then-resweep cycle; the cold-launch focus fix specifically needed live,
+instrumented debugging (temporary `Log.d` calls added, then removed before the final commit) to
+find the real root cause (Paging's initial load taking ~3.4s for a 123-channel group, not a
+simple missing-requestFocus-call bug as first suspected) - logged here since it's a real
+departure from the sweep protocol's shape, not because anything was wrong with doing it this way.
+
+**Verified on device** (signed release, real Chromecast, real ~28K-channel Xtream playlist):
+- Cold launch → single OK press, zero other input → opens fullscreen directly on the exact
+  resumed channel. Confirmed via targeted logcat instrumentation during development (this
+  specific device's `screencap`/`screenrecord` are both broken entirely, and `uiautomator`'s
+  `focused` attribute doesn't reliably report Compose TV focus here either - established earlier
+  this project, held true again this sprint).
+- UP/DOWN zap within fullscreen, both directions: correct channel change, real
+  `AudioFocusManager` request logged with `AA=USAGE_MEDIA/CONTENT_TYPE_MOVIE` (confirms the new
+  `AudioAttributes` wiring actually took effect), no HTTP 456, no crash.
+- No crashes anywhere across the whole session, including through several points where the
+  Chromecast's launcher unexpectedly stole foreground (YouTube TV, then Projectivy Launcher) for
+  reasons unrelated to RedSurf - confirmed via `dumpsys activity` + a clean logcat crash search
+  each time, not assumed.
+
+**Not yet verified:** the error-message copy for a real dead/blocked channel (403/404/456/884) -
+no such channel was actually hit live this session, so `PlayerErrorMapper`'s classification logic
+is implemented and reasoned through but not observed firing against a real failure. Same for the
+15s stall watchdog's second-strike path. Worth a deliberate negative-path test (tune a channel
+number known not to exist, or throttle the network mid-stream) before calling this fully closed.
+
+**Release:** not cut this sprint - the user's own explicit workflow for this session was iterate
+on local signed builds throughout, cut one real release at the very end once satisfied. See
+`AGENTS.md`/git log for whether that release has landed by the time this is read.

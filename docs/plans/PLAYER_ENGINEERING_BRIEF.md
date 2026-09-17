@@ -642,21 +642,28 @@ stereo"** (§2.4) and a diagnostic **"Force software decoder"** (§2.2).
 
 **P0 — correctness and reliability; do these first, inside the `PlayerController` hoist**
 
-1. `PlayerController` hoist (§9). Unblocks everything below *and* PHASE_2 #2.3/#2.4.
-2. `DefaultRenderersFactory` with `setEnableDecoderFallback(true)` (§2.2). One line, largest
+**✅ Done and device-verified 2026-09-17** - `SPRINT_LOG.md`'s "Player sprint, P0" entry has the
+full account. Two items folded in on top at the user's request: the cold-launch resume focus bug
+(`AppShell`/`LiveTvScreen`) and this list's own item 4 (the user's "black screen close connection
+fix"). Not yet verified: the error copy (item 3) and stall watchdog (item 8) haven't been observed
+firing against a real failure - no dead/blocked channel was hit live this session.
+
+1. ✅ `PlayerController` hoist (§9). Unblocks everything below *and* PHASE_2 #2.3/#2.4.
+2. ✅ `DefaultRenderersFactory` with `setEnableDecoderFallback(true)` (§2.2). One line, largest
    compatibility-per-effort ratio in the document.
-3. `PlaybackErrorController` + `Player.Listener.onPlayerError`: classify 403/404/456/884, bounded
-   backoff retry, `BehindLiveWindowException` recovery, visible message (§4.4).
-4. `stop()` before every zap's `setMediaItem()` + `prepare()`, plus the single delayed 456 retry
-   (§4.3).
-5. `setTsExtractorFlags(FLAG_ALLOW_NON_IDR_KEYFRAMES)` (§2.6). Compatibility *and* zap latency.
-6. `setTargetBufferBytes(20 MB)`; `bufferForPlaybackAfterRebufferMs` 1500 → 2500 (§3.1).
-7. `TrackManager` defaults: text disabled by default, system-locale audio preference, persist the
+3. ✅ `PlaybackErrorController` + `Player.Listener.onPlayerError`: classify 403/404/456/884, bounded
+   backoff retry, `BehindLiveWindowException` recovery, visible message (§4.4). Implemented per
+   spec; not yet observed against a real failure - see note above.
+4. ✅ `stop()` before every zap's `setMediaItem()` + `prepare()`, plus the single delayed 456 retry
+   (§4.3). Device-verified: UP/DOWN zap in both directions, no 456, no crash.
+5. ✅ `setTsExtractorFlags(FLAG_ALLOW_NON_IDR_KEYFRAMES)` (§2.6). Compatibility *and* zap latency.
+6. ✅ `setTargetBufferBytes(20 MB)`; `bufferForPlaybackAfterRebufferMs` 1500 → 2500 (§3.1).
+7. ✅ `TrackManager` defaults: text disabled by default, system-locale audio preference, persist the
    user's audio-language choice (§2.8).
-8. Stall watchdog (15 s buffering → one `prepare()`) + media-specific OkHttp timeouts 5 s / 8 s
-   (§4.5).
-9. Single shared `OkHttpClient` in `IptvNetworkModule`; thread the per-playlist User-Agent into the
-   media data source (§6).
+8. ✅ Stall watchdog (15 s buffering → one `prepare()`) + media-specific OkHttp timeouts 5 s / 8 s
+   (§4.5). Implemented per spec; not yet observed firing - see note above.
+9. ✅ Single shared `OkHttpClient` in `IptvNetworkModule`; thread the per-playlist User-Agent into the
+   media data source (§6). `ChannelRepository.getPlaylist` added to support this.
 
 **P1 — performance and format reach**
 
@@ -678,8 +685,9 @@ stereo"** (§2.4) and a diagnostic **"Force software decoder"** (§2.2).
 18. AFR rebuild: seamless path as default, `AfrManager` demoted to opt-in fallback with
     integer-multiple matching and a resolution filter, wired to its Settings row, default Off (§5).
 19. `#KODIPROP` → `MediaItem.DrmConfiguration` in `M3uParser` (§2.7).
-20. Delete `player/PlayerEngine.kt` and `settings/PlayerSettings.kt`; `ui/player/PlayerOsd.kt` is
-    already slated for deletion by PHASE_2 #2.3 — agreed, delete it with the Actions row (§7).
+20. ✅ Delete `player/PlayerEngine.kt` and `settings/PlayerSettings.kt` - done early, alongside P0
+    (2026-09-17), both confirmed zero real references before deletion. `ui/player/PlayerOsd.kt` is
+    still slated for deletion by PHASE_2 #2.3 - delete it with the Actions row (§7).
 21. Extend #2.6's measurements: split zap latency into three phases; record Graphics/EGL memory
     separately (§8).
 

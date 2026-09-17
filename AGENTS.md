@@ -623,19 +623,21 @@ before the report comes in, not after.
   instrumentation makes that a fast diagnosis, not a new investigation from zero.
 
 - **Channel-switch loading state: branded spinner + timeout + real error feedback, TiviMate-style**
-  (user, 2026-09-16). Not a new item - this is `PLAYER_ENGINEERING_BRIEF.md`'s §4.4
-  (`PlaybackErrorController`), §4.5 (15s stall watchdog, "give up" after a second stall within
-  60s), and §11 (`PlayerErrorMapper` - friendly non-technical copy, never a raw code) all together,
-  applied to the zap/tune path specifically. Confirming explicitly, since the user asked for it by
-  name: the loading visual for this should be the branded `WaveSpinner`
-  (`ui/theme/RedSurfSpinner.kt`, already built for the app's cold-start loading screen), not a
-  generic spinner - same component, same OSD badge slot the existing "tuning" indicator ask
-  (backlog below, Progress feedback #3) already calls for.
-- **Test playlist may be dead as of 2026-09-16** (user report, end of session) - the
-  `infinitytv-mgm.online` Xtream credentials in `~/.redsurf/test-playlist.url` stopped returning
-  live content. Before seeding a fresh install/debug session with it next time, ask the user for
-  new credentials or confirm whether they loaded a working list themselves that session - don't
-  assume the file's contents are still valid.
+  (user, 2026-09-16) - **the timeout/error-feedback half built and device-verified 2026-09-17**
+  (`PLAYER_ENGINEERING_BRIEF.md` P0, `SPRINT_LOG.md`): `PlaybackErrorController` classifies and
+  retries with bounded backoff, the 15s stall watchdog catches everything else, and
+  `PlayerErrorMapper` surfaces short friendly copy (never a raw code) in a non-blocking OSD badge
+  (`PlayerScreen.kt`). **Still open: the badge is a plain text pill today, not the branded
+  `WaveSpinner`** (`ui/theme/RedSurfSpinner.kt`, already built for the app's cold-start loading
+  screen) the user specifically asked for - swap it in, same OSD slot the "tuning" indicator ask
+  (below, Progress feedback #3) already calls for. Also still open: the error copy and stall
+  watchdog haven't actually been observed firing against a real failure yet (no dead/blocked
+  channel was hit live) - worth a deliberate negative-path test before calling this fully closed.
+- **Test playlist confirmed working again, 2026-09-17** - superseded the 2026-09-16 "may be dead"
+  note below: "Test Magnum"/"Magnum NFL Adams" (Xtream, `eempiree.com`) streamed and zapped
+  cleanly this session, real audio-focus requests logged, no errors. Whatever the user loaded in
+  between resolved it - no longer a live concern, but if a future session hits dead streams again,
+  don't assume the credentials are still good without checking first, the same caution as before.
 - **Playlist management: edit existing credentials, and a real detail view (server/user/type -
   not just the name)** (user, 2026-09-16). Today Settings → Playlists only shows the name and a
   Remove action (`PLAYLIST_GREY_ROWS` already has "Rename" as a grey row, `SETTINGS.md`) - there's
@@ -658,15 +660,23 @@ before the report comes in, not after.
     this file's binding focus-discipline rule, same as every other drill-down in the app.
 
 - **Cold-launch resume: lands in the right category/channel *area* but D-pad focus itself isn't
-  actually on the resumed channel** (user, 2026-09-16, not yet confirmed exactly where focus
-  really lands - first press seems to jump to either the top category or the Live TV nav pill;
-  needs a real device test to pin down before fixing). This is the same class of bug this file's
-  own "State and focus discipline" binding rule exists to catch - `AppShell`'s cold-launch restore
-  `LaunchedEffect` (see the auto-play-on-launch entry above) sets `selectedGroup`/`focusedChannel`
-  as *data*, but apparently nothing is claiming actual D-pad focus onto that channel's row via a
-  `FocusRequester`, so the very next key press falls back to wherever Compose's default focus
-  landing resolves to instead. The user should be able to land cold, exactly on the last-watched
-  channel, and press OK immediately to resume it - not have to re-navigate to find it first.
+  actually on the resumed channel** - **no longer backlog: built and device-verified,
+  2026-09-17** (`SPRINT_LOG.md`'s "Player sprint, P0" entry). Confirmed root cause exactly as
+  suspected: this file's own "State and focus discipline" binding rule - `AppShell`'s cold-launch
+  restore `LaunchedEffect` sets `selectedGroup`/`focusedChannel` as *data* correctly, but neither
+  of the app's two existing focus-claim mechanisms (fullscreen-exit, lateral column re-entry) ever
+  fires on a cold launch, since both are purely reactive to a transition that hasn't happened yet.
+  Fixed with a third, explicit one-shot trigger (`claimInitialFocusTrigger`, same shape as
+  `autoPlayTrigger`) in `AppShell`/`LiveTvScreen`. **Real subtlety found via live logcat
+  instrumentation, not guessed:** a single fixed delay before calling `requestFocus()` reliably
+  failed with "FocusRequester is not initialized" - the target row only becomes focus-requestable
+  once Paging's *initial* load of the group completes, which measured ~3.4s for a real
+  123-channel group on this device, not the ~100-400ms every other focus-claim effect in this
+  screen gets away with (they're all reacting to an *already-composed* screen, not racing a cold
+  list's first load). Fixed with a bounded retry loop (300ms × 20, 6s ceiling) instead of a longer
+  fixed delay, so a fast small group doesn't wait needlessly and a slow large one still lands.
+  Verified live: single OK press on cold launch, zero other input, opens fullscreen directly on
+  the exact resumed channel.
 
 ## The one rule that matters
 

@@ -28,7 +28,7 @@ the app too, not just the player - note it when touching other screens' error pa
 | 2.1 | `PlayerScreen`: key router, overlay state machine, Back peeling, scrim | ✅ done & build-verified |
 | 2.2 | Zap: neighbour queries, UP/DOWN, zap banner, stream badges, no-black-screen | ✅ done & device-verified (multiple live-bug rounds through 2026-09-12/14, incl. real tvg-chno numbering and the 2026-09-14 UP/DOWN direction flip) |
 | **A** | **Checkpoint — user tests entry, zap, OK overlay skeleton, Back** | 🟡 in progress - several real bugs found + fixed live 2026-09-12 (focus loss, zap dead-stop, channel numbering); awaiting a clean pass to close |
-| **P0** | **Player engineering foundation** (`PLAYER_ENGINEERING_BRIEF.md` §10) - `PlayerController` hoist, renderer/extractor config, error handling + UX mapping, buffer byte ceiling, track defaults, stall watchdog, shared OkHttp client | ⬜ not started - do this before/alongside 2.3's remaining slice |
+| **P0** | **Player engineering foundation** (`PLAYER_ENGINEERING_BRIEF.md` §10) - `PlayerController` hoist, renderer/extractor config, error handling + UX mapping, buffer byte ceiling, track defaults, stall watchdog, shared OkHttp client | ✅ done & device-verified 2026-09-17 (`SPRINT_LOG.md`), plus the cold-launch focus bug and zap connection-ordering fix folded in - error-copy/stall-watchdog negative paths not yet hit live, see log |
 | 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | 🟡 info block + tile row + History picker done; actions/other pickers remain |
 | 2.4 | LEFT channel-list overlay, RIGHT last-channel zap, long-press context menu | ⬜ not started |
 | 2.5 | Recents + last-channel: table, real migration 6→7, History tile, resume setting | ⬜ not started |
