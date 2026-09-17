@@ -33,11 +33,46 @@ object IptvNetworkModule {
      * bounded-timeout guidance, sized to what was actually observed (38s), not the default.
      */
     const val PLAYLIST_READ_TIMEOUT_SECONDS = 90L
-    
+
+    /**
+     * PLAYER_ENGINEERING_BRIEF.md §4.5/§7 - the live-stream media path, deliberately tighter than
+     * the default. A live stream that's gone this long without a byte is dead; before this, the
+     * player's data source inherited the 15s default, so the UI sat frozen with no feedback for
+     * 15 whole seconds before the stall watchdog even got a chance to act. This is
+     * IPTV_DOMAIN_KNOWLEDGE.md §4's fast-fail hedging applied to the media path, where it had
+     * never actually been applied.
+     */
+    private const val MEDIA_CONNECT_TIMEOUT_SECONDS = 5L
+    private const val MEDIA_READ_TIMEOUT_SECONDS = 8L
+
     enum class DnsProvider {
         SYSTEM, CLOUDFLARE, GOOGLE
     }
+
     var currentDnsProvider = DnsProvider.SYSTEM
+        set(value) {
+            if (field != value) {
+                field = value
+                baseClient = null // force a rebuild against the new DNS provider
+            }
+        }
+
+    /**
+     * §6/§7: one lazily-created client every other client variant derives from via
+     * `newBuilder()`, which shares the connection pool, dispatcher, and TLS session cache -
+     * `getOkHttpClient()` used to build a brand-new client (plus a throwaway bootstrap client) on
+     * every single call, which meant every playlist fetch, every update check, and every player
+     * construction paid for a fresh connection pool and fresh TLS handshakes. Holds no
+     * interceptors or timeouts of its own - those vary per caller (User-Agent, read timeout) and
+     * are layered on by each `newBuilder()` derivation below, same as before.
+     */
+    private var baseClient: OkHttpClient? = null
+
+    private fun getBaseClient(): OkHttpClient =
+        baseClient ?: OkHttpClient.Builder()
+            .dns(buildDoHDns(OkHttpClient.Builder().build(), currentDnsProvider))
+            .build()
+            .also { baseClient = it }
 
     private fun buildDoHDns(bootstrapClient: OkHttpClient, provider: DnsProvider): Dns {
         if (provider == DnsProvider.SYSTEM) return Dns.SYSTEM
@@ -63,19 +98,19 @@ object IptvNetworkModule {
         return DnsOverHttps.Builder().client(dohClient).url(url).build()
     }
 
-    // Pass custom User-Agent from Playlist (Feature 1)
+    // Pass custom User-Agent from Playlist (Feature 1). Derives from the shared [getBaseClient]
+    // via `newBuilder()` (§6/§7) - this keeps its own connect/read timeouts and UA-injecting
+    // interceptor (both genuinely per-caller), while still sharing the base client's connection
+    // pool, dispatcher, and TLS session cache instead of building all three fresh every call.
     fun getOkHttpClient(
         playlistUserAgent: String? = null,
         readTimeoutSeconds: Long = DEFAULT_READ_TIMEOUT_SECONDS,
+        connectTimeoutSeconds: Long = 15L,
     ): OkHttpClient {
-        val bootstrapClient = OkHttpClient.Builder().build()
-        val dns = buildDoHDns(bootstrapClient, currentDnsProvider)
-
         val finalUserAgent = playlistUserAgent?.takeIf { it.isNotBlank() } ?: globalUserAgent
 
-        return OkHttpClient.Builder()
-            .dns(dns)
-            .connectTimeout(15, TimeUnit.SECONDS)
+        return getBaseClient().newBuilder()
+            .connectTimeout(connectTimeoutSeconds, TimeUnit.SECONDS)
             .readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
@@ -94,11 +129,22 @@ object IptvNetworkModule {
     fun getPlaylistOkHttpClient(playlistUserAgent: String? = null): OkHttpClient =
         getOkHttpClient(playlistUserAgent, PLAYLIST_READ_TIMEOUT_SECONDS)
 
-    // Custom DataSource.Factory for ExoPlayer
+    /** PLAYER_ENGINEERING_BRIEF.md §4.5/§7 - the live-stream media client specifically, with the
+     * tighter fail-fast timeouts a dead live stream deserves (see [MEDIA_CONNECT_TIMEOUT_SECONDS]/
+     * [MEDIA_READ_TIMEOUT_SECONDS]'s own doc comment). */
+    private fun getMediaOkHttpClient(playlistUserAgent: String? = null): OkHttpClient =
+        getOkHttpClient(playlistUserAgent, MEDIA_READ_TIMEOUT_SECONDS, MEDIA_CONNECT_TIMEOUT_SECONDS)
+
+    /** Custom DataSource.Factory for ExoPlayer - the player's actual stream requests, not API
+     * calls. Uses [getMediaOkHttpClient], not the general-purpose client, and [playlistUserAgent]
+     * is threaded all the way from the playing channel's own playlist (§6/§9) - previously this
+     * was called with no argument from the player, so a playlist configured with a custom
+     * User-Agent got the *global* one for its actual stream requests while its API requests got
+     * the right one, a 403 waiting to happen on exactly the providers a custom UA was added for. */
     fun getDataSourceFactory(playlistUserAgent: String? = null): HttpDataSource.Factory {
         val finalUserAgent = playlistUserAgent?.takeIf { it.isNotBlank() } ?: globalUserAgent
         // Use OkHttpDataSource so ExoPlayer uses our DoH enabled client
-        return OkHttpDataSource.Factory(getOkHttpClient(playlistUserAgent))
+        return OkHttpDataSource.Factory(getMediaOkHttpClient(playlistUserAgent))
             .setUserAgent(finalUserAgent)
     }
 }

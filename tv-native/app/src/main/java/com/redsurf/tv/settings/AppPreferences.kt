@@ -7,12 +7,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Purpose-built persistence for the two toggles BACKLOG_SWEEP.md items #11/#12 flip live -
- * neither existing settings file in this package fits: [SettingsManager] is DNS/TMDB config,
- * [PlayerSettings] is non-reactive buffer/decoder tuning with manual `load()`/`save()` calls.
- * This one is `SharedPreferences`-backed but `StateFlow`-exposed, matching `MainViewModel`'s own
- * reactive pattern (state/focus discipline expects the UI to react to a change, not poll a `var`)
- * - and deliberately small, just these two booleans, not a general settings framework.
+ * Purpose-built persistence for the small reactive settings that don't fit [SettingsManager]
+ * (DNS/TMDB config). `SharedPreferences`-backed but `StateFlow`-exposed, matching
+ * `MainViewModel`'s own reactive pattern (state/focus discipline expects the UI to react to a
+ * change, not poll a `var`) - deliberately small, not a general settings framework. (The dead,
+ * unwired `PlayerSettings` this class doc used to be contrasted against was deleted
+ * PLAYER_ENGINEERING_BRIEF.md §7, 2026-09-17 - its real buffer/decoder rows belong here or
+ * directly in `PlayerController`, not a separate manual load()/save() file.)
  */
 class AppPreferences(context: Context) {
     private val prefs: SharedPreferences =
@@ -53,6 +54,20 @@ class AppPreferences(context: Context) {
         _autoPlayLastChannelOnLaunch.value = enabled
     }
 
+    /** PLAYER_ENGINEERING_BRIEF.md §2.8 - the language of whatever audio track the user last
+     * explicitly picked from the player's Audio picker, across every channel/playlist (a
+     * `TrackSelectionOverride` is scoped to one track group's identity and doesn't survive a
+     * channel change, so without persisting the *language* itself, "give me the English feed"
+     * would need re-picking after every zap). Null until the user picks one for the first time -
+     * [TrackManager] falls back to the system's own locale list until then. */
+    private val _preferredAudioLanguage = MutableStateFlow(prefs.getString(KEY_PREFERRED_AUDIO_LANGUAGE, null))
+    val preferredAudioLanguage: StateFlow<String?> = _preferredAudioLanguage.asStateFlow()
+
+    fun setPreferredAudioLanguage(language: String) {
+        prefs.edit().putString(KEY_PREFERRED_AUDIO_LANGUAGE, language).apply()
+        _preferredAudioLanguage.value = language
+    }
+
     /** Composite (playlistId, streamId) - matches ChannelEntity's own primary key
      * (BACKLOG_SWEEP.md #13) so a stale/removed channel just fails the lookup cleanly rather than
      * resolving to the wrong provider's channel. */
@@ -77,5 +92,6 @@ class AppPreferences(context: Context) {
         private const val KEY_AUTO_PLAY_LAST_CHANNEL = "auto_play_last_channel_on_launch"
         private const val KEY_LAST_PLAYLIST_ID = "last_watched_playlist_id"
         private const val KEY_LAST_STREAM_ID = "last_watched_stream_id"
+        private const val KEY_PREFERRED_AUDIO_LANGUAGE = "preferred_audio_language"
     }
 }

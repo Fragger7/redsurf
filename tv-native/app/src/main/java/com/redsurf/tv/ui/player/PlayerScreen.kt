@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +52,7 @@ import com.redsurf.tv.data.ChannelRepository
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.player.PlayerHost
 import com.redsurf.tv.player.StreamInfo
+import com.redsurf.tv.player.rememberPlayerController
 import com.redsurf.tv.ui.theme.Background
 import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
@@ -128,12 +130,24 @@ fun PlayerScreen(
     // default false, matching this screen's pre-toggle behavior exactly.
     blackScreenBetweenZaps: Boolean = false,
     showRawResolution: Boolean = false,
+    // PLAYER_ENGINEERING_BRIEF.md §6/§9 - the currently-playing channel's own playlist User-Agent,
+    // resolved reactively by LiveTvScreen (see its own doc comment for why not here).
+    playlistUserAgent: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    var streamInfo by remember { mutableStateOf(StreamInfo()) }
     var overlay by remember { mutableStateOf<PlayerOverlay>(PlayerOverlay.None) }
     val tilesFloorFocus = remember { FocusRequester() }
+
+    // PLAYER_ENGINEERING_BRIEF.md §6/§9: [playlistUserAgent] is resolved by the caller
+    // (LiveTvScreen, reactively, well before this screen is ever composed - see its own doc
+    // comment) rather than looked up here. A fresh async lookup started at this composable's own
+    // first composition would race directly against `rememberPlayerController`'s `remember {}` in
+    // the very same composition pass and always lose - the controller and its data source's
+    // User-Agent have to exist together from this screen's very first frame.
+    val controller = rememberPlayerController(playlistUserAgent)
+    val streamInfo by controller.streamInfo.collectAsState()
+    val errorPresentation by controller.errorPresentation.collectAsState()
 
     // Shared by Level 0's zap and the Controls elevator's ceiling/floor fallback below (user
     // decision, 2026-09-12, after comparing against real TiviMate behavior: TiviMate stops UP/DOWN
@@ -406,12 +420,34 @@ fun PlayerScreen(
             },
     ) {
         PlayerHost(
+            controller = controller,
             streamUrl = streamUrl,
             fullscreen = true,
             modifier = Modifier.fillMaxSize(),
             blackScreenBetweenZaps = blackScreenBetweenZaps,
-            onStreamInfo = { streamInfo = it },
         )
+
+        // PLAYER_ENGINEERING_BRIEF.md §11 - non-blocking, never a modal that steals D-pad focus.
+        // Shown regardless of overlay state (unlike the chrome below, which only shows when an
+        // overlay is up) since a dead/reconnecting channel is exactly when Level 0's pure-video
+        // view most needs *some* feedback that something is happening - the badge the brief's
+        // "tuning indicator" ask (AGENTS.md backlog) and this share the same slot.
+        errorPresentation?.let { presentation ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(24.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Surface.copy(alpha = if (presentation.isTerminal) 0.95f else 0.7f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    presentation.message,
+                    style = RedSurfType.rowSecondary,
+                    color = if (presentation.isTerminal) TextPrimary else TextSecondary,
+                )
+            }
+        }
 
         // Scrim + breadcrumb/clock (decision 7's chrome, not its info-block content - that's
         // #2.3). Shown whenever any overlay is up; Level 0 (nothing showing) stays pure video,

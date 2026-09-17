@@ -3,7 +3,6 @@ package com.redsurf.tv.player
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,21 +25,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
-import androidx.media3.common.Player
-import androidx.media3.common.Tracks
-import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import com.redsurf.tv.network.IptvNetworkModule
-import com.redsurf.tv.player.tracks.TrackManager
-import com.redsurf.tv.player.tuning.AfrManager
-import kotlin.math.roundToInt
 
 fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -48,71 +36,71 @@ fun Context.findActivity(): Activity? = when (this) {
 }
 
 /**
- * The live stream's current characteristics, for the zap-banner/info-block badges
- * (PHASE_2.md #2.2, decision 7). A field is null - never a placeholder value - whenever ExoPlayer
- * hasn't reported it yet; decision 7 is explicit that an unknown badge is omitted, not shown
- * empty. Delivered via [PlayerHost]'s `onStreamInfo` callback rather than a caller-owned
- * `StateFlow` (the brief's literal suggestion) - every other composable in this codebase reports
- * upward the same way (`onFullscreenChanged`, `onChannelFocused`, …), and matching that idiom
- * beats introducing a second pattern for one composable.
+ * Creates and remembers one [PlayerController] for as long as the caller stays in composition
+ * (PHASE_1.md #1.5, Decisions #5 - unchanged lifetime from before the hoist, see
+ * PLAYER_ENGINEERING_BRIEF.md §3.3: reuse within a fullscreen session, recreate across sessions).
+ * Wires the Activity window's AFR mode application, the app's own pause/resume-on-background
+ * behavior, and release-on-dispose - the pieces of the old `PlayerHost` that are genuinely
+ * Compose/Activity concerns, not player-engine ones, so they stay here rather than moving into
+ * [PlayerController] itself.
  */
-data class StreamInfo(
-    val resolutionClass: String? = null, // "SD" | "HD" | "FHD" | "4K"
-    val rawResolution: String? = null, // "1920x1080" - user request, 2026-09-12: a badge showing
-    // the actual detected pixel resolution as an alternative to the SD/HD/FHD/4K class, toggled
-    // in Settings. Captured now since it's free alongside resolutionClass; the toggle itself
-    // waits on Settings having a real place to put it (AGENTS.md backlog).
-    val frameRate: Int? = null,
-    val audioChannels: String? = null, // "STEREO" | "5.1" | "N ch"
-    val audioCodec: String? = null, // "AAC" | "AC3" | "EAC3" | "MP3"
-    val videoCodec: String? = null, // "H.264" | "H.265" | "VP9" - not in decision 7's badge list,
-    // captured anyway since it's free here and decision 9's "Video info" picker wants it later.
-)
+@Composable
+fun rememberPlayerController(playlistUserAgent: String? = null): PlayerController {
+    val context = LocalContext.current
+    // Deliberately keyed on nothing but Unit (brief §3.3: one controller per fullscreen session,
+    // never recreated within it) - [playlistUserAgent] is usually resolved from an async Room
+    // lookup by the caller, which can land a frame or two after this composable's first
+    // composition; keying `remember` on it would tear down and rebuild the whole ExoPlayer the
+    // instant that lookup resolves. Whatever value is current on the *first* call is what this
+    // session's data source uses - matches the pre-hoist behavior's own risk profile (which had
+    // no per-playlist User-Agent support for the media path at all), just narrower now.
+    val controller = remember { PlayerController(context, playlistUserAgent) }
 
-private fun resolutionClassOf(height: Int): String? = when {
-    height <= 0 -> null
-    height < 720 -> "SD"
-    height < 1080 -> "HD"
-    height < 2160 -> "FHD"
-    else -> "4K"
-}
+    DisposableEffect(controller) {
+        val activity = context.findActivity()
+        controller.onAfrModeFound = { modeId ->
+            activity?.window?.attributes = activity?.window?.attributes?.apply {
+                preferredDisplayModeId = modeId
+            }
+        }
+        onDispose { controller.release() }
+    }
 
-private fun audioChannelsLabelOf(channelCount: Int): String? = when {
-    channelCount <= 0 -> null
-    channelCount == 2 -> "STEREO"
-    channelCount == 6 -> "5.1"
-    else -> "$channelCount ch"
-}
+    // Home button during playback left audio running until the app was force-closed (found
+    // live, 2026-09-12) - Compose composition doesn't track the Activity going to the
+    // background on its own, so nothing told ExoPlayer to stop. This app has no background-
+    // playback feature (no MediaSession, no foreground service) - pause is the correct,
+    // conservative behavior here, not a workaround. Resumes automatically on return, from
+    // wherever the buffer left off, since pause() (unlike release()) doesn't drop position.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, controller) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> controller.exoPlayer.pause()
+                Lifecycle.Event.ON_RESUME -> controller.exoPlayer.play()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
-private fun audioCodecOf(mimeType: String?): String? = when (mimeType) {
-    MimeTypes.AUDIO_AAC -> "AAC"
-    MimeTypes.AUDIO_AC3 -> "AC3"
-    MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "EAC3"
-    MimeTypes.AUDIO_MPEG, MimeTypes.AUDIO_MPEG_L1, MimeTypes.AUDIO_MPEG_L2 -> "MP3"
-    else -> null
-}
-
-private fun videoCodecOf(mimeType: String?): String? = when (mimeType) {
-    MimeTypes.VIDEO_H264 -> "H.264"
-    MimeTypes.VIDEO_H265 -> "H.265"
-    MimeTypes.VIDEO_VP9 -> "VP9"
-    else -> null
+    return controller
 }
 
 /**
- * Owns one ExoPlayer for as long as this composable stays in composition (PHASE_1.md #1.5,
- * Decisions #5). The predecessor, ExoPlayerView, released its player inside
- * DisposableEffect(streamUrl)'s onDispose - so it only ever worked for a single URL; the second
- * one it was ever handed hit a released player. This swaps media items on the same player
- * instead of recreating it.
+ * The thin `PlayerView` binding (PLAYER_ENGINEERING_BRIEF.md §9's hoist) - [controller] owns the
+ * `ExoPlayer` instance, track selection, AFR, error handling and the stall watchdog; this
+ * composable's only remaining jobs are rendering it, driving zaps via [streamUrl], and the
+ * black-screen-between-zaps overlay (a genuinely Compose/View concern - an opaque layer drawn on
+ * top of the video surface - not something that belongs inside the engine layer).
  *
  * [fullscreen] enables AFR (Decisions #6 - never mid-scroll, only when actually watching).
- * [onStreamInfo] fires whenever the current track's characteristics become known or change - see
- * [StreamInfo].
  */
 @OptIn(UnstableApi::class)
 @Composable
 fun PlayerHost(
+    controller: PlayerController,
     streamUrl: String?,
     fullscreen: Boolean,
     modifier: Modifier = Modifier,
@@ -120,44 +108,12 @@ fun PlayerHost(
     // backed) - false (default) is this composable's existing "no-black-screen zapping" trick,
     // unchanged; true skips it, matching the old-cable-box behavior the user asked for.
     blackScreenBetweenZaps: Boolean = false,
-    onStreamInfo: (StreamInfo) -> Unit = {},
 ) {
+    val exoPlayer = controller.exoPlayer
     val context = LocalContext.current
 
-    val exoPlayer = remember {
-        val dataSourceFactory = IptvNetworkModule.getDataSourceFactory()
-        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-        val trackManager = TrackManager(context)
-        // Fast-zap buffering (PHASE_2.md #2.2, decision 13, PRODUCT_VISION.md #4): start playback
-        // the moment there's 500ms of buffer rather than ExoPlayer's much larger default, while
-        // still building a real cushion (up to 15s) in the background to survive jitter. These
-        // are a starting point - #2.6 measures actual key-press-to-first-frame latency on the
-        // real list and they're only retuned from that measurement, not guessed again.
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(2_500, 15_000, 500, 1_500)
-            .build()
-        ExoPlayer.Builder(context)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .setTrackSelector(trackManager.trackSelector)
-            .setLoadControl(loadControl)
-            .build()
-            .apply { playWhenReady = true }
-    }
-
-    val afrManager = remember {
-        val manager = AfrManager(context, exoPlayer)
-        val activity = context.findActivity()
-        manager.onModeFound = { modeId ->
-            activity?.window?.attributes = activity?.window?.attributes?.apply {
-                preferredDisplayModeId = modeId
-            }
-        }
-        manager
-    }
-
-    LaunchedEffect(fullscreen) {
-        afrManager.isEnabled = fullscreen
-        if (!fullscreen) afrManager.restoreOriginalMode()
+    LaunchedEffect(fullscreen, controller) {
+        controller.setFullscreen(fullscreen)
     }
 
     // Real black-screen-between-zaps (found not-working live, 2026-09-15 - user compared
@@ -168,36 +124,26 @@ fun PlayerHost(
     // ExoPlayer's own reset/shutter timing gives no control over that window at all. This state,
     // not the shutter, is now the actual black screen: a real opaque Compose layer, independent
     // of the video surface, held from the moment a zap is initiated until this player confirms a
-    // frame of the *new* stream actually rendered ([Player.Listener.onRenderedFirstFrame] - the
-    // one signal that means "there is now something real to show," not just "reset happened").
+    // frame of the *new* stream actually rendered ([Player.Listener.onRenderedFirstFrame], via
+    // [PlayerController.streamInfo] changing - see below).
     var showBlackOverlay by remember { mutableStateOf(false) }
 
     val lastUrl = remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(streamUrl, blackScreenBetweenZaps) {
+    LaunchedEffect(streamUrl, blackScreenBetweenZaps, controller) {
         if (streamUrl != null && streamUrl != lastUrl.value) {
             // Only between zaps, not the very first tune-in this session (lastUrl.value == null)
             // - matches the setting's own name, and the screen is already blank before a first
             // frame ever arrives so there's nothing to hide.
             if (blackScreenBetweenZaps && lastUrl.value != null) showBlackOverlay = true
-            // clearMediaItems() is the actual "reset" event setKeepContentOnPlayerReset below
-            // cares about - setMediaItem()+prepare() alone doesn't trigger it, so without this
-            // call the toggle would have nothing to act on and every zap would keep holding the
-            // last frame regardless of the setting.
-            // Diagnostic only (BACKLOG_SWEEP.md #10/#11 acceptance criterion - "verifiable via
-            // PlayerHost state logs, not a screenshot", since a real black frame between two
-            // live streams is too fast to reliably catch in one screencap).
-            Log.d("PlayerHost", "media swap blackScreenBetweenZaps=$blackScreenBetweenZaps keepContentOnReset=${!blackScreenBetweenZaps}")
-            if (blackScreenBetweenZaps) exoPlayer.clearMediaItems()
-            exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
-            exoPlayer.prepare()
+            controller.play(streamUrl)
             lastUrl.value = streamUrl
         }
     }
 
     // Belt-and-suspenders timeout: if the new stream never renders a frame (dead channel, no
     // signal), don't leave the user staring at permanent black with no explanation - that would
-    // be a worse outcome than today's behavior, not a wash. Cleared normally by
-    // onRenderedFirstFrame below long before this fires on a healthy stream.
+    // be a worse outcome than today's behavior, not a wash. Cleared normally by the streamInfo
+    // effect below long before this fires on a healthy stream.
     LaunchedEffect(showBlackOverlay) {
         if (showBlackOverlay) {
             delay(5_000)
@@ -205,61 +151,11 @@ fun PlayerHost(
         }
     }
 
-    // Home button during playback left audio running until the app was force-closed (found
-    // live, 2026-09-12) - Compose composition doesn't track the Activity going to the
-    // background on its own, so nothing told ExoPlayer to stop. This app has no background-
-    // playback feature (no MediaSession, no foreground service) - pause is the correct,
-    // conservative behavior here, not a workaround. Resumes automatically on return, from
-    // wherever the buffer left off, since pause() (unlike release()) doesn't drop position.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE -> exoPlayer.pause()
-                Lifecycle.Event.ON_RESUME -> exoPlayer.play()
-                else -> {}
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            afrManager.restoreOriginalMode()
-            exoPlayer.release()
-        }
-    }
-
-    // Stream badges (PHASE_2.md #2.2, decision 7) - recomputed from whatever ExoPlayer currently
-    // reports whenever a track or the video size changes, which covers both the very first
-    // format becoming known and a mid-stream change (e.g. the provider switching resolution).
-    DisposableEffect(exoPlayer) {
-        fun report() {
-            val video = exoPlayer.videoFormat
-            val audio = exoPlayer.audioFormat
-            onStreamInfo(
-                StreamInfo(
-                    resolutionClass = video?.height?.let(::resolutionClassOf),
-                    rawResolution = video?.takeIf { it.width > 0 && it.height > 0 }?.let { "${it.width}x${it.height}" },
-                    frameRate = video?.frameRate?.takeIf { it > 0f }?.roundToInt(),
-                    audioChannels = audio?.channelCount?.let(::audioChannelsLabelOf),
-                    audioCodec = audioCodecOf(audio?.sampleMimeType),
-                    videoCodec = videoCodecOf(video?.sampleMimeType),
-                ),
-            )
-        }
-        val listener = object : Player.Listener {
-            override fun onTracksChanged(tracks: Tracks) = report()
-            override fun onVideoSizeChanged(videoSize: VideoSize) = report()
-            // The real "lift the black overlay" signal - see showBlackOverlay's doc comment
-            // above. Harmless when blackScreenBetweenZaps is off (overlay was never shown).
-            override fun onRenderedFirstFrame() {
-                showBlackOverlay = false
-            }
-        }
-        exoPlayer.addListener(listener)
-        onDispose { exoPlayer.removeListener(listener) }
+    // The real "lift the black overlay" signal - see [PlayerController.firstFrameRenderedTick]'s
+    // own doc comment for why this is a counter, not the streamInfo content itself.
+    val firstFrameTick by controller.firstFrameRenderedTick.collectAsState()
+    LaunchedEffect(firstFrameTick) {
+        showBlackOverlay = false
     }
 
     AndroidView(

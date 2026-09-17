@@ -13,6 +13,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import com.redsurf.tv.data.Channel
 import com.redsurf.tv.player.PlayerHost
+import com.redsurf.tv.player.rememberPlayerController
 
 /**
  * TiViMate Parity: Multi-View (watching 2 to 9 streams simultaneously).
@@ -53,9 +54,13 @@ fun MultiViewScreen(
                         ) {
                             // Each surface gets its own dedicated hardware player instance.
                             // This screen is unreferenced dead code (PHASE_1.md Non-goals -
-                            // multiview is a later phase); updated only to keep it compiling
-                            // after ExoPlayerView -> PlayerHost.
+                            // multiview is a later phase; PLAYER_ENGINEERING_BRIEF.md §3.2/§9
+                            // explicitly defers a real rewrite of this file to when multiview
+                            // becomes a real phase - a shared allocator across tiles, per-tile
+                            // budgets, device-derived tile caps, none of which belong here yet);
+                            // updated only to keep it compiling after the PlayerController hoist.
                             PlayerHost(
+                                controller = rememberPlayerController(),
                                 streamUrl = channel.streamUrl,
                                 fullscreen = false,
                                 modifier = Modifier.fillMaxSize()

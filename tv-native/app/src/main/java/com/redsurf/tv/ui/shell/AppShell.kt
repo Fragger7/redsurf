@@ -92,6 +92,15 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // LiveTvScreen consumes it back to false via onAutoPlayTriggerConsumed so it can never refire.
     var liveTvAutoPlayTrigger by remember { mutableStateOf(false) }
 
+    // Cold-launch resume focus fix (AGENTS.md backlog, 2026-09-16) - same one-shot shape as
+    // liveTvAutoPlayTrigger, for the same reason: only ever set true from the restore effect
+    // below, right alongside the seed it applies to, and consumed back to false by LiveTvScreen
+    // so it can't refire. Only meaningful when NOT auto-playing - if auto-play fires instead, the
+    // fullscreen entry it triggers claims focus on its own via the existing fullscreenFocus
+    // mechanism, and Back out of fullscreen already reactively focuses the channel row via the
+    // existing channelReturnFocus effect, so there's nothing this trigger needs to do in that case.
+    var liveTvClaimInitialFocusTrigger by remember { mutableStateOf(false) }
+
     // BACKLOG_SWEEP.md #10 - one instance for the whole shell, same lifetime as the ViewModel;
     // AppShell is the natural owner since both destinations that touch these prefs (Settings to
     // flip them, Live TV/PlayerScreen to read them) are composed from here.
@@ -119,6 +128,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         liveTvSelectedGroup = GroupKey(channel.playlistId, channel.groupName)
         liveTvFocusedChannel = channel
         if (autoPlayLastChannelOnLaunch) liveTvAutoPlayTrigger = true
+        else liveTvClaimInitialFocusTrigger = true
     }
 
     // The write side of the same feature - records whatever channel is actually playing
@@ -170,6 +180,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     onRecentChannelsChanged = { liveTvRecentChannels = it },
                     autoPlayTrigger = liveTvAutoPlayTrigger,
                     onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
+                    claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,
+                    onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
                 )
             destination == NavDestination.LiveTv ->
                 PlaceholderScreen("Live TV", "No active playlist")

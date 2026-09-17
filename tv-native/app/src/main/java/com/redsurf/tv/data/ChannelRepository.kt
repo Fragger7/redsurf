@@ -21,6 +21,11 @@ class ChannelRepository(
 ) {
     fun playlists(): Flow<List<PlaylistEntity>> = playlistDao.getAllPlaylists()
 
+    /** PLAYER_ENGINEERING_BRIEF.md §6/§9 - so the player's data source can use this playlist's
+     * own User-Agent for its actual stream requests, not just the global one its API requests
+     * already got. */
+    suspend fun getPlaylist(id: String): PlaylistEntity? = playlistDao.getPlaylistById(id)
+
     /** Across every loaded playlist (user request, 2026-09-12 - multiple playlists can coexist
      * and all show up under Live TV, grouped by playlist name; see [GroupCount]). */
     fun liveGroups(): Flow<List<GroupCount>> = channelDao.getLiveGroupCounts()

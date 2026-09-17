@@ -127,8 +127,23 @@ fun LiveTvScreen(
     // [onAutoPlayTriggerConsumed] so it can't refire later in the session.
     autoPlayTrigger: Boolean = false,
     onAutoPlayTriggerConsumed: () -> Unit = {},
+    // AGENTS.md backlog, 2026-09-16: the cold-launch resume restore (above) sets `selectedGroup`/
+    // `focusedChannel` as *data* and correctly pre-selects the right area, but nothing ever
+    // claimed real D-pad focus onto that channel's row - the two existing focus-claim mechanisms
+    // (ChannelsColumn's own `onFocusChanged` redirect, and this screen's own fullscreen-exit
+    // effect below) are both purely reactive, triggered by focus *arriving* from somewhere else
+    // or by *leaving* fullscreen - neither ever fires on a cold launch, where nothing has focus
+    // yet at all. An explicit one-shot trigger, same shape as [autoPlayTrigger] and for the same
+    // reason: inferring this from `focusedChannel` becoming non-null would also fire on every
+    // ordinary focus change during normal browsing, repeatedly stealing focus back mid-session.
+    claimInitialFocusTrigger: Boolean = false,
+    onClaimInitialFocusTriggerConsumed: () -> Unit = {},
 ) {
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
+    // PLAYER_ENGINEERING_BRIEF.md §6/§9 - resolved here, reactively, well before any fullscreen
+    // entry is possible (the user has to browse/focus/press OK first), not inside PlayerScreen
+    // itself - see PlayerScreen.kt's own doc comment for why the timing matters.
+    val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
     var isFullscreen by remember { mutableStateOf(false) }
     var channelsHasFocus by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -210,6 +225,40 @@ fun LiveTvScreen(
         } else if (focusedChannel != null) {
             delay(100)
             runCatching { channelReturnFocus.requestFocus() }
+        }
+    }
+
+    // Cold-launch resume: claim real focus (see [claimInitialFocusTrigger]'s own doc comment for
+    // why the two existing mechanisms above never do this on their own). Reuses
+    // [channelReturnFocus] - the same `FocusRequester` ChannelsColumn already attaches to
+    // whichever row matches `focusedChannelId` - rather than introducing a second one. Longer
+    // delay than the fullscreen-exit case above: that one only waits on this already-composed
+    // screen's own recomposition; this one is racing the group's paged channel list loading for
+    // the very first time and ChannelsColumn's own scroll-to-item effect bringing the target row
+    // into TvLazyColumn's composed window before a `FocusRequester` attached to it has any node to
+    // find. `runCatching` is still the real safety net if that hasn't happened yet - same as
+    // every other focus-claim in this screen, never a silent app-level assumption that it worked.
+    LaunchedEffect(claimInitialFocusTrigger) {
+        if (claimInitialFocusTrigger) {
+            if (focusedChannel != null) {
+                // Retries, not one fixed delay: the target row only becomes focus-requestable
+                // once the paged channel list has loaded far enough AND ChannelsColumn's own
+                // scroll-to-item effect has run AND TvLazyColumn has actually recomposed to place
+                // that row inside its composed window - a multi-step async chain with no single
+                // signal this composable can observe directly. Measured live on the real device/
+                // playlist (2026-09-17): Paging's initial load for a 123-channel group took
+                // ~3.4s end to end before the row existed at all - a single fixed delay (400ms
+                // was tried first) reliably failed with "FocusRequester is not initialized";
+                // 300ms x 20 (6s ceiling) comfortably covers it without leaving the user staring
+                // at nothing for long if it somehow never does.
+                var claimed = false
+                repeat(20) {
+                    if (claimed) return@repeat
+                    delay(300)
+                    claimed = runCatching { channelReturnFocus.requestFocus() }.isSuccess
+                }
+            }
+            onClaimInitialFocusTriggerConsumed()
         }
     }
 
@@ -329,6 +378,9 @@ fun LiveTvScreen(
                 recentChannels = recentChannels.filter { it.streamId != focusedChannel?.streamId },
                 blackScreenBetweenZaps = blackScreenBetweenZaps,
                 showRawResolution = showRawResolution,
+                playlistUserAgent = remember(focusedChannel?.playlistId, playlists) {
+                    playlists.firstOrNull { it.id == focusedChannel?.playlistId }?.userAgent
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
