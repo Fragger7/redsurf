@@ -110,6 +110,12 @@ fun ChannelListOverlay(
                     }
                 },
                 modifier = Modifier.fillMaxHeight().fillMaxWidth(0.45f),
+                // Root-caused live, 2026-09-17 (logcat: channelReturnFocus succeeded at 300ms,
+                // GroupsColumn's own claim fired 1.1s later off a fresh, uncached liveGroups()
+                // query and silently stole focus back) - this overlay places focus on the channel
+                // row itself, deliberately; GroupsColumn's own doc comment on this flag has the
+                // full story.
+                claimInitialFocus = false,
             )
 
             val currentGroup = queriedGroup

@@ -97,6 +97,15 @@ fun GroupsColumn(
     selectedGroup: GroupKey?,
     onGroupFocused: (GroupKey) -> Unit,
     modifier: Modifier = Modifier,
+    // false when a caller is placing focus elsewhere deliberately (ChannelListOverlay, decision
+    // 11's "focus lands on the current channel row") - root-caused live, 2026-09-17: this
+    // composable's own `groups` param often arrives from a *fresh* `liveGroups()` subscription
+    // with no warm cache (confirmed via logcat: ~1.1s to first emission on the user's real ~30K-
+    // channel DB), so its own initial-focus claim below - correct and wanted on the browse screen,
+    // where nothing else is competing for focus - fires *after* the caller's own claim already
+    // succeeded and silently steals it back. True (default) preserves this column's original,
+    // still-correct standalone behavior everywhere else (LiveTvScreen).
+    claimInitialFocus: Boolean = true,
 ) {
     val multiplePlaylists = remember(groups) { groups.map { it.playlistId }.distinct().size > 1 }
     var collapsedPlaylists by remember { mutableStateOf(setOf<String>()) }
@@ -141,6 +150,7 @@ fun GroupsColumn(
         val index = rows.indexOfFirst { it is GroupsRow.Item && it.group.key() == selectedGroup }
         if (index < 0) return@LaunchedEffect
         runCatching { listState.scrollToItem(index) }
+        if (!claimInitialFocus) return@LaunchedEffect
         repeat(5) { attempt ->
             if (initialFocusDone) return@repeat
             delay(100)
