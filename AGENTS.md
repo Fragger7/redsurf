@@ -678,6 +678,11 @@ before the report comes in, not after.
   Verified live: single OK press on cold launch, zero other input, opens fullscreen directly on
   the exact resumed channel.
 
+  **Same-day follow-on, user-found immediately after testing the fix above: `GroupsColumn` (the
+  categories column) had no equivalent scroll-to-selected mechanism at all** - the channel itself
+  focused correctly, but the category list just sat at the top instead of scrolling to reveal the
+  actual selected category. Same root cause, same fix shape, applied to the other column - see
+  `GroupsColumn.kt`'s own doc comment. Verified live, reproducibly, across repeated cold launches.
 ## The one rule that matters
 
 **Never claim something works because you wrote plausible code for it.**
