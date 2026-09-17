@@ -386,13 +386,40 @@ before the report comes in, not after.
     (e.g. a cool tone, not another red/warm variant) so it never gets confused with "this row is
     focused." Same "never claim something works without showing it's real" principle as grey
     Settings rows, just expressed as colour + a border cue instead of text.
-  - **Settings control for this, not just a fixed default** - a user may not want supplemental EPG
-    at all (accuracy concerns, a provider whose own listings are already complete, or simply
-    preferring "no data" over "possibly wrong data"). Needs an off switch - open question whether
-    that's one global toggle (Settings → EPG) or per-playlist (since coverage quality can differ
-    provider to provider) - lean per-playlist given `PlaylistEntity` already carries per-playlist
-    config (`epgOffsetHours`, `userAgent`), but confirm with the user when this is actually built
-    rather than assuming.
+  - **EPG Sources UI - DECIDED, 2026-09-17, full design locked (TiviMate's own pattern, adapted).**
+    Nothing built yet (no sync worker exists) - this is the design to build to once Phase 3 starts.
+    - **Per-playlist ("EPG Sources" section of the new per-playlist detail page - see the Playlist
+      management backlog entry above for that page itself):** two toggles. "Provider EPG," default
+      **on** - use this playlist's own Xtream/Stalker EPG endpoint. "Fallback with public sources,"
+      default **on** - when this playlist's provider has no listing for a channel, fill the gap
+      from whichever public sources are enabled globally (below); this row expands to list which
+      sources that currently means, so it's never a mystery toggle.
+    - **General fallback rule, restated precisely (user, 2026-09-17):** per channel, try provider
+      EPG first unless "Provider EPG" is off for that playlist; only when that channel has no
+      data, fall through to public/other enabled sources. Per-channel, not per-playlist - same
+      playlist can have some channels covered by its provider and gaps filled from public sources
+      for others.
+    - **Global (Settings → EPG page):** a "Supplement all Playlists with Global EPG Sources"
+      toggle - **a bulk-setter, not a second independent gate.** Turning it on sets every
+      playlist's own "Fallback with public sources" toggle on (and off sets them all off); each
+      playlist's own toggle stays the single source of truth afterward, so a user can still flip
+      one playlist back off individually. Deliberately not an AND-gate between two switches that
+      could silently disagree with each other.
+    - **"Manage Sources" (global, under the EPG Settings page):** the actual enable/disable
+      catalog - the built-in public sources (EPGSHARE01, open-epg.com, etc. - see the shortlist
+      above) each get their own on/off row here, not duplicated per-playlist. Two more ways to add
+      a row to this same list, both confirmed in scope: **a custom XMLTV URL** the user adds by
+      hand, and **promoting any playlist's own provider EPG endpoint** into this shared pool so
+      other playlists can use it too (exactly TiviMate's pattern the user described) - neither
+      needs new architecture, they're just two more ways to populate the one list.
+    - **Multi-source tie-break, when two+ enabled public sources both have data for the same
+      channel/timeslot: a manual, user-reorderable priority list in "Manage Sources," not an
+      automatic ranking.** Default order = the order sources were enabled in; top of the list wins
+      ties; drag-to-reorder if the user ever notices one source is actually better for their own
+      channels. Deliberately not a hardcoded quality ranking of named services - coverage quality
+      varies by region/channel, not uniformly across a whole service, and there's no real evidence
+      either researched source is generally better (see the shortlist above) - asserting one would
+      be authority this project doesn't actually have.
 - **Optional black-screen between channel zaps** - **no longer backlog: built and machine-swept,
   BACKLOG_SWEEP.md #11, 2026-09-15.** Live toggle, Settings → Playback; `AppPreferences`-backed,
   `PlayerHost` reads it and inverts `setKeepContentOnPlayerReset`. `SPRINT_LOG.md` has the sweep
