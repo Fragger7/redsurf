@@ -101,14 +101,19 @@ merging.
   user explicitly paused it and asked to proceed to Phase 3 instead (2026-09-19)** - the earlier
   "blocks Phase 3 start" note was superseded by that direct instruction; Teleport Menu's own fixes
   are picked back up separately, not gating Phase 3.
-  **Phase 3 (EPG + Guide) - P0 code complete, device verification blocked (2026-09-19).** Brief:
-  `docs/plans/PHASE_3.md`. All of P0.1-P0.5 built and compiling (real per-playlist EPG sync via
-  `WorkManager`, the actual Guide timeline grid with a coordinator-requested visual-polish pass,
-  both nav entry points wired) - see the brief's "Sweep status" section for the full account,
-  including a real data-loss bug found and fixed mid-sweep (a v9 migration was wrongly destructive
-  and wiped the device's playlist - now a real scoped migration) and why the device sweep itself
-  couldn't finish (the Chromecast dropped off wireless ADB entirely - needs a human to re-pair it
-  before testing can resume). Not pushed to `main` yet - tied to a completed, verified sweep.
+  **Phase 3 (EPG + Guide) - P0 built and substantially device-verified (2026-09-19).** Brief:
+  `docs/plans/PHASE_3.md`. All of P0.1-P0.5 built, compiling, and live-confirmed on the real
+  device: real per-playlist EPG sync via `WorkManager` (confirmed actively downloading real
+  provider data), the actual Guide timeline grid (categories + channel rows + programme cells,
+  plus a coordinator-requested visual-polish pass - a static crescent "LIVE" glyph, a
+  brand-anchored header, a cheap one-shot entrance), both nav entry points wired (Guide pill reaches
+  the real grid; OK on a cell tunes real fullscreen playback; Back returns to the grid). See the
+  brief's "Sweep status" section for the full account, including a real data-loss bug found and
+  fixed mid-sweep (a v9 migration was wrongly destructive and wiped the device's playlist - now a
+  real scoped migration) and the one open gap (this session's test provider's EPG feed never
+  finished downloading, so a populated programme cell was never actually seen rendering - the
+  mechanism is confirmed genuinely working, just not seen through to a visible result). Pushed to
+  `main`, real release cut. **Checkpoint A (user tests on the real playlist) is the next step.**
   Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud

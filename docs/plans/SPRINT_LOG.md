@@ -2,6 +2,44 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-19 (evening, resumed) — Phase 3 P0: device reconnected, sweep substantially passed
+
+Follow-up to the entry directly below (same sprint, same session) - the device came back on its
+own after the disconnect, so this isn't a new sprint, it's the same one finishing. Full account:
+`docs/plans/PHASE_3.md`'s "Sweep status" section.
+
+**Reconnected without re-pairing** - a later `adb connect` retry just worked, no fresh pairing
+code needed after all (the earlier entry's assumption that one would be required was wrong).
+**Second snag on reconnect, unrelated to ADB:** the device had gone to sleep
+(`dumpsys power` → `mWakefulness=Asleep`), which swallows D-pad key injection silently (no error,
+no effect) - several minutes lost reading that as a broken nav-search loop before checking power
+state directly. `KEYCODE_WAKEUP` before each interaction fixed it. Worth remembering for next
+time: identical `uiautomator` focus bounds across a sequence of key presses means check
+`mWakefulness` before assuming the input itself is broken.
+
+**Playlist re-seeded** (lost to the migration bug below) - real provider data imported cleanly,
+no repeat of the bug (the fix holds).
+
+**Sweep results, live on the real device:** Guide pill reaches the real grid (distinct from Live
+TV's plain list, confirmed via `uiautomator` text - "No programme data" vs. "No schedule
+information"/"Channel Preview"). OK on a grid cell tuned real fullscreen playback (`BUFFERING` →
+`READY` in logcat, right channel confirmed via the group-snapshot log line). Back from fullscreen
+returned to the grid specifically, not the plain list. UP/DOWN moved focus row to row correctly
+(default Compose 2D focus traversal, no custom key handling needed, as designed). EPG sync
+confirmed genuinely active (not silently failing) - `EpgSyncWorker` logged `epgSync -> start`, and
+`dumpsys netstats` showed this playlist's real XMLTV feed actively downloading (128MB → 134MB →
+151MB across checks spaced a few seconds apart).
+
+**One gap, not chased further:** this provider's XMLTV feed didn't finish downloading+parsing
+within the session (150MB+ and still growing at last check), so a real *populated* programme cell
+was never actually seen rendering - the empty-slot path was exercised live, the populated-cell
+path is implemented and reasoned-correct but not yet eyes-verified. Worth a specific look at
+Checkpoint A once sync has had more wall-clock time.
+
+**Pushed to `main`** - a real CI release cut off this work (see `gh release list` for the tag). The
+one open item above is a feel/vision checkpoint item, not a known bug - reasonable to ship and let
+Checkpoint A cover it live.
+
 ## 2026-09-19 (evening) — Phase 3 P0 (EPG + Guide): code complete, sweep blocked mid-run
 
 Full account: `docs/plans/PHASE_3.md`'s "Sweep status" section - summarized here per the sprint

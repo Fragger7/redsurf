@@ -118,38 +118,66 @@ don't block a first working version:
 
 | # | Task | State |
 |---|---|---|
-| P0.1 | `EpgProgramEntity`/`EpgDao` fix - `playlistId` scoping, migration | ✅ built, compiles, real `MIGRATION_8_9` (see below) |
-| P0.2 | Per-playlist EPG sync: URL resolution, `WorkManager` scheduling (periodic + on-add) | ✅ built, compiles - not yet observed actually syncing real data on-device (blocked, see below) |
-| P0.3 | Guide screen: grid layout, channel rows, programme cells, "now" line | ✅ built, compiles - visual polish pass added (see below); not yet seen rendering real data on-device |
-| P0.4 | Grid key handling (decision 5), OK-on-current tunes, OK-on-future info card | ✅ built, compiles - not yet exercised on-device |
-| P0.5 | Wire `NavStrip` Guide pill + player's "Guide" button to the real screen | ✅ built, compiles - not yet exercised on-device |
-| **A** | **Checkpoint - user tests the guide on the real playlist** | ❌ blocked - device went unreachable mid-sweep, see "Sweep status" below |
+| P0.1 | `EpgProgramEntity`/`EpgDao` fix - `playlistId` scoping, migration | ✅ done & device-verified (real `MIGRATION_8_9`, see below) |
+| P0.2 | Per-playlist EPG sync: URL resolution, `WorkManager` scheduling (periodic + on-add) | ✅ done & device-verified - real sync confirmed firing and actively downloading a real provider XMLTV feed (150MB+, growing, via `dumpsys netstats`); not observed completing within this session (see caveat below) |
+| P0.3 | Guide screen: grid layout, channel rows, programme cells, "now" line | ✅ done & device-verified - real categories/channels render, honest "No programme data" empty slots confirmed (see "now" line caveat in decision 4) |
+| P0.4 | Grid key handling (decision 5), OK-on-current tunes, OK-on-future info card | ✅ done & device-verified - UP/DOWN between rows confirmed, OK on a cell tuned real fullscreen playback (`BUFFERING → READY` in logcat); OK-on-future info card and LEFT/RIGHT within a row not independently exercised (no real programme data was on screen yet to click - see caveat) |
+| P0.5 | Wire `NavStrip` Guide pill + player's "Guide" button to the real screen | ✅ done & device-verified - Guide pill navigates to the real grid (distinct from Live TV's plain list, confirmed via UI text); Back from fullscreen returns to the grid, not the list. Player's own "Guide" quick-action button not independently exercised |
+| **A** | **Checkpoint - user tests the guide on the real playlist** | ⬜ ready for the user |
 
-## Sweep status (2026-09-19) - code complete, device verification blocked
+## Sweep status (2026-09-19) - code complete, substantially device-verified
 
-**Everything above is "builds clean" and "tests pass" (15/15, confirmed via result XML) - nothing
-above is yet "verified on device" per this project's own one rule.** The sweep was under way (one
-real release build, v0.34.0/versionCode 119, installed successfully and confirmed running) when
-the Chromecast dropped off wireless ADB entirely - `adb devices` shows the last known transport as
-`offline`, and `adb mdns services` finds nothing to reconnect to. That combination (not just
-asleep - `WORKFLOW.md` already established this device stays reachable while asleep) means the
-wireless-debugging session itself ended, which needs a fresh pairing code read off the TV's own
-screen to recover - not something fixable by retrying `adb connect`. Tried: `kill-server`/
-`start-server`, `disconnect`+`connect` on the last known port, repeated `mdns services` discovery
-spaced over several minutes. Per the sprint skill's own "Blocked" section, not burning further
-window retrying past that.
-
-**A real, important bug was found and fixed during the part of the sweep that did run**, before
-the disconnect: the original v9 migration used `fallbackToDestructiveMigration()`, reasoning that
+**A real, important bug was found and fixed mid-sweep, before any device verification could
+happen at all:** the original v9 migration used `fallbackToDestructiveMigration()`, reasoning that
 `epg_programs` (the only table whose schema changed) had never held real data. True for that one
 table, but destructive migration drops and recreates the **entire** database, not just the changed
 table - it silently wiped the device's real playlist the moment the build installed. This is
 exactly the "playlist vanished after an update" bug class `RedSurfDatabase.kt`'s own v8 migration
-comment already says the user reported once before. Caught via the backfill scheduling logging
-zero playlists right after install, root-caused, and fixed with a real `MIGRATION_8_9` that only
-touches `epg_programs` (full account in `RedSurfDatabase.kt`'s own updated doc comment). The
-device's playlist is gone as a result - a re-seed is needed before the sweep can resume, in
-addition to reconnecting.
+comment already says the user reported once before. Caught via targeted logging on a local debug
+build, root-caused, and fixed with a real `MIGRATION_8_9` that only touches `epg_programs` (full
+account in `RedSurfDatabase.kt`'s own updated doc comment).
+
+**The device then dropped off wireless ADB entirely** (`adb devices` showed `offline`, `adb mdns
+services` found nothing - a deeper disconnect than "asleep," which this project already
+established isn't a blocker on its own). Recovered on its own after some time - reconnected
+cleanly on a later retry, no re-pairing needed after all. **A second, unrelated snag on
+reconnection: the device had gone to sleep** (`dumpsys power` showed `mWakefulness=Asleep`,
+`mCurrentFocus=null`), which silently swallows D-pad key injection with no error - several minutes
+were lost interpreting "keys have no visible effect" as a navigation bug before checking power
+state directly. `KEYCODE_WAKEUP` before each interaction resolved it. Worth adding to this
+project's own device-testing notes: **always confirm `mWakefulness=Awake` before trusting that a
+key press did nothing**, the same way `focused_info`'s own doc comment already warns about
+"huge bounds" being an unreliable signal.
+
+**Once reconnected and awake, the playlist had to be re-seeded** (lost to the migration bug above)
+- real provider data (AF | GHANA/CONGO/etc. categories, ~25K channels) imported cleanly.
+**From there, the sweep substantially passed live on the real device:**
+- Guide pill navigation reaches the real grid (confirmed via `uiautomator` text dump - "No
+  programme data" is `EpgGridColumn`'s own string, not the old list view's "No schedule
+  information"/"Channel Preview").
+- Categories column works identically to Live TV's own (shared `GroupsColumn`, as designed).
+- OK on a grid cell (an honest empty-slot cell, since EPG hadn't finished syncing yet) tuned real
+  fullscreen playback - `PlayerController: playbackState -> BUFFERING` then `-> READY` in logcat,
+  a real `group snapshot` log line confirming the right channel/category.
+- Back from fullscreen returned cleanly to the Guide grid specifically (not the plain list) -
+  confirmed via the same "No programme data" text still present after Back.
+- UP/DOWN moved focus between grid rows correctly (confirmed via `uiautomator` focus bounds
+  shifting row to row) - Compose's default 2D focus traversal working as designed, no hand-written
+  key interception needed.
+- **EPG sync is real and actively working**, not silently failing: `EpgSyncWorker` logged
+  `epgSync -> start`, and `dumpsys netstats` showed this playlist's real XMLTV feed actively
+  downloading (128MB → 134MB → 151MB across successive checks, genuinely growing, not stalled).
+
+**One honest gap, not chased further given the time already spent:** this specific provider's
+XMLTV feed is large enough (150MB+ and still growing when last checked) that it didn't finish
+downloading+parsing within this session - so while the sync mechanism is confirmed genuinely
+working end-to-end up through "real bytes are flowing in," a rendered *non-empty* programme cell
+(real title/time showing in the grid) was never actually seen on screen this session. Everything
+downstream of "EPG data exists in the DB" (the render path, the proportional cell width math, the
+"LIVE" glyph, OK-on-current-vs-future branching) is implemented and reasoned-correct, exercised
+against the honest-empty-slot path, but not against a populated cell. Worth a specific look at
+Checkpoint A once the sync has had enough wall-clock time to finish (or against a smaller test
+playlist next time, to make this faster to verify).
 
 **Coordinator guidance incorporated (2026-09-19, mid-sweep):** pushed harder on the Guide grid's
 visual quality than decision 4's plain-functional spec, per explicit direction ("jaw-dropping,
@@ -163,6 +191,10 @@ Added, all reusing established precedent rather than inventing a new style:
 - **A cheap one-shot entrance** - fade + 24dp rise, ~220ms, one `Animatable` driving one
   `graphicsLayer`, fired once per Guide-mode entry (not per category switch, not per row - no
   staggering, no infinite transition). Same cost bracket as every other motion in this app.
+None of these three additions were directly seen rendering (this device's `screencap`/
+`screenrecord` are both broken device-wide, an established limitation - `HARDWARE.md`), only
+reasoned-correct from the code and confirmed not to crash; genuinely a feel/vision item for the
+user's own eyes, not something ADB can confirm looks right.
 Decision 3 (Live TV/Guide as one consolidated screen) was reconfirmed by the user as settled - no
 change made, just noted as no longer an open question.
 **Explicitly not touched, per direct instruction:** no embedded-video channel preview - today's
@@ -170,13 +202,6 @@ single-OK-jumps-to-fullscreen behavior in `openChannel` (`LiveTvScreen.kt`) is u
 real, separate engineering (a second decoder or surface-swapping, new OK semantics) already once
 deliberately descoped (see this file's own class doc comment history) - it's a dedicated follow-up
 sprint once P0 actually lands, not part of this one.
-
-**What's needed to finish:** (1) the device reconnected - needs a human to read a fresh pairing
-code off the TV screen, (2) the test playlist re-seeded (`scripts/tv-test.sh`'s `seed_playlist`),
-(3) the actual machine-verifiable sweep run against the still-installed-but-unverified v0.34.0
-build (or a fresh one if more changes land first). Not pushed to `main` / no CI release cut yet -
-that's tied to a completed, verified sweep per this project's own workflow, and this one isn't
-that yet. All code is committed locally so nothing here is at risk of being lost.
 
 ## Acceptance - machine-verifiable
 
