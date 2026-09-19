@@ -89,11 +89,10 @@ merging.
 
 - **Roadmap order** (user, 2026-09-13): Settings shell (`SETTINGS.md`) → **Branding** → Player
   sprint (Phase 2 #2.3 Actions row, #2.4, #2.5) → EPG + Guide (Phase 3) → **Cloud Sync** →
-  VOD/Series. Player sprint built and released as v0.32.0 on 2026-09-17 (`SPRINT_LOG.md`) -
-  release-verified, awaiting the device pass (Checkpoint B, `PHASE_2.md`) before Phase 3 starts;
-  #2.6's zap-latency measurement is still open, explicitly deferred to the end of this list per
-  user instruction (2026-09-17) rather than blocking the rest of the sprint. Two deliberate
-  reorderings:
+  VOD/Series. Player sprint device-verified and Checkpoint B closed, 2026-09-17
+  (`PHASE_2.md`'s "2.3-2.5 device-verification round", `SPRINT_LOG.md`) - only #2.6 (the
+  acceptance sweep: migration from v0.20.x, zap latency measurement, memory with overlays) remains
+  before Phase 3 (EPG + Guide) starts. Two deliberate reorderings:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud
     state - so every module built after it inherits that, and every module built before it
@@ -624,11 +623,11 @@ before the report comes in, not after.
      (confirmed: no `Content-Length`/progress code in it) - the user sees nothing between "Install
      now" and the Package Manager sheet. Add branded download progress; leave install to the
      system installer.
-  3. **Channel tune and zap.** From OK on a channel (or UP/DOWN in the player) to first frame,
-     nothing indicates work is happening - `PlayerHost` renders no buffering state (confirmed: no
-     buffering/playbackState UI in it). Decision 13's "no black screen" zap deliberately keeps the
-     old frame up, which is right, but it needs a small, unobtrusive "tuning" indicator so a slow
-     stream reads as loading rather than dead. Same component as 1 and 2, smallest form.
+  3. **Channel tune and zap - no longer backlog: built and device-verified, 2026-09-17.** Ended
+     up bigger than "small, unobtrusive" - the user's later, more specific ask (comparing directly
+     against TiviMate) was a full centered branded `WaveSpinner` while buffering and a full
+     branded error panel on terminal failure, not a subtle badge; see `PHASE_2.md`'s "2.3-2.5
+     device-verification round" for the built/verified account. Items 1 and 2 above are still open.
 - **Zap UP/DOWN order - RESOLVED (pending user re-test), 2026-09-14 mini-sprint.** Was: "total
   chaos" on v0.27.0, up meaning down, no predictable increment. Root cause was exactly hypothesis
   1 below, confirmed by instrumented, on-device measurement - not a guess. Two prior rounds: the
@@ -663,16 +662,17 @@ before the report comes in, not after.
   instrumentation makes that a fast diagnosis, not a new investigation from zero.
 
 - **Channel-switch loading state: branded spinner + timeout + real error feedback, TiviMate-style**
-  (user, 2026-09-16) - **the timeout/error-feedback half built and device-verified 2026-09-17**
-  (`PLAYER_ENGINEERING_BRIEF.md` P0, `SPRINT_LOG.md`): `PlaybackErrorController` classifies and
-  retries with bounded backoff, the 15s stall watchdog catches everything else, and
-  `PlayerErrorMapper` surfaces short friendly copy (never a raw code) in a non-blocking OSD badge
-  (`PlayerScreen.kt`). **Still open: the badge is a plain text pill today, not the branded
-  `WaveSpinner`** (`ui/theme/RedSurfSpinner.kt`, already built for the app's cold-start loading
-  screen) the user specifically asked for - swap it in, same OSD slot the "tuning" indicator ask
-  (below, Progress feedback #3) already calls for. Also still open: the error copy and stall
-  watchdog haven't actually been observed firing against a real failure yet (no dead/blocked
-  channel was hit live) - worth a deliberate negative-path test before calling this fully closed.
+  (user, 2026-09-16) - **no longer backlog: fully built and device-verified, 2026-09-17**
+  (`PLAYER_ENGINEERING_BRIEF.md` P0 + `PHASE_2.md`'s "2.3-2.5 device-verification round"). The
+  plain-text top-left badge is gone; the branded `WaveSpinner` (`ui/theme/RedSurfSpinner.kt`) now
+  shows front-and-center whenever ExoPlayer is genuinely buffering (`PlayerController.isBuffering`,
+  driven directly by `playbackState`), and terminal errors get a full centered branded panel
+  (warning icon, plain-English message, error code when available) - verified live via a
+  screenshot caught mid-buffer. The stall watchdog's negative path was also observed firing for
+  real this session - not just theoretically: a genuine stuck-at-READY stall was live-caught and
+  auto-recovered, logcat-confirmed (see the PHASE_2.md entry for the full account, including a
+  follow-on bug this same live test found and fixed - the spinner not clearing after a real
+  recovery, since it only listened for a video-frame callback that didn't always fire).
 - **Test playlist confirmed working again, 2026-09-17** - superseded the 2026-09-16 "may be dead"
   note below: "Test Magnum"/"Magnum NFL Adams" (Xtream, `eempiree.com`) streamed and zapped
   cleanly this session, real audio-focus requests logged, no errors. Whatever the user loaded in

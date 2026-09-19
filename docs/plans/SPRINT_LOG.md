@@ -2,6 +2,36 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-17 (evening) — Player sprint device-verification round, Checkpoint B closed
+
+**Builds this pass: several local `assembleRelease` builds (real keystore, real next version
+number each time - v0.32.4 through v0.32.5-equivalent), installed via `adb install -r`, `git
+push`ed after each batch for the real CI record.** Workflow reverted mid-session, user-directed:
+the morning's "wait for CI every time" rule cost more wall-clock/tokens than it saved; see
+`.claude/commands/sprint.md`'s same-day correction.
+
+Full account of what was found and fixed - each confirmed against real logcat, `uiautomator`
+dumps, or a live screenshot, not inferred - lives in `PHASE_2.md`'s new "2.3-2.5 device-
+verification round" section: LEFT overlay's focus-target bug (root-caused: `GroupsColumn`'s own
+late-firing initial-focus claim was stealing focus back from the channel), the context-menu
+repeat-key bug (two rounds to actually close), the fast-scroll bug (user corrected the diagnosis -
+real fix was the list's own scroll tracking, not the focus ring), a full branded buffering/error
+UX rebuild (centered `WaveSpinner`, full branded terminal-error panel), and - the headline result -
+a **live-caught, live-confirmed recovery** of the "channel freezes forever" report: a real stall
+(READY state, position stuck at 0) was caught by last session's position watchdog and auto-
+recovered, logcat-confirmed. A follow-on bug this same test surfaced (the spinner not clearing
+after a real recovery) was found and fixed in the same session.
+
+**Checkpoint B closed.** Not confirmed, explicitly, and left open: multi-playlist performance
+(untested by the user's own account) and audio/subtitle track switching (the user's live channels
+are single-track, untestable without a VOD source).
+
+**Also this session:** Provider Intelligence (a feature idea raised mid-testing, not part of the
+Player sprint) researched across three separate angles and rejected on all three - live API
+fields, live third-party site query, and public community knowledge all dead ends for brand
+identification; see `AGENTS.md`'s Backlog for the full record. Only #2.6 (migration/zap-latency/
+memory acceptance sweep) remains before Phase 3 (EPG + Guide) starts.
+
 ## 2026-09-17 — Player sprint close: #2.3/#2.4/#2.5 (`docs/plans/PHASE_2.md`)
 
 **Builds this pass: 1 release cut (v0.32.0), 2 local compile-checks** (no install - this session

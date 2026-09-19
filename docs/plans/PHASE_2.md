@@ -29,11 +29,11 @@ the app too, not just the player - note it when touching other screens' error pa
 | 2.2 | Zap: neighbour queries, UP/DOWN, zap banner, stream badges, no-black-screen | ✅ done & device-verified (multiple live-bug rounds through 2026-09-12/14, incl. real tvg-chno numbering and the 2026-09-14 UP/DOWN direction flip) |
 | **A** | **Checkpoint — user tests entry, zap, OK overlay skeleton, Back** | ✅ closed 2026-09-17 - machine-verifiable criteria (1/2/3/5) all confirmed clean this session (fullscreen entry/exit, UP/DOWN zap both directions, OK-overlay elevator Tiles↔Actions, Back peeling one layer per press through every state, LEFT/RIGHT placeholders don't crash), no failures since the 2026-09-12 fixes. Criterion 4 (timeout *feel*) is genuinely the user's own call, not machine-verifiable - folded into this session's feel/vision list instead of blocking closure on it |
 | **P0** | **Player engineering foundation** (`PLAYER_ENGINEERING_BRIEF.md` §10) - `PlayerController` hoist, renderer/extractor config, error handling + UX mapping, buffer byte ceiling, track defaults, stall watchdog, shared OkHttp client | ✅ done & device-verified 2026-09-17 (`SPRINT_LOG.md`), plus the cold-launch focus bug and zap connection-ordering fix folded in - error-copy/stall-watchdog negative paths not yet hit live, see log |
-| 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | ✅ done & release-verified (v0.32.0) - the five real actions, Audio/Subtitles/Info pickers, `PlayerOsd.kt` deleted; not yet device-verified, see note below |
-| 2.4 | LEFT channel-list overlay, RIGHT last-channel zap, long-press context menu | ✅ done & release-verified (v0.32.0); not yet device-verified, see note below |
-| 2.5 | Recents + last-channel: table, real migration 6→7→8, History tile, resume setting | ✅ done & release-verified (v0.32.0) - resume-on-launch setting was already built in an earlier session under a different mechanism, not re-touched here; not yet device-verified, see note below |
-| **B** | **Checkpoint — user tests the full matrix on the real list** | ⬜ awaiting device test of v0.32.0 |
-| 2.6 | Acceptance sweep: migration from v0.20.x, zap latency, memory with overlays | ⬜ not started |
+| 2.3 | OK overlay: info block, tile row, elevator to action row, pickers | ✅ done & device-verified 2026-09-17 - the five real actions, Audio/Subtitles/Info pickers, `PlayerOsd.kt` deleted. Video info rebuilt full-screen/branded (see decision 9 update below), aspect tile confirmed working live (shows real ratio, e.g. "Fit (16:9)") |
+| 2.4 | LEFT channel-list overlay, RIGHT last-channel zap, long-press context menu | ✅ done & device-verified 2026-09-17, after fixing two real bugs the user found live (see "2.3-2.5 device-verification round" below): LEFT's focus-target bug (root-caused via live logcat) and the context-menu repeat-key bug |
+| 2.5 | Recents + last-channel: table, real migration 6→7→8, History tile, resume setting | ✅ done & device-verified 2026-09-17 - resume-on-launch setting was already built in an earlier session under a different mechanism, not re-touched here |
+| **B** | **Checkpoint — user tests the full matrix on the real list** | ✅ closed 2026-09-17 - see "2.3-2.5 device-verification round" below. Every machine-verifiable item confirmed live via ADB (real logcat, uiautomator dumps, screenshots); items 2-4 of the user's own checkpoint list (audio/subtitle switching, general responsiveness feel, multi-playlist performance) are explicitly *not* independently confirmed - audio/subtitle switching couldn't be tested (single-track live channels), multi-playlist is untested by the user's own account ("not tested, can't log as an official bug") |
+| 2.6 | Acceptance sweep: migration from v0.20.x, zap latency, memory with overlays | ⬜ not started - the next real work in this phase, see below |
 
 **Goal:** watching live TV feels like TiviMate. Today the fullscreen player is a bare video surface
 that swallows every key except Back; to change channel you leave it. After this phase, everything
@@ -518,6 +518,75 @@ all three, newest first; the tile row shows them too.
 (CI green: regression suite, signature check). **Not verified:** on the actual TV - device
 unreachable this session, see the note above. This is the first slice in this sprint genuinely
 worth a full device pass before Checkpoint B is called closed.
+
+## 2.3-2.5 device-verification round (2026-09-17, Sonnet, two feedback passes + live ADB)
+
+The user tested v0.32.0-v0.32.3 on the real device and reported real bugs across two rounds;
+this session's own live ADB access (device came back reachable) let most of them be root-caused
+against real logcat/uiautomator evidence instead of guessed at. Workflow note: this round
+reverted to local release-signed builds (`assembleRelease -PversionName=vX.Y.Z -PversionCode=N`,
+matching CI's next number, real keystore) installed directly via `adb install -r` for fast
+iteration, still `git push`ed after each batch for the real CI record - see
+`.claude/commands/sprint.md`'s 2026-09-17 correction for why (a same-day reversal of that
+morning's own "wait for CI" rule, which cost more than it saved).
+
+**Real bugs found and fixed, each confirmed on-device:**
+- **LEFT overlay landed on the category, never the channel actually playing.** Root-caused via
+  live logcat with diagnostic logging added this session: the channel-focus claim was succeeding
+  correctly at ~300ms, but `GroupsColumn`'s own initial-focus effect fired ~1.1s *later* (its
+  `liveGroups()` query has no warm cache in this overlay, confirmed via timestamps) and silently
+  reclaimed focus back onto the category row. Fixed with a `claimInitialFocus` opt-out on
+  `GroupsColumn`, used only by `ChannelListOverlay`. Verified live: a real channel row (not a
+  category) is focused after LEFT, confirmed via `uiautomator dump`.
+- **Long-press context menu closed itself / toggled favourite repeatedly on a held press.** Two
+  rounds: first fix only swallowed the long-press's terminating key-up; the real gap was every
+  repeat key-down tick generated the whole time OK stays physically held, each independently
+  reaching the menu's focused row. Fixed to swallow the entire gesture. Verified live via a
+  synthesized long-press (`adb shell input keyevent --longpress`) - menu opens and stays open.
+- **Fast-scrolling Categories/Channels lost visual position mid-scroll** - user correction of an
+  earlier (wrong) diagnosis: not the focus ring animation, the list's own scroll position not
+  tracking focus during rapid key-repeat (Compose's default animated bring-into-view losing the
+  race against repeat events). Fixed with an explicit, non-animated `scrollToItem` tied directly
+  to the focused index in both columns. An earlier band-aid (a flat non-animated highlight tint)
+  aimed at the wrong diagnosis was reverted once the real fix landed - pure animated focus ring
+  restored.
+- **Video/buffering feedback rebuilt entirely, TiviMate-style** (user request, comparing directly
+  against TiviMate): the branded `WaveSpinner` now shows front-and-center whenever ExoPlayer is
+  genuinely buffering (`PlayerController.isBuffering`, driven directly by `playbackState`, not
+  gated behind the 15s stall watchdog) - replaces the old subtle top-left text badge entirely.
+  Terminal errors get a full centered branded panel (warning icon in `Accent`, plain-English
+  message, HTTP status/error code when available via `PlayerErrorMapper`'s new `errorCode` field).
+  Verified live via screenshot caught mid-buffer (`Read` on an `adb exec-out screencap` capture).
+- **The "channel freezes forever, no feedback" report - live-confirmed real, and live-confirmed
+  fixed.** While testing, a channel genuinely reproduced the exact failure: `playbackState`
+  reported `READY` while `position` stayed at 0 and `bufferedPct` at 0 - healthy-looking state,
+  actually stuck. `PlayerController`'s position watchdog (built the prior session, unconfirmed
+  until now) caught it on its very first check and force-reconnected; logcat confirms position
+  advancing cleanly afterward (5000ms of real elapsed time per 5s poll tick). This is a genuine
+  live confirmation the fix works, not a plausible theory. A second, smaller bug was found in the
+  same live trace: the "Reconnecting…" spinner didn't clear even after the stream recovered,
+  because it only cleared on `onRenderedFirstFrame`, which didn't fire even though audio/position
+  had genuinely recovered - fixed by clearing from the same signal that detects recovery (position
+  resuming) instead of depending solely on that callback.
+- **Video info screen rebuilt full-screen/semi-transparent** (VLC-style, per user request, was a
+  small bottom-right box) - always shows both resolution class and literal pixel size (no longer
+  gated by the Appearance toggle - this is the deep-dive screen), added video/audio bitrate when
+  the stream declares it, network speed (`DefaultBandwidthMeter`), buffer state, and the
+  provider's live connection count via Xtream's own `player_api.php` `user_info` (no scraping, no
+  new credential storage - every Xtream-imported channel's `streamId` already contains
+  server/user/pass, parsed back out rather than persisted a second time).
+- **Aspect tile confirmed working by the user** (an earlier "nothing changes" report turned out to
+  be a normal-aspect test channel, not broken wiring) - now shows the detected content ratio
+  alongside the mode, e.g. "Fit (16:9)", not just a bare mode name.
+- **Favourites toggle had no way to verify it worked** - added a brief on-screen confirmation
+  ("Added to favourites"/"Removed from favourites").
+
+**Not confirmed, explicitly:** multi-playlist performance (user's own words: "not tested, can't
+log as an official bug"); audio/subtitle track switching (untestable on the user's live channels,
+which are single-track - would need a VOD source to really test).
+
+**Provider Intelligence** (a feature idea raised during this same testing round, not part of the
+Player sprint) - fully researched across three angles and rejected; see `AGENTS.md`'s Backlog.
 
 ## Checkpoint B — user, on the device, real list
 
