@@ -110,6 +110,10 @@ fun SettingsScreen(
     // AGENTS.md backlog, 2026-09-15 - same AppPreferences pattern as the two above.
     autoPlayLastChannelOnLaunch: Boolean,
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
+    // TELEPORT_MENU.md decision 1, 2026-09-19 - same AppPreferences pattern, the first live row
+    // Remote control has ever had.
+    teleportMenuEnabled: Boolean,
+    onToggleTeleportMenuEnabled: () -> Unit,
 ) {
     val railFocus = remember { FocusRequester() }
     val paneFirstRowFocus = remember { FocusRequester() }
@@ -153,11 +157,15 @@ fun SettingsScreen(
     // one live toggle row alongside its grey ones.
     // General joined this list too (AGENTS.md backlog, 2026-09-15) - "Resume last channel on
     // launch" is now its one live toggle row.
+    // Remote control joined this list (TELEPORT_MENU.md decision 1, 2026-09-19) - "Teleport Menu"
+    // is now its one live toggle row, same layering as every other category's live-rows-then-
+    // grey-rows shape.
     val hasLiveContent = selectedCategory == SettingsCategory.Playlists ||
         selectedCategory == SettingsCategory.About ||
         selectedCategory == SettingsCategory.Playback ||
         selectedCategory == SettingsCategory.Appearance ||
-        selectedCategory == SettingsCategory.General
+        selectedCategory == SettingsCategory.General ||
+        selectedCategory == SettingsCategory.RemoteControl
 
     Row(
         modifier = Modifier
@@ -211,6 +219,8 @@ fun SettingsScreen(
             onToggleShowRawResolution = onToggleShowRawResolution,
             autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
             onToggleAutoPlayLastChannelOnLaunch = onToggleAutoPlayLastChannelOnLaunch,
+            teleportMenuEnabled = teleportMenuEnabled,
+            onToggleTeleportMenuEnabled = onToggleTeleportMenuEnabled,
             firstRowFocus = paneFirstRowFocus,
             onFocusChanged = { focusInPane = it },
             modifier = Modifier.weight(1.8f),
@@ -367,6 +377,8 @@ private fun SettingsPane(
     onToggleShowRawResolution: () -> Unit,
     autoPlayLastChannelOnLaunch: Boolean,
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
+    teleportMenuEnabled: Boolean,
+    onToggleTeleportMenuEnabled: () -> Unit,
     firstRowFocus: FocusRequester,
     onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -418,6 +430,11 @@ private fun SettingsPane(
                 SettingsCategory.Appearance -> appearanceContent(
                     showRawResolution = showRawResolution,
                     onToggle = onToggleShowRawResolution,
+                    firstRowFocus = firstRowFocus,
+                )
+                SettingsCategory.RemoteControl -> remoteControlContent(
+                    teleportMenuEnabled = teleportMenuEnabled,
+                    onToggle = onToggleTeleportMenuEnabled,
                     firstRowFocus = firstRowFocus,
                 )
                 else -> items(SETTINGS_GREY_ROWS[category].orEmpty()) { row -> GreyRowContent(row) }
@@ -695,6 +712,25 @@ private fun TvLazyListScope.appearanceContent(
         )
     }
     items(SETTINGS_GREY_ROWS[SettingsCategory.Appearance].orEmpty()) { GreyRowContent(it) }
+}
+
+/** Remote control (`docs/plans/TELEPORT_MENU.md` decision 1, 2026-09-19): "Teleport Menu" is the
+ * first live row this category has ever had - default off, see `AppShell.kt`'s long-press-Back
+ * handler for what flipping it changes. Existing grey rows (Long-press OK, Digit keys) unchanged. */
+private fun TvLazyListScope.remoteControlContent(
+    teleportMenuEnabled: Boolean,
+    onToggle: () -> Unit,
+    firstRowFocus: FocusRequester,
+) {
+    item {
+        LiveRow(
+            label = "Teleport Menu",
+            value = if (teleportMenuEnabled) "On" else "Off",
+            onClick = onToggle,
+            modifier = Modifier.focusRequester(firstRowFocus),
+        )
+    }
+    items(SETTINGS_GREY_ROWS[SettingsCategory.RemoteControl].orEmpty()) { GreyRowContent(it) }
 }
 
 /** A real, focusable `Label ······ Value` row (`SETTINGS.md`'s layout) - value right-aligned in

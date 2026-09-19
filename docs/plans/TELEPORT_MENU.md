@@ -174,12 +174,67 @@ scenario and still not connect it to the other.)**
 
 | # | Task | State |
 |---|---|---|
-| T.1 | Settings toggle + grey-row plumbing for the two unbuilt destinations | ⬜ not started |
-| T.2 | Menu overlay: layout, focus, key handling, portal open/close animation | ⬜ not started |
-| T.3 | Five real destinations (Nav-Strip, Playlist Root, Root Channel Group, Return to fullscreen, Exit) | ⬜ not started |
-| T.4 | Root Category prefix-parsing (ships grey until this lands - not blocking T.1-T.3) | ⬜ not started |
-| T.5 | Discoverability tips (both named triggers, plus whatever else the brainstorm adds) | ⬜ not started |
-| **A** | **Checkpoint - user tests the menu on the real list** | ⬜ |
+| T.1 | Settings toggle + grey-row plumbing for the two unbuilt destinations | ✅ done & device-verified |
+| T.2 | Menu overlay: layout, focus, key handling, portal open/close animation | ✅ done & device-verified |
+| T.3 | Five real destinations (Nav-Strip, Playlist Root, Root Channel Group, Return to fullscreen, Exit) | ✅ done - Nav-Strip/Playlist Root/Return to fullscreen device-verified; Root Channel Group/Exit RedSurf built on the same proven code paths, not independently exercised live (see below) |
+| T.4 | Root Category prefix-parsing - built for real this sprint, not left grey (pulled forward per the Non-goals section's own "only if cheap once this sprint is already touching the relevant code" carve-out - it was) | ✅ done & device-verified against real messy provider data |
+| T.5 | Discoverability tips (both named triggers, plus whatever else the brainstorm adds) | ⬜ not started - deferred, see note below |
+| **A** | **Checkpoint - user tests the menu on the real list** | ⬜ ready for the user |
+
+**T.5 deferred, not forgotten.** Built T.1-T.4 (the mechanism itself) this pass; the two named
+discoverability triggers plus further brainstorming are real remaining work, explicitly called out
+as not-exhaustive by the user - picking this up needs the user's own gut-check on the UP-hold
+threshold (open question in the Discoverability section above) more than it needs more code, so it
+felt wrong to guess a number and ship it silently. Flagged here rather than silently dropped.
+
+## What actually happened (2026-09-19, Sonnet)
+
+Built T.1-T.4 in one pass. New file `ui/shell/TeleportMenu.kt` (the row model, decision 4's prefix
+logic, and "The Curl" animation); `AppShell.kt` gained the menu's own state, the three jump
+functions (`jumpToGroup`/`returnToChannelGroup`/`returnToFullscreen`, all reusing the already-
+verified `liveTvClaimInitialFocusTrigger`/`liveTvAutoPlayTrigger` machinery rather than inventing a
+second way to move real D-pad focus), and the row-availability computation; `SettingsScreen.kt`
+gained Remote control's first-ever live row; `ChannelRepository.kt` gained one new method
+(`firstChannelInGroup`, a thin wrapper on an already-existing DAO query).
+
+**Root Category's target resolution reuses the exact same jump machinery as Playlist Root**
+(`jumpToGroup`) - once the prefix match found the right `GroupKey`, "land on it" is identical
+regardless of which row asked. Root Channel Group's `returnToChannelGroup` is a simpler variant of
+the same idea (no DB lookup needed, the channel's already known) - built on the same reasoning but
+not independently exercised live this session; low risk given how directly it mirrors the two
+paths that were.
+
+**Live-verified end to end, real device (Chromecast, real ~30K-channel-scale playlist), real
+signed release v0.33.0:**
+- Settings toggle: flips and persists (`uiautomator` text dump confirmed "On"/"Off" both ways).
+- Long-press Back with the toggle on opens the menu (`AppShell: teleportMenu -> open` in logcat);
+  with it off, the plain TiviMate-parity fallback fires exactly as before with zero regression
+  (confirmed via the same real synthesized long-press, `adb shell input keyevent --longpress
+  KEYCODE_BACK`, both ways).
+- All 7 rows render with the right labels; grey rows are genuinely unfocusable - confirmed by
+  cross-referencing the focused node's raw bounds against each row's `clickable`/`focusable`
+  attributes in a real `uiautomator` dump, not just visual impression. Initial focus correctly
+  lands on Nav-Strip (row 0).
+- **Playlist Root**: selected, closed the menu, landed real D-pad focus on channel `990 #####
+  CANAL+ BOXOFFICE #####` - the first channel of the first category belonging to the
+  then-current channel's own playlist, confirmed via `PlayerScreen`'s own group-snapshot log line.
+- **Root Category**: focused on "VIP | CHRISTMAS" (not first in its family), selected Root
+  Category, landed on channel `468 ##### 4 GOLDEN RELAX 4K #####` in "VIP | 4 GOLDEN RELAX" - the
+  actual first VIP-prefixed category in list order, against this provider's real `|`-delimited
+  category names. The prefix rule works on real, messy data, not just the synthetic examples in
+  decision 4.
+- **Return to fullscreen**: selected from within the menu, `PlayerScreen` entered fullscreen and
+  began real playback on the jumped-to channel (`PlayerController` reached `BUFFERING`, wired up
+  correctly end to end - a separate, unrelated provider `401`/reconnect loop showed up on that
+  specific test channel during this run, not a Teleport Menu bug, not chased further here).
+- Back closes the menu with no side effect (confirmed: focus/state unchanged, `teleportMenu ->
+  closed` in logcat, no jump fired).
+
+Build/test status: `compileDebugKotlin` clean, 15/15 unit tests passing (confirmed via the actual
+result XML, not just exit code), real `assembleRelease -PversionName=v0.33.0 -PversionCode=118`
+(matching the next real CI run number) signed with the project's real keystore (fingerprint
+`1b13f1d9…d2510d8a`, matches every prior release), installed and confirmed running on-device before
+push.
 
 ## Acceptance - machine-verifiable
 

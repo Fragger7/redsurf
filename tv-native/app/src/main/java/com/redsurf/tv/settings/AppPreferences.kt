@@ -54,6 +54,18 @@ class AppPreferences(context: Context) {
         _autoPlayLastChannelOnLaunch.value = enabled
     }
 
+    // Teleport Menu (docs/plans/TELEPORT_MENU.md decision 1, built 2026-09-19) - default OFF:
+    // long-press Back already has real, working, TiviMate-parity behavior (see AppShell.kt); this
+    // opts a user into the fuller quick-jump menu instead of changing established behavior out
+    // from under them without asking.
+    private val _teleportMenuEnabled = MutableStateFlow(prefs.getBoolean(KEY_TELEPORT_MENU_ENABLED, false))
+    val teleportMenuEnabled: StateFlow<Boolean> = _teleportMenuEnabled.asStateFlow()
+
+    fun setTeleportMenuEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_TELEPORT_MENU_ENABLED, enabled).apply()
+        _teleportMenuEnabled.value = enabled
+    }
+
     /** PLAYER_ENGINEERING_BRIEF.md §2.8 - the language of whatever audio track the user last
      * explicitly picked from the player's Audio picker, across every channel/playlist (a
      * `TrackSelectionOverride` is scoped to one track group's identity and doesn't survive a
@@ -93,5 +105,6 @@ class AppPreferences(context: Context) {
         private const val KEY_LAST_PLAYLIST_ID = "last_watched_playlist_id"
         private const val KEY_LAST_STREAM_ID = "last_watched_stream_id"
         private const val KEY_PREFERRED_AUDIO_LANGUAGE = "preferred_audio_language"
+        private const val KEY_TELEPORT_MENU_ENABLED = "teleport_menu_enabled"
     }
 }

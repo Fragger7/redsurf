@@ -1,6 +1,9 @@
 package com.redsurf.tv.ui.shell
 
+import android.app.Activity
+import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -27,6 +31,7 @@ import com.redsurf.tv.settings.AppPreferences
 import com.redsurf.tv.ui.livetv.GroupKey
 import com.redsurf.tv.ui.livetv.LiveTvScreen
 import com.redsurf.tv.ui.theme.tvSafeArea
+import kotlinx.coroutines.launch
 
 /**
  * What AppState.Loaded renders (replaces the deleted ui/TiViMateLayout.kt mock view -
@@ -70,6 +75,8 @@ import com.redsurf.tv.ui.theme.tvSafeArea
  * an internal `remember` would reset to the first category on every re-entry instead of keeping
  * whichever one the user was on (state/focus discipline, `AGENTS.md`).
  */
+private const val TAG = "AppShell"
+
 @Composable
 fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     var destination by remember { mutableStateOf(NavDestination.LiveTv) }
@@ -118,6 +125,17 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val navPillFocusRequesters = remember { NavDestination.entries.associateWith { FocusRequester() } }
     var backHeldLong by remember { mutableStateOf(false) }
 
+    // Teleport Menu (docs/plans/TELEPORT_MENU.md, 2026-09-19) - the power-user layer on top of
+    // the plain long-press-Back jump above: instead of one guessed destination, a short list of
+    // likely ones. `groups`/`scope` are needed here (not just in LiveTvScreen) so a jump can be
+    // resolved and applied without LiveTvScreen needing to be the one driving it.
+    var teleportMenuOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(teleportMenuOpen) {
+        Log.d(TAG, "teleportMenu -> ${if (teleportMenuOpen) "open" else "closed"}")
+    }
+    val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
+
     // BACKLOG_SWEEP.md #10 - one instance for the whole shell, same lifetime as the ViewModel;
     // AppShell is the natural owner since both destinations that touch these prefs (Settings to
     // flip them, Live TV/PlayerScreen to read them) are composed from here.
@@ -126,6 +144,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val blackScreenBetweenZaps by appPreferences.blackScreenBetweenZaps.collectAsState()
     val showRawResolution by appPreferences.showRawResolution.collectAsState()
     val autoPlayLastChannelOnLaunch by appPreferences.autoPlayLastChannelOnLaunch.collectAsState()
+    val teleportMenuEnabled by appPreferences.teleportMenuEnabled.collectAsState()
 
     // Resume-last-channel-on-launch restore (AGENTS.md backlog, user decision 2026-09-15,
     // corrected same day from an earlier pass that had this gated behind the toggle - it's
@@ -159,16 +178,76 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         }
     }
 
+    // Teleport Menu's three group-level jumps (TELEPORT_MENU.md decisions 3/4) - all reuse the
+    // already-verified cold-launch-resume machinery above (liveTvClaimInitialFocusTrigger) rather
+    // than inventing a second way to move real D-pad focus onto a category/channel row.
+    fun jumpToGroup(target: GroupKey) {
+        scope.launch {
+            val channel = viewModel.repository.firstChannelInGroup(target.playlistId, target.groupName)
+            destination = NavDestination.LiveTv
+            liveTvSelectedGroup = target
+            liveTvFocusedChannel = channel
+            if (channel != null) liveTvClaimInitialFocusTrigger = true
+        }
+    }
+
+    fun returnToChannelGroup(channel: ChannelEntity) {
+        destination = NavDestination.LiveTv
+        liveTvSelectedGroup = GroupKey(channel.playlistId, channel.groupName)
+        liveTvFocusedChannel = channel
+        liveTvClaimInitialFocusTrigger = true
+    }
+
+    fun returnToFullscreen() {
+        destination = NavDestination.LiveTv
+        liveTvAutoPlayTrigger = true
+    }
+
+    val playlistRootTarget = resolvePlaylistRootTarget(groups, liveTvFocusedChannel)
+    val rootCategoryTarget = resolveRootCategoryTarget(groups, liveTvSelectedGroup)
+    val teleportCurrentChannel = liveTvFocusedChannel
+    val teleportRows = buildList {
+        add(TeleportRow.Live("Nav-Strip") { runCatching { navPillFocusRequesters[destination]?.requestFocus() } })
+        add(
+            if (playlistRootTarget != null) TeleportRow.Live("Playlist Root") { jumpToGroup(playlistRootTarget) }
+            else TeleportRow.Grey("Playlist Root"),
+        )
+        add(TeleportRow.Grey("Playlist Favorites")) // no favorites view exists yet - permanent until it does
+        add(
+            if (rootCategoryTarget != null) TeleportRow.Live("Root Category") { jumpToGroup(rootCategoryTarget) }
+            else TeleportRow.Grey("Root Category"),
+        )
+        add(
+            if (teleportCurrentChannel != null) {
+                TeleportRow.Live("Root Channel Group") { returnToChannelGroup(teleportCurrentChannel) }
+            } else {
+                TeleportRow.Grey("Root Channel Group")
+            },
+        )
+        add(
+            if (teleportCurrentChannel != null) TeleportRow.Live("Return to fullscreen") { returnToFullscreen() }
+            else TeleportRow.Grey("Return to fullscreen"),
+        )
+        add(TeleportRow.Live("Exit RedSurf") { (prefsContext as? Activity)?.finish() })
+    }
+
     // BACKLOG_SWEEP.md #8: excluded while Live TV's own Channels column holds focus, mirroring
     // the fullscreen exclusion right below it - LiveTvScreen owns its own BackHandler for that
     // one Back press (Channels -> Categories), the same mutual-exclusivity-via-`enabled` pattern
-    // this class doc already describes for fullscreen, just a second instance of it.
+    // this class doc already describes for fullscreen, just a second instance of it. Also
+    // excluded while the Teleport Menu is open (decision 7: Back closes the menu with no other
+    // side effect) - its own BackHandler right below takes over then.
     BackHandler(
         enabled = !liveTvFullscreen &&
+            !teleportMenuOpen &&
             destination != NavDestination.Home &&
             !(destination == NavDestination.LiveTv && liveTvChannelsFocused),
     ) {
         destination = NavDestination.Home
+    }
+
+    BackHandler(enabled = teleportMenuOpen) {
+        teleportMenuOpen = false
     }
 
     val rootModifier = (if (liveTvFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxSize().tvSafeArea())
@@ -192,15 +271,23 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             if (isDown && event.nativeKeyEvent.repeatCount == 0) backHeldLong = false
             if (isDown && event.nativeKeyEvent.isLongPress && !backHeldLong) {
                 backHeldLong = true
-                // TiviMate parity (user request, 2026-09-18): on Live TV, with a channel already
-                // focused/previewed and not already fullscreen, jump straight into it - reusing
-                // the exact same trigger cold-launch auto-play already uses, since "set
-                // previewUrl, record it, go fullscreen" is exactly the same action regardless of
-                // what asked for it. Everywhere else (including Live TV with nothing focused, or
-                // already fullscreen), jump real D-pad focus to the pill for wherever the user
-                // actually is - the generic "fast way back to the nav-strip" the deep-scroll
-                // case (Settings, a long channel list, anywhere) needs.
-                if (destination == NavDestination.LiveTv && !liveTvFullscreen && liveTvFocusedChannel != null) {
+                if (teleportMenuEnabled) {
+                    // TELEPORT_MENU.md decision 2: with the setting on, long-press Back opens the
+                    // menu instead, in every context this gesture already reaches (fullscreen is
+                    // already excluded above, same as the plain fallback below) - including Live
+                    // TV, where the plain fallback's TiviMate-parity fullscreen-jump becomes one
+                    // of the menu's own rows ("Return to fullscreen") instead of the automatic
+                    // action, since the whole point is offering the choice instead of guessing one.
+                    teleportMenuOpen = true
+                } else if (destination == NavDestination.LiveTv && !liveTvFullscreen && liveTvFocusedChannel != null) {
+                    // TiviMate parity (user request, 2026-09-18): on Live TV, with a channel already
+                    // focused/previewed and not already fullscreen, jump straight into it - reusing
+                    // the exact same trigger cold-launch auto-play already uses, since "set
+                    // previewUrl, record it, go fullscreen" is exactly the same action regardless of
+                    // what asked for it. Everywhere else (including Live TV with nothing focused, or
+                    // already fullscreen), jump real D-pad focus to the pill for wherever the user
+                    // actually is - the generic "fast way back to the nav-strip" the deep-scroll
+                    // case (Settings, a long channel list, anywhere) needs.
                     liveTvAutoPlayTrigger = true
                 } else {
                     runCatching { navPillFocusRequesters[destination]?.requestFocus() }
@@ -217,62 +304,77 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             false
         }
 
-    Column(modifier = rootModifier) {
-        if (!liveTvFullscreen) {
-            NavStrip(current = destination, onSelect = { destination = it }, focusRequesters = navPillFocusRequesters)
-            Spacer(modifier = Modifier.height(20.dp))
+    // Box, not a bare Column, so the Teleport Menu overlay can render on top of everything below
+    // regardless of `destination` - `rootModifier` (the safe area + long-press-Back interception)
+    // moves here with it; the Column inside is unchanged otherwise.
+    Box(modifier = rootModifier) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (!liveTvFullscreen) {
+                NavStrip(current = destination, onSelect = { destination = it }, focusRequesters = navPillFocusRequesters)
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+
+            // One call site, always reached when destination == LiveTv, regardless of
+            // liveTvFullscreen - see the class doc above for why that matters.
+            when {
+                destination == NavDestination.LiveTv && activePlaylistId != null ->
+                    LiveTvScreen(
+                        viewModel = viewModel,
+                        onFullscreenChanged = { liveTvFullscreen = it },
+                        onChannelsFocusChanged = { liveTvChannelsFocused = it },
+                        blackScreenBetweenZaps = blackScreenBetweenZaps,
+                        showRawResolution = showRawResolution,
+                        selectedGroup = liveTvSelectedGroup,
+                        onSelectedGroupChanged = { liveTvSelectedGroup = it },
+                        focusedChannel = liveTvFocusedChannel,
+                        onFocusedChannelChanged = { liveTvFocusedChannel = it },
+                        autoPlayTrigger = liveTvAutoPlayTrigger,
+                        onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
+                        claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,
+                        onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
+                    )
+                destination == NavDestination.LiveTv ->
+                    PlaceholderScreen("Live TV", "No active playlist")
+                destination == NavDestination.Settings -> {
+                    val updateStatus by viewModel.updateStatus.collectAsState()
+                    val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
+                    val context = LocalContext.current
+                    SettingsScreen(
+                        selectedCategory = selectedSettingsCategory,
+                        onCategorySelected = { selectedSettingsCategory = it },
+                        updateStatus = updateStatus,
+                        playlists = playlists,
+                        onCheckForUpdates = { viewModel.checkForUpdates(force = true) },
+                        onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
+                        onAddPlaylist = { viewModel.beginAddPlaylist(context) },
+                        onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
+                        blackScreenBetweenZaps = blackScreenBetweenZaps,
+                        onToggleBlackScreenBetweenZaps = {
+                            appPreferences.setBlackScreenBetweenZaps(!blackScreenBetweenZaps)
+                        },
+                        showRawResolution = showRawResolution,
+                        onToggleShowRawResolution = {
+                            appPreferences.setShowRawResolution(!showRawResolution)
+                        },
+                        autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
+                        onToggleAutoPlayLastChannelOnLaunch = {
+                            appPreferences.setAutoPlayLastChannelOnLaunch(!autoPlayLastChannelOnLaunch)
+                        },
+                        teleportMenuEnabled = teleportMenuEnabled,
+                        onToggleTeleportMenuEnabled = {
+                            appPreferences.setTeleportMenuEnabled(!teleportMenuEnabled)
+                        },
+                    )
+                }
+                else ->
+                    PlaceholderScreen(destination.label, "Coming in a later phase")
+            }
         }
 
-        // One call site, always reached when destination == LiveTv, regardless of
-        // liveTvFullscreen - see the class doc above for why that matters.
-        when {
-            destination == NavDestination.LiveTv && activePlaylistId != null ->
-                LiveTvScreen(
-                    viewModel = viewModel,
-                    onFullscreenChanged = { liveTvFullscreen = it },
-                    onChannelsFocusChanged = { liveTvChannelsFocused = it },
-                    blackScreenBetweenZaps = blackScreenBetweenZaps,
-                    showRawResolution = showRawResolution,
-                    selectedGroup = liveTvSelectedGroup,
-                    onSelectedGroupChanged = { liveTvSelectedGroup = it },
-                    focusedChannel = liveTvFocusedChannel,
-                    onFocusedChannelChanged = { liveTvFocusedChannel = it },
-                    autoPlayTrigger = liveTvAutoPlayTrigger,
-                    onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
-                    claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,
-                    onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
-                )
-            destination == NavDestination.LiveTv ->
-                PlaceholderScreen("Live TV", "No active playlist")
-            destination == NavDestination.Settings -> {
-                val updateStatus by viewModel.updateStatus.collectAsState()
-                val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
-                val context = LocalContext.current
-                SettingsScreen(
-                    selectedCategory = selectedSettingsCategory,
-                    onCategorySelected = { selectedSettingsCategory = it },
-                    updateStatus = updateStatus,
-                    playlists = playlists,
-                    onCheckForUpdates = { viewModel.checkForUpdates(force = true) },
-                    onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
-                    onAddPlaylist = { viewModel.beginAddPlaylist(context) },
-                    onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
-                    blackScreenBetweenZaps = blackScreenBetweenZaps,
-                    onToggleBlackScreenBetweenZaps = {
-                        appPreferences.setBlackScreenBetweenZaps(!blackScreenBetweenZaps)
-                    },
-                    showRawResolution = showRawResolution,
-                    onToggleShowRawResolution = {
-                        appPreferences.setShowRawResolution(!showRawResolution)
-                    },
-                    autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
-                    onToggleAutoPlayLastChannelOnLaunch = {
-                        appPreferences.setAutoPlayLastChannelOnLaunch(!autoPlayLastChannelOnLaunch)
-                    },
-                )
-            }
-            else ->
-                PlaceholderScreen(destination.label, "Coming in a later phase")
-        }
+        TeleportMenu(
+            visible = teleportMenuOpen,
+            rows = teleportRows,
+            onDismiss = { teleportMenuOpen = false },
+        )
     }
 }

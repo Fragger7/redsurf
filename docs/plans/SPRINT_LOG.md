@@ -2,6 +2,43 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-19 — Teleport Menu built (T.1-T.4), device-verified, v0.33.0
+
+Full brief and account: `docs/plans/TELEPORT_MENU.md`. Built T.1-T.4 of the brief in one pass -
+Settings toggle (`Remote control`'s first-ever live row, default off), the menu overlay itself
+(new file `ui/shell/TeleportMenu.kt`), all five real destinations plus the two grey ones, and
+Root Category's prefix-parsing logic built for real rather than left grey (pulled forward since
+this sprint was already touching the exact code it needed - the brief's own carve-out for that).
+Visual treatment ("The Curl" - the reveal mask is the mark's own crescent, closing shut into a
+disc then stretching into the panel, its leading edge riding `WaveSpinner`'s own arc) came from an
+Opus design consultation earlier the same day - full spec in the brief's decision 5.
+
+**Live-verified on the real Chromecast, real ~30K-channel playlist, both toggle states:**
+- Settings toggle flips and persists both ways (`uiautomator` text dump).
+- Toggle on: long-press Back opens the menu (`AppShell: teleportMenu -> open`, logcat). Toggle
+  off: the plain TiviMate-parity fallback fires exactly as before, zero regression (same real
+  synthesized long-press, `adb shell input keyevent --longpress KEYCODE_BACK`, both states).
+- All 7 rows render correctly; grey rows are genuinely unfocusable - confirmed by cross-checking
+  the focused node's raw bounds against `clickable`/`focusable` attributes in a real `uiautomator`
+  dump. Initial focus correctly claims row 0 (Nav-Strip).
+- Playlist Root: landed on the correct first channel of the right playlist's first category
+  (confirmed via `PlayerScreen`'s own group-snapshot log line).
+- Root Category: focused on "VIP | CHRISTMAS" (not first in its family), jumped correctly to
+  "VIP | 4 GOLDEN RELAX" - the real first VIP-prefixed category in list order, against this
+  provider's actual `|`-delimited names, not a synthetic example.
+- Return to fullscreen: entered fullscreen and began real playback on the jumped-to channel.
+- Back closes the menu with zero side effect (confirmed via logcat + unchanged focus/state).
+
+**Not independently exercised live:** Root Channel Group and Exit RedSurf (both built on the same
+proven code paths as the rows above - reasoned correct, low risk, just not separately clicked
+through this session). T.5 (discoverability tips) deferred - the mechanism is done, the tips
+themselves need the user's own gut-check on a tuning number more than more code.
+
+Build/test: `compileDebugKotlin` clean, 15/15 unit tests (confirmed via the actual result XML).
+Real signed release **v0.33.0** (versionCode 118, matching the next real CI run number), keystore
+fingerprint `1b13f1d9…d2510d8a` (matches every prior release), installed and confirmed running on
+the real device before push.
+
 ## 2026-09-18/19 — TBN freeze root-caused and fixed; long-press Back; #2.6 closed; Phase 2 done
 
 **The real fix, this time.** Root-caused the user's recurring "channel freezes forever" report,

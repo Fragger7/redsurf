@@ -91,9 +91,10 @@ merging.
   sprint (Phase 2 #2.3 Actions row, #2.4, #2.5) → EPG + Guide (Phase 3) → **Cloud Sync** →
   VOD/Series. **Phase 2 is fully closed, 2026-09-19** (`PHASE_2.md`'s "2.6 - closed" entry - #2.6's
   zap-latency and memory items both explicitly waived by user decision, everything else confirmed).
-  **Inserted, user decision 2026-09-19: "Teleport Menu" (see Backlog) as its own small standalone
-  sprint, right here, before Phase 3 starts** - reasoning on record in its backlog entry (Live TV's
-  overlay/key-routing code is still fresh from Phase 2, cheaper to build on now than reload later).
+  **"Teleport Menu" - no longer inserted-but-pending: built and device-verified, 2026-09-19**
+  (see Backlog entry and `docs/plans/TELEPORT_MENU.md`'s "What actually happened" for the full
+  account). T.1-T.4 done; T.5 (discoverability tips) deferred, not forgotten - needs the user's own
+  gut-check on a tuning number more than more code. Phase 3 (EPG + Guide) is next.
   Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud
@@ -338,44 +339,30 @@ before the report comes in, not after.
 
 ## Backlog - explicitly logged, not forgotten
 
-- **"Teleport Menu" - a RedSurf-original quick-navigation overlay, toggle-able in Settings** - user
-  idea, 2026-09-18 ("shower thought," explicitly floated for feedback, not yet committed to
-  building). Long-press Back (once the "Teleport Menu" setting is on - default behavior stays the
-  TiviMate-parity fullscreen-jump/nav-strip-jump already built, see the long-press-Back entry
-  below) opens an overlay - working title "Teleport to..." - with a mastermind-style quick-jump
-  list: Nav-Strip, Playlist Root, Playlist Favorites, Root Category (the common prefix across
-  related categories, e.g. every "US -" group), Root Channel Group (the category the currently-
-  playing channel belongs to), Return to fullscreen, Exit RedSurf. Also wants a distinctive launch
-  animation ("a portal opening," on-brand) rather than a plain overlay fade.
-  **Assessed - corrected, 2026-09-19: these are not blockers, apply the grey-row pattern.**
-  First pass wrongly framed the two data-dependent entries as prerequisites blocking the whole
-  feature - user correction: this project already has the exact right pattern for this
-  (`SETTINGS.md`'s grey, unfocusable rows for planned-but-unbuilt items) and Teleport Menu should
-  use it the same way, not wait on every entry being real before any of it ships.
-  - *Playlist Favorites* - grey out until a real favorites view exists to jump to (today a channel
-    can be marked favorite via decision 12's context menu, but nothing displays/filters by it yet).
-  - *Root Category* needs new logic before it's real - no modeled "category family" exists today,
-    just naming convention (e.g. "US - ABC" / "US - NFL" happen to share a "US -" prefix in the
-    provider's own strings) - a real prefix-parse-and-match step, not an existing lookup. Grey out
-    until built, same as Favorites.
-  - *Root Channel Group* is the cheapest of the five destinations - `currentChannel.groupName` is
-    already real data, buildable in the first pass.
-  - *Return to fullscreen* and *Exit RedSurf* are both trivial, buildable in the first pass.
-  - The portal-open animation is its own design pass, not a quick add, but doesn't block a plainer
-    launch transition shipping first and getting upgraded later.
-  **Discoverability - user request, 2026-09-19: contextual tips, not just the one-time dismissible
-  hint already decided for the plain nav-strip-jump case.** Detect situations where Teleport Menu
-  (once built) would genuinely help and surface a tip in the moment, not just once ever. Two
-  concrete triggers already named:
-  - Holding a directional key (e.g. UP) for a sustained period (user's example: ~60s) without
-    reaching the top/edge - a real signal the user is stuck deep in a long list.
-  - Long-press Back fires its default behavior (fullscreen-jump or nav-strip-jump) while the
-    Teleport Menu setting is off - the exact moment its extra value would be obvious.
-  **Explicitly not an exhaustive list - more triggers need brainstorming when this is picked up,**
-  per the user's own note.
-  **Recommendation on record:** worth building as its own dedicated sprint - ship the cheap,
-  buildable-today destinations for real, grey out the two that need new data/logic first, and
-  build the discoverability tips alongside it, not as an afterthought.
+- **"Teleport Menu" - a RedSurf-original quick-navigation overlay, toggle-able in Settings** -
+  **no longer backlog: built and device-verified, 2026-09-19.** Full brief and build account:
+  `docs/plans/TELEPORT_MENU.md`. Origin: user idea, 2026-09-18 ("shower thought"). Long-press Back
+  (once the "Teleport Menu" setting is on under Settings → Remote control, default off - the
+  default behavior stays the TiviMate-parity fullscreen-jump/nav-strip-jump, see the long-press-
+  Back entry below) opens an overlay ("Teleport to...") with a quick-jump list: Nav-Strip, Playlist
+  Root, Playlist Favorites, Root Category, Root Channel Group, Return to fullscreen, Exit RedSurf.
+  Visual treatment ("The Curl" - the reveal mask is the brand mark's own crescent, closing shut into
+  a disc then stretching into the panel, riding `WaveSpinner`'s own arc) came from an Opus design
+  consultation, 2026-09-19 - full spec in the brief.
+  - *Playlist Favorites* - still grey (`SETTINGS.md`'s established pattern), permanently until a
+    real favorites view exists to jump to.
+  - *Root Category* - built for real this pass, not left grey: prefix-parsing on the earliest of
+    `-`/`|`/`•`/`:` in a category's raw name, scoped to the same playlist, live-verified against
+    real messy provider category names (not just synthetic examples).
+  - *Root Channel Group*, *Return to fullscreen*, *Exit RedSurf* - all real.
+  - **Discoverability tips - deferred, T.5 in the brief's status board.** The mechanism itself is
+    done; contextual tips (surfacing a hint at the moment Teleport Menu would genuinely help, not
+    just a one-time dismissible one) are real remaining work, not chased this pass. Two triggers
+    already named, **explicitly not an exhaustive list**: holding a directional key (e.g. UP) for
+    a sustained period without reaching the top/edge (a real signal of being stuck deep in a long
+    list - exact threshold needs the user's own gut-check against how long a genuinely long list
+    actually takes to traverse, not a guessed number); long-press Back firing its default behavior
+    while the Teleport Menu setting is off (the exact moment its extra value would be obvious).
 - **Provider Intelligence (unsupervised playlist fingerprinting, no brand names)** - user request,
   2026-09-17, explicitly low priority ("not a whole useful of a feature right now") - logged, not
   scheduled. Origin: the user wanted to identify which real-world IPTV reseller brand (e.g.
