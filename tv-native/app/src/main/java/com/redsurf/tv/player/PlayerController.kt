@@ -268,18 +268,35 @@ class PlayerController(
     private val _networkStats = MutableStateFlow(NetworkStats())
     val networkStats: StateFlow<NetworkStats> = _networkStats.asStateFlow()
 
+    // Smoothed, not the raw instantaneous 2s-window rate (found live, 2026-09-18: "Network speed
+    // appears and disappears") - ExoPlayer only pulls from the network when its buffer actually
+    // has room, so a comfortably-full buffer can legitimately go a window or two with zero bytes
+    // read even though playback is completely fine, making a hard per-window reading flicker to
+    // null constantly. An EMA absorbs that burstiness; only genuinely sustained silence (several
+    // windows in a row) clears the badge, rather than one quiet 2s tick doing it.
+    private var smoothedBitrateEstimateBps: Long? = null
+    private var consecutiveEmptyWindows = 0
+
     private fun startNetworkStatsPoll() {
         scope.launch {
             while (true) {
                 delay(2_000)
                 val bytes = bytesTransferredSinceLastSample.getAndSet(0)
+                val instantBps = bytes * 8 / 2
+                if (instantBps > 0) {
+                    consecutiveEmptyWindows = 0
+                    smoothedBitrateEstimateBps = smoothedBitrateEstimateBps
+                        ?.let { (it * 0.7 + instantBps * 0.3).toLong() }
+                        ?: instantBps
+                } else {
+                    consecutiveEmptyWindows++
+                    // 3 windows (~6s) of true silence, not one quiet tick, before clearing.
+                    if (consecutiveEmptyWindows >= 3) smoothedBitrateEstimateBps = null
+                }
                 _networkStats.value = NetworkStats(
                     bufferedMs = exoPlayer.totalBufferedDuration,
                     bufferedPercentage = exoPlayer.bufferedPercentage,
-                    // bytes over this exact 2s window, in bits/sec - see [transferListener]'s own
-                    // doc comment for why this is measured directly instead of via a bandwidth
-                    // meter's estimate.
-                    bitrateEstimateBps = (bytes * 8 / 2).takeIf { it > 0 },
+                    bitrateEstimateBps = smoothedBitrateEstimateBps,
                 )
             }
         }
@@ -396,6 +413,8 @@ class PlayerController(
         cancelStallWatchdog()
         cancelBackgroundRecoveryRetry() // a genuinely new channel - never keep retrying the old one
         lastObservedPositionMs = 0L // a fresh channel's position must not compare against the last one's
+        smoothedBitrateEstimateBps = null // nor its network-speed estimate
+        consecutiveEmptyWindows = 0
         exoPlayer.stop()
         exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
         exoPlayer.prepare()

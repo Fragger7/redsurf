@@ -680,6 +680,7 @@ fun PlayerScreen(
                     channel = currentChannel,
                     streamInfo = streamInfo,
                     networkStats = networkStats,
+                    showRawResolution = showRawResolution,
                     repository = repository,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -1238,6 +1239,7 @@ private fun VideoInfoOverlay(
     channel: ChannelEntity?,
     streamInfo: StreamInfo,
     networkStats: NetworkStats,
+    showRawResolution: Boolean,
     repository: ChannelRepository,
     modifier: Modifier = Modifier,
 ) {
@@ -1251,13 +1253,12 @@ private fun VideoInfoOverlay(
         providerInfo = XtreamApi.getUserInfo(server, user, pass, playlist.userAgent)
     }
 
-    // Both the class and the literal pixel size, always (user request, 2026-09-17: "real
-    // resolution size... whatever else could be helpful and advance") - unlike the zap-banner's
-    // brief badges, this is the deep-dive screen, so the Appearance toggle only decides the zap
-    // banner's own badge now, not what's available here.
+    // One setting decides which resolution display shows, everywhere it appears - not "always
+    // show both" (reverted 2026-09-18, user correction: "add a setting of what to display... like
+    // TiviMate" - a single Appearance toggle governing both the zap-banner badge and this screen
+    // consistently is the right shape, not a second independent choice for this screen alone).
     val streamRows = listOfNotNull(
-        streamInfo.resolutionClass?.let { "Resolution" to it },
-        streamInfo.rawResolution?.let { "Pixel size" to it },
+        (if (showRawResolution) streamInfo.rawResolution else streamInfo.resolutionClass)?.let { "Resolution" to it },
         streamInfo.frameRate?.let { "Frame rate" to "$it FPS" },
         streamInfo.videoCodec?.let { "Video codec" to it },
         streamInfo.videoBitrateBps?.let { "Video bitrate" to formatBitrate(it) },
