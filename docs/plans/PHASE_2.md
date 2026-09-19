@@ -33,7 +33,7 @@ the app too, not just the player - note it when touching other screens' error pa
 | 2.4 | LEFT channel-list overlay, RIGHT last-channel zap, long-press context menu | ✅ done & device-verified 2026-09-17, after fixing two real bugs the user found live (see "2.3-2.5 device-verification round" below): LEFT's focus-target bug (root-caused via live logcat) and the context-menu repeat-key bug |
 | 2.5 | Recents + last-channel: table, real migration 6→7→8, History tile, resume setting | ✅ done & device-verified 2026-09-17 - resume-on-launch setting was already built in an earlier session under a different mechanism, not re-touched here |
 | **B** | **Checkpoint — user tests the full matrix on the real list** | ✅ closed 2026-09-17 - see "2.3-2.5 device-verification round" below. Every machine-verifiable item confirmed live via ADB (real logcat, uiautomator dumps, screenshots); items 2-4 of the user's own checkpoint list (audio/subtitle switching, general responsiveness feel, multi-playlist performance) are explicitly *not* independently confirmed - audio/subtitle switching couldn't be tested (single-track live channels), multi-playlist is untested by the user's own account ("not tested, can't log as an official bug") |
-| 2.6 | Acceptance sweep: migration from v0.20.x, zap latency, memory with overlays | ⬜ not started - the next real work in this phase, see below |
+| 2.6 | Acceptance sweep: migration from v0.20.x, zap latency, memory with overlays | ✅ closed 2026-09-19 - see "2.6 - closed" below. Zap latency and memory both waived by user decision, not measured; everything else confirmed |
 
 **Goal:** watching live TV feels like TiviMate. Today the fullscreen player is a bare video surface
 that swallows every key except Back; to change channel you leave it. After this phase, everything
@@ -645,6 +645,38 @@ verification.
    (both still Non-goal files).
 5. Every `FocusRequester` in `PlayerScreen` has a comment naming the transition it serves.
 6. 13/13 tests; signed release; status board and `AGENTS.md` updated.
+
+## 2.6 — closed, 2026-09-19
+
+1. **Migration:** confirmed by the user directly (`v0.32.x` over an existing install with a real
+   playlist loaded) - "DB and playlists survive fine."
+2. **Zap latency:** **waived, user decision** - "Black screen zap lag seems fine, if you see any
+   opportunities to zap faster, please go ahead, if not, leave as-is." No formal median/worst
+   measurement taken; nothing in this phase's own testing suggested a real problem to chase.
+3. **Memory:** **waived, user decision** - "I don't think we should apply any hard memory related
+   requirements right now, especially if we're not seeing a performance issue already... At worst,
+   let's address this if/when we do a performance tuning sprint." Not measured against the 1.6
+   baseline; deferred wholesale to a future dedicated performance pass, not silently dropped.
+4. **Dead-code/hardcoded-color greps:** both re-run live this session, both clean exactly as
+   specified - `PlayerOsd` grep empty, `Color(0xFF` grep hits only the two already-known Non-goal
+   files.
+5. **`FocusRequester` comments:** the two floor-level requesters (`tilesFloorFocus`/
+   `actionsFloorFocus`) already had theirs via their usage-site doc comment; the four `firstFocus`
+   instances across `ContextMenuPanel`/`HistoryPicker`/`AudioPicker`/`SubtitlePicker` didn't -
+   added.
+6. **Tests/release/docs:** 15/15 unit tests passing (grew from 13 since this list was written -
+   `RegressionTestSuite` 2, `M3uParserTest` 6, `UpdateManagerTest` 7 - zero failures, confirmed by
+   reading the actual test-result XML, not just the exit code). Real signed releases cut
+   continuously across this whole phase (`git push` → CI, or a local `assembleRelease` with the
+   real keystore and the next real version number - see `.claude/commands/sprint.md`'s workflow
+   note - never a debug-signed or placeholder-versioned artifact). Status board above and
+   `AGENTS.md` both current as of this close.
+
+**Phase 2 is done.** Every task on the status board is closed; #2.6 was the last one. Next per the
+roadmap (`AGENTS.md`'s "Roadmap order"): Phase 3 (EPG + Guide), with the "Teleport Menu" feature
+slotted as its own small standalone sprint before Phase 3 starts (user decision, 2026-09-19) -
+Live TV's overlay/key-routing code is still fresh from this phase's own work, cheaper to build now
+than to re-load that context later.
 
 ---
 

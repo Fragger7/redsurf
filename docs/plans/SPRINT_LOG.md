@@ -2,6 +2,55 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-18/19 — TBN freeze root-caused and fixed; long-press Back; #2.6 closed; Phase 2 done
+
+**The real fix, this time.** Root-caused the user's recurring "channel freezes forever" report,
+live, against their actual TBN channel reproducing naturally: `ExoPlayer` reports `STATE_ENDED`
+on this channel roughly every ~30s (provider-side connection rolling, not a RedSurf bug), and
+neither existing watchdog was watching for that state at all. First fix attempt (treat it as a
+stall, call the existing bare `prepare()`) compiled clean but **failed live** - state stayed frozen
+across 5 straight attempts. Real fix: `forceReconnect()` - a full `stop()` + fresh `setMediaItem`
++ `prepare()`, matching this codebase's own documented `max_connections: 1` reasoning. Live-
+confirmed end to end: `ENDED -> IDLE -> BUFFERING -> READY` in ~1.4s. A follow-on bug the same
+live data surfaced: the "2 strikes, give up" counter never reset on a genuine successful recovery,
+so TBN's own benign reconnect cycle was tripping the terminal error even though every individual
+reconnect was working - fixed by resetting it from both real-recovery signals.
+
+Also root-caused and fixed the separate "audio plays, picture never appears, no error" pattern
+(observed on two unrelated channels): real, documented ExoPlayer behavior - a video track this
+device can't decode doesn't fail loudly, `DefaultTrackSelector` just silently drops to audio-only.
+Detected via `Tracks.Group.isSupported` and surfaced as a real, honest error instead of an
+indefinite silent black screen. Not live-reproduced this round to confirm the fix fires (both this
+and the freeze fix's edge cases are intermittent/hard to force on demand) - reasoned and compiled
+clean, flagged as such.
+
+**Built and live-verified, both paths:** long-press Back - TiviMate-parity jump into fullscreen
+from Live TV's browse view when a channel is already focused/previewed, nav-strip pill-focus jump
+everywhere else (the "fast way back to the nav-strip no matter how deep" backlog item). Intercepted
+once at `AppShell`'s root, not touching any individual screen's own key router.
+
+**Smaller fixes, all live-verified:** the critical auto-play-on-launch focus bug (no
+`runCatching`/retry on the one focus-claim that mattered - left the remote completely dead on the
+user's own current default setting); Video info's network-speed estimate was frozen at channel-
+change time (a bandwidth-meter estimate that never updates for one continuous connection - replaced
+with a direct byte-counter, smoothed to stop flickering, and made always-present per user request);
+resolution display reverted to the single Appearance setting (not "always show both," an earlier
+over-correction); the provider's live connection count added to the zap-banner badge row.
+
+**#2.6 (acceptance sweep) closed** - migration confirmed by the user directly; zap latency and
+memory both explicitly waived by user decision (no measurement taken, deferred wholesale to a
+future performance-tuning sprint); everything else (dead-code greps, `FocusRequester` comments,
+15/15 tests, signed releases, docs) confirmed. **Phase 2 is fully closed.** "Teleport Menu" (a new
+RedSurf-original quick-navigation feature the user proposed this session) inserted into the
+roadmap as its own standalone sprint before Phase 3 starts - see its `AGENTS.md` backlog entry for
+the full design, the two data-dependent destinations correctly scoped as grey-out-until-built
+rows (not blockers), and the discoverability-tips sub-idea.
+
+Workflow note: local release-signed builds throughout (`assembleRelease` with the real keystore,
+the real next version number each time - v0.32.4 through v0.32.10), `adb install -r` for
+verification, `git push` after each batch for the real CI record - per this session's own
+same-day reversal of the "wait for CI every time" rule (`.claude/commands/sprint.md`).
+
 ## 2026-09-17 (evening) — Player sprint device-verification round, Checkpoint B closed
 
 **Builds this pass: several local `assembleRelease` builds (real keystore, real next version

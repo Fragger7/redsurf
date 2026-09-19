@@ -89,10 +89,12 @@ merging.
 
 - **Roadmap order** (user, 2026-09-13): Settings shell (`SETTINGS.md`) → **Branding** → Player
   sprint (Phase 2 #2.3 Actions row, #2.4, #2.5) → EPG + Guide (Phase 3) → **Cloud Sync** →
-  VOD/Series. Player sprint device-verified and Checkpoint B closed, 2026-09-17
-  (`PHASE_2.md`'s "2.3-2.5 device-verification round", `SPRINT_LOG.md`) - only #2.6 (the
-  acceptance sweep: migration from v0.20.x, zap latency measurement, memory with overlays) remains
-  before Phase 3 (EPG + Guide) starts. Two deliberate reorderings:
+  VOD/Series. **Phase 2 is fully closed, 2026-09-19** (`PHASE_2.md`'s "2.6 - closed" entry - #2.6's
+  zap-latency and memory items both explicitly waived by user decision, everything else confirmed).
+  **Inserted, user decision 2026-09-19: "Teleport Menu" (see Backlog) as its own small standalone
+  sprint, right here, before Phase 3 starts** - reasoning on record in its backlog entry (Live TV's
+  overlay/key-routing code is still fresh from Phase 2, cheaper to build on now than reload later).
+  Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud
     state - so every module built after it inherits that, and every module built before it
