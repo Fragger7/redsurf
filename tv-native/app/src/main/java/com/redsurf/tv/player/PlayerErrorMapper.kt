@@ -51,9 +51,13 @@ object PlayerErrorMapper {
     fun reconnecting(): PlayerErrorPresentation =
         PlayerErrorPresentation(message = "Reconnecting…", isRetrying = true, isTerminal = false)
 
-    /** §2.5 - AV1 is the only track and this device has no hardware decoder for it. Distinct from
-     * [present] since it's never an ExoPlayer error at all (the stream "succeeds" and stutters). */
-    fun avOneUnsupported(): PlayerErrorPresentation =
+    /** §2.5, generalized 2026-09-18 (built for AV1 specifically, never wired up - the real live
+     * case turned out broader): a video track this device can't decode at all (no working
+     * hardware or software fallback), any codec. Distinct from [present] since it's never an
+     * ExoPlayer error at all - `DefaultTrackSelector` just quietly selects no video track and
+     * continues with audio, so nothing ever throws; the silence itself is the bug this answers -
+     * see `PlayerController.onTracksChanged`'s own doc comment for the detection. */
+    fun videoFormatUnsupported(): PlayerErrorPresentation =
         PlayerErrorPresentation(
             message = "This device can't play this channel's video format",
             isRetrying = false,

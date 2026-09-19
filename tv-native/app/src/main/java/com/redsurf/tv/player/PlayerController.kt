@@ -348,13 +348,31 @@ class PlayerController(
 
     init {
         exoPlayer.addListener(object : Player.Listener {
-            override fun onTracksChanged(tracks: Tracks) = reportStreamInfo()
+            override fun onTracksChanged(tracks: Tracks) {
+                reportStreamInfo()
+                // The "audio plays fine, picture never appears, no error" pattern observed live
+                // 2026-09-18 on two unrelated channels - real mechanism, not guessed: a video
+                // track this device genuinely can't decode (wrong codec/profile for this
+                // hardware, no working fallback either) doesn't fail loudly - ExoPlayer/
+                // DefaultTrackSelector just selects no video track at all and continues with
+                // whatever else works (audio), silently. `exoPlayer.videoFormat` staying null
+                // (already visible as the missing Resolution/FPS badges) was the first clue;
+                // `Tracks.Group.isSupported` is what actually distinguishes "this stream never
+                // had video" (a legitimate radio-style channel, say nothing) from "it has video
+                // and none of it is usable here" (say something honest, using the same pattern
+                // §2.5's AV1-specific case already established, generalized to any codec).
+                val hasUnsupportedVideo = tracks.groups.any { it.type == C.TRACK_TYPE_VIDEO && !it.isSupported }
+                if (hasUnsupportedVideo && exoPlayer.videoFormat == null) {
+                    _errorPresentation.value = PlayerErrorMapper.videoFormatUnsupported()
+                }
+            }
             override fun onVideoSizeChanged(videoSize: VideoSize) = reportStreamInfo()
 
             override fun onRenderedFirstFrame() {
                 _errorPresentation.value = null
                 _firstFrameRenderedTick.value++
                 retryAttempt = 0
+                stallCountInWindow = 0
                 cancelStallWatchdog()
                 cancelBackgroundRecoveryRetry()
             }
@@ -601,9 +619,21 @@ class PlayerController(
                         // recovery retry (see onStallDetected) can bring a *terminal* "stalled"
                         // channel back too, and that recovery deserves clearing the message just
                         // as much as an ordinary reconnect does.
+                        //
+                        // stallCountInWindow reset here too (2026-09-18, user found the real
+                        // consequence live: TBN's own ~30s reconnect cycle was tripping the
+                        // 2-strikes-in-60s "give up" threshold even though *every* individual
+                        // reconnect was genuinely succeeding - two back-to-back successful, benign
+                        // reconnects aren't "consecutive failures," but the counter never knew the
+                        // difference because nothing ever told it a recovery actually worked. Now
+                        // it does, from the same signal (position/audio genuinely advancing again)
+                        // that already proves the previous stall is over - so the terminal
+                        // "Having trouble" message (and the spinner-vs-error choice it drives) is
+                        // reserved for genuine repeated failure, not a channel's own normal cadence.
                         Log.d(TAG, "positionWatchdog: position resumed advancing, clearing errorPresentation")
                         _errorPresentation.value = null
                         retryAttempt = 0
+                        stallCountInWindow = 0
                         cancelBackgroundRecoveryRetry()
                     }
                     lastObservedPositionMs = position
