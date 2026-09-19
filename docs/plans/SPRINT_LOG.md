@@ -36,9 +36,12 @@ was never actually seen rendering - the empty-slot path was exercised live, the 
 path is implemented and reasoned-correct but not yet eyes-verified. Worth a specific look at
 Checkpoint A once sync has had more wall-clock time.
 
-**Pushed to `main`** - a real CI release cut off this work (see `gh release list` for the tag). The
-one open item above is a feel/vision checkpoint item, not a known bug - reasonable to ship and let
-Checkpoint A cover it live.
+**Pushed to `main`** - a real CI release cut off this work (see `gh release list` for the tag).
+**Deviated:** the first push's own HEAD commit accidentally carried `[skip ci]` (meant for a
+docs-only convention, wrongly applied to a push that also bundled real code) - GitHub skipped the
+whole workflow, not just that one commit, so no release actually landed until this follow-up
+commit (no `[skip ci]`) re-triggered it. The one open item above is a feel/vision checkpoint item,
+not a known bug - reasonable to ship and let Checkpoint A cover it live.
 
 ## 2026-09-19 (evening) — Phase 3 P0 (EPG + Guide): code complete, sweep blocked mid-run
 
