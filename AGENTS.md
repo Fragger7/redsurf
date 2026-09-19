@@ -345,17 +345,35 @@ before the report comes in, not after.
   related categories, e.g. every "US -" group), Root Channel Group (the category the currently-
   playing channel belongs to), Return to fullscreen, Exit RedSurf. Also wants a distinctive launch
   animation ("a portal opening," on-brand) rather than a plain overlay fade.
-  **Assessed, not started - real prerequisites, not just menu entries:**
-  - *Playlist Favorites* needs an actual favorites view to jump to - today a channel can be marked
-    favorite (decision 12's context menu) but nothing in the app displays/filters by favorites yet.
-  - *Root Category* needs new logic - there's no modeled "category family" today, just naming
-    convention (e.g. "US - ABC" / "US - NFL" happen to share a "US -" prefix in the provider's own
-    strings); this would need a real prefix-parse-and-match step, not a lookup that already exists.
+  **Assessed - corrected, 2026-09-19: these are not blockers, apply the grey-row pattern.**
+  First pass wrongly framed the two data-dependent entries as prerequisites blocking the whole
+  feature - user correction: this project already has the exact right pattern for this
+  (`SETTINGS.md`'s grey, unfocusable rows for planned-but-unbuilt items) and Teleport Menu should
+  use it the same way, not wait on every entry being real before any of it ships.
+  - *Playlist Favorites* - grey out until a real favorites view exists to jump to (today a channel
+    can be marked favorite via decision 12's context menu, but nothing displays/filters by it yet).
+  - *Root Category* needs new logic before it's real - no modeled "category family" exists today,
+    just naming convention (e.g. "US - ABC" / "US - NFL" happen to share a "US -" prefix in the
+    provider's own strings) - a real prefix-parse-and-match step, not an existing lookup. Grey out
+    until built, same as Favorites.
   - *Root Channel Group* is the cheapest of the five destinations - `currentChannel.groupName` is
-    already real data.
-  - The portal-open animation is its own design pass, not a quick add.
-  **Recommendation on record:** worth building, but as its own dedicated sprint once the
-  prerequisites above are scoped - not a bolt-on to whatever else is in flight when it comes up.
+    already real data, buildable in the first pass.
+  - *Return to fullscreen* and *Exit RedSurf* are both trivial, buildable in the first pass.
+  - The portal-open animation is its own design pass, not a quick add, but doesn't block a plainer
+    launch transition shipping first and getting upgraded later.
+  **Discoverability - user request, 2026-09-19: contextual tips, not just the one-time dismissible
+  hint already decided for the plain nav-strip-jump case.** Detect situations where Teleport Menu
+  (once built) would genuinely help and surface a tip in the moment, not just once ever. Two
+  concrete triggers already named:
+  - Holding a directional key (e.g. UP) for a sustained period (user's example: ~60s) without
+    reaching the top/edge - a real signal the user is stuck deep in a long list.
+  - Long-press Back fires its default behavior (fullscreen-jump or nav-strip-jump) while the
+    Teleport Menu setting is off - the exact moment its extra value would be obvious.
+  **Explicitly not an exhaustive list - more triggers need brainstorming when this is picked up,**
+  per the user's own note.
+  **Recommendation on record:** worth building as its own dedicated sprint - ship the cheap,
+  buildable-today destinations for real, grey out the two that need new data/logic first, and
+  build the discoverability tips alongside it, not as an afterthought.
 - **Provider Intelligence (unsupervised playlist fingerprinting, no brand names)** - user request,
   2026-09-17, explicitly low priority ("not a whole useful of a feature right now") - logged, not
   scheduled. Origin: the user wanted to identify which real-world IPTV reseller brand (e.g.
