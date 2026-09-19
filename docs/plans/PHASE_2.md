@@ -588,6 +588,40 @@ which are single-track - would need a VOD source to really test).
 **Provider Intelligence** (a feature idea raised during this same testing round, not part of the
 Player sprint) - fully researched across three angles and rejected; see `AGENTS.md`'s Backlog.
 
+## Player reliability round: the real freeze bug, root-caused and fixed (2026-09-18, Sonnet)
+
+The prior round's "position=0, bufferedPct=0" freeze/recovery was real and the position watchdog
+genuinely helped, but it wasn't the user's actual recurring report - this round chased that down
+specifically (their real TBN channel, reproducing naturally while live on the device) and found a
+**different, more fundamental gap** the same watchdogs were blind to.
+
+**Root cause, confirmed via logcat, not guessed:** `playbackState -> ENDED`. A live IPTV stream
+never legitimately ends, but ExoPlayer reported `STATE_ENDED` anyway (most likely the provider's
+connection closing cleanly or a discontinuity read as end-of-stream) - and *neither* existing
+watchdog was watching for that state at all, both only ever checked `STATE_READY`. Confirmed via
+20+ consecutive `positionWatchdog` ticks all reading the exact same frozen position with zero
+recovery attempts ever made. This is the actual mechanism behind "continues to get frozen, after
+buffer runs out."
+
+**First fix attempt, live-tested, and it failed - worth recording why:** treating `STATE_ENDED` as
+a stall and calling the existing bare `exoPlayer.prepare()` recovery path did *not* clear it -
+state and position both stayed frozen across 5 straight attempts, confirmed live. Root cause of
+*that*: this file's own documented domain knowledge (`PlayerController.play()`'s comment) - the
+provider's `max_connections: 1` means the old socket has to be genuinely severed before a new one
+can open; a bare `prepare()` on an already-`ENDED` player never does that.
+
+**Real fix:** `forceReconnect()` - `stop()` + a fresh `setMediaItem` + `prepare()`, the same real
+reset `play()` already does for an ordinary zap, used for both `onStallDetected`'s immediate
+retry and the background recovery loop. **Live-confirmed end to end**, watching it happen
+naturally on the real TBN channel: `ENDED -> IDLE -> BUFFERING -> READY` in ~1.4s, position
+resetting to a fresh live point and resuming clean real-time advancement afterward. This is the
+first time this specific user-reported bug has an actual confirmed fix, not a plausible theory.
+
+Also this round: long-press Back (TiviMate-parity fullscreen jump on Live TV + the standing
+"fast way back to the nav-strip" backlog item, built together since the user specified they're
+the same gesture) - see `AGENTS.md`'s relevant entry for the full design and its own live
+verification.
+
 ## Checkpoint B — user, on the device, real list
 
 1. The whole matrix, decision 3, from memory - does it match TiviMate muscle memory?

@@ -560,7 +560,23 @@ before the report comes in, not after.
   gives every other escape-to-NavStrip case the same deterministic target to reuse, rather than
   four different ad hoc spatial-search outcomes. Don't fix this one in isolation; fix it as part
   of that.
-- **Global quick-jump to the NavStrip from anywhere (long-press Back)** - user idea 2026-09-15,
+- **Global quick-jump to the NavStrip from anywhere (long-press Back)** - **no longer backlog:
+  built and device-verified, 2026-09-18**, with a real addition beyond the original idea (user
+  request, same session): on Live TV specifically, with a channel already focused/previewed and
+  not already fullscreen, long-press Back jumps *into* that channel's fullscreen instead (TiviMate
+  parity) - the strip-jump is the fallback everywhere else (including Live TV with nothing focused
+  yet). Both paths verified live via a real synthesized long-press
+  (`adb shell input keyevent --longpress KEYCODE_BACK`): fullscreen→browse exit lands correctly,
+  browse→fullscreen jump lands correctly on the exact previously-focused channel. Deliberately
+  scoped to *not* intercept while already fullscreen - `NavStrip` isn't even composed then (hidden
+  during fullscreen), so a pill-focus jump would silently fail, and there's no clean single-press
+  way to also exit fullscreen first without fighting `PlayerScreen`'s own Back-peel discipline;
+  this was asked for "navigating any menus," and the fullscreen player already has its own working
+  Back behaviour. Intercepted once at `AppShell`'s root via `onPreviewKeyEvent`, not touching any
+  individual screen's own key router - genuinely global, confirmed working from Settings and
+  Live TV alike. **Still open, not built this round:** the self-teaching radial-fill discoverability
+  affordance described below - the mechanism works, but there's no visual hint yet that it exists.
+  Original framing, kept for the reasoning:
   raised after finding that a deep scroll (150th category, or several tabs deep in Settings) has
   no fast way back to the top-level nav, since the strip lives above content rather than beside it
   (TiviMate's own left rail doesn't have this problem - it's one LEFT away regardless of depth).
