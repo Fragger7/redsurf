@@ -13,6 +13,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.redsurf.tv.MainViewModel
@@ -104,6 +110,14 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // existing channelReturnFocus effect, so there's nothing this trigger needs to do in that case.
     var liveTvClaimInitialFocusTrigger by remember { mutableStateOf(false) }
 
+    // Long-press Back, anywhere in the app (user request, 2026-09-18, TiviMate parity + the
+    // standing "no fast way back to top-level nav from a deep scroll" backlog item, built
+    // together since they're the same gesture doing two context-dependent things, not two
+    // features). One `FocusRequester` per pill so this can force focus onto whichever one
+    // matches wherever the user actually is - `NavStrip` just attaches whichever it's handed.
+    val navPillFocusRequesters = remember { NavDestination.entries.associateWith { FocusRequester() } }
+    var backHeldLong by remember { mutableStateOf(false) }
+
     // BACKLOG_SWEEP.md #10 - one instance for the whole shell, same lifetime as the ViewModel;
     // AppShell is the natural owner since both destinations that touch these prefs (Settings to
     // flip them, Live TV/PlayerScreen to read them) are composed from here.
@@ -157,11 +171,55 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         destination = NavDestination.Home
     }
 
-    val rootModifier = if (liveTvFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxSize().tvSafeArea()
+    val rootModifier = (if (liveTvFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxSize().tvSafeArea())
+        // Long-press Back, intercepted once here rather than in every individual screen's own
+        // key router - `onPreviewKeyEvent` on this root sees every key event top-down, before
+        // whatever's actually focused (Settings' rail, Live TV's channel list) gets a look at
+        // it, so this works "no matter how deep" without touching any of those screens' own key
+        // routers. Only ever consumes the events that make up a genuine held Back press (the
+        // qualifying repeat tick, and that same press's own release) - every ordinary short Back
+        // press passes through completely untouched.
+        //
+        // Deliberately not intercepted while already `liveTvFullscreen` (scope decision, not an
+        // oversight): `NavStrip` isn't even composed then (hidden during fullscreen, above), so
+        // a pill-focus jump would silently fail, and there's no clean single-press way to also
+        // exit fullscreen first without fighting `PlayerScreen`'s own well-established Back-peel
+        // discipline. This was asked for "navigating any menus" - the fullscreen player already
+        // has its own working Back behaviour, left untouched here.
+        .onPreviewKeyEvent { event ->
+            if (event.key != Key.Back || liveTvFullscreen) return@onPreviewKeyEvent false
+            val isDown = event.type == KeyEventType.KeyDown
+            if (isDown && event.nativeKeyEvent.repeatCount == 0) backHeldLong = false
+            if (isDown && event.nativeKeyEvent.isLongPress && !backHeldLong) {
+                backHeldLong = true
+                // TiviMate parity (user request, 2026-09-18): on Live TV, with a channel already
+                // focused/previewed and not already fullscreen, jump straight into it - reusing
+                // the exact same trigger cold-launch auto-play already uses, since "set
+                // previewUrl, record it, go fullscreen" is exactly the same action regardless of
+                // what asked for it. Everywhere else (including Live TV with nothing focused, or
+                // already fullscreen), jump real D-pad focus to the pill for wherever the user
+                // actually is - the generic "fast way back to the nav-strip" the deep-scroll
+                // case (Settings, a long channel list, anywhere) needs.
+                if (destination == NavDestination.LiveTv && !liveTvFullscreen && liveTvFocusedChannel != null) {
+                    liveTvAutoPlayTrigger = true
+                } else {
+                    runCatching { navPillFocusRequesters[destination]?.requestFocus() }
+                }
+                return@onPreviewKeyEvent true
+            }
+            if (event.type == KeyEventType.KeyUp && backHeldLong) {
+                // Swallow this same press's own release - same reasoning as the long-press
+                // context-menu fix (PlayerScreen.kt): left alone, it would fall through as an
+                // ordinary short Back press the instant the physical key comes up.
+                backHeldLong = false
+                return@onPreviewKeyEvent true
+            }
+            false
+        }
 
     Column(modifier = rootModifier) {
         if (!liveTvFullscreen) {
-            NavStrip(current = destination, onSelect = { destination = it })
+            NavStrip(current = destination, onSelect = { destination = it }, focusRequesters = navPillFocusRequesters)
             Spacer(modifier = Modifier.height(20.dp))
         }
 

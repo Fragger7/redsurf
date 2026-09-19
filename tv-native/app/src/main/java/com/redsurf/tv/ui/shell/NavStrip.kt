@@ -20,6 +20,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,7 +60,16 @@ enum class NavDestination(val label: String, val icon: ImageVector) {
  * only ever clip horizontally, never inflate the strip. Found from a device screenshot 2026-09-11.
  */
 @Composable
-fun NavStrip(current: NavDestination, onSelect: (NavDestination) -> Unit, modifier: Modifier = Modifier) {
+fun NavStrip(
+    current: NavDestination,
+    onSelect: (NavDestination) -> Unit,
+    modifier: Modifier = Modifier,
+    // Long-press-Back quick-jump (user request, 2026-09-18) - lets AppShell force real D-pad
+    // focus onto whichever pill matches wherever the user actually is, from anywhere in the app.
+    // Owned by AppShell, not `remember`ed here, since AppShell is what needs to call
+    // `requestFocus()` on the right one - this composable just attaches whichever it's handed.
+    focusRequesters: Map<NavDestination, FocusRequester> = emptyMap(),
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -69,7 +80,12 @@ fun NavStrip(current: NavDestination, onSelect: (NavDestination) -> Unit, modifi
     ) {
         Wordmark(modifier = Modifier.padding(start = 4.dp, end = 20.dp))
         NavDestination.entries.forEach { dest ->
-            NavPill(dest = dest, selected = dest == current, onClick = { onSelect(dest) })
+            NavPill(
+                dest = dest,
+                selected = dest == current,
+                onClick = { onSelect(dest) },
+                modifier = focusRequesters[dest]?.let { Modifier.focusRequester(it) } ?: Modifier,
+            )
         }
     }
 }
@@ -97,9 +113,10 @@ private fun Wordmark(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun NavPill(dest: NavDestination, selected: Boolean, onClick: () -> Unit) {
+private fun NavPill(dest: NavDestination, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         onClick = onClick,
+        modifier = modifier,
         shape = RedSurfFocus.pillShape(),
         colors = RedSurfFocus.colors(selected = selected),
         scale = RedSurfFocus.scale(),

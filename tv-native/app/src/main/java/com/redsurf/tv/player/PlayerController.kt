@@ -371,6 +371,18 @@ class PlayerController(
                 } else {
                     cancelStallWatchdog()
                 }
+                if (playbackState == Player.STATE_ENDED) {
+                    // Root cause, live-caught and confirmed 2026-09-18 (the actual mechanism
+                    // behind "TBN keeps freezing"): a live IPTV stream never legitimately ends,
+                    // but ExoPlayer reported STATE_ENDED anyway (a provider-side clean connection
+                    // close or discontinuity read as end-of-stream) - and *neither* watchdog was
+                    // watching for it, both only ever checked STATE_READY, so position sat frozen
+                    // forever with zero recovery attempts, confirmed live via 20+ consecutive
+                    // positionWatchdog ticks all reading the exact same frozen position. Treat
+                    // ENDED on this player as a stall, always - there's no legitimate case for it.
+                    Log.d(TAG, "playbackState ENDED on a live stream - treating as a stall, recovering")
+                    onStallDetected()
+                }
             }
 
             override fun onPlayerError(error: PlaybackException) = handlePlaybackError(error)
@@ -511,8 +523,24 @@ class PlayerController(
             armBackgroundRecoveryRetry()
         } else {
             _errorPresentation.value = PlayerErrorMapper.reconnecting()
-            exoPlayer.prepare()
+            forceReconnect()
         }
+    }
+
+    /** A real reset, not a bare `prepare()` - found live, 2026-09-18: after the STATE_ENDED fix
+     * above started catching a genuine freeze, `exoPlayer.prepare()` alone did *not* actually
+     * clear it - state and position both stayed frozen for 15+ seconds across five straight
+     * recovery attempts, confirmed via logcat. `play()`'s own doc comment already has the reason
+     * this codebase knows about: the provider's `max_connections: 1` (`IPTV_DOMAIN_KNOWLEDGE.md`
+     * §10) means the *old* socket has to be genuinely severed before a new one can open, or the
+     * provider can refuse/ignore the reconnect - a bare `prepare()` on an already-ENDED player
+     * never does that. `stop()` + a fresh `setMediaItem` + `prepare()` is exactly what `play()`
+     * already does for an ordinary zap; recovery deserves the same real reset, not a lighter one. */
+    private fun forceReconnect() {
+        val url = lastUrl ?: return
+        exoPlayer.stop()
+        exoPlayer.setMediaItem(MediaItem.fromUri(url))
+        exoPlayer.prepare()
     }
 
     private var backgroundRecoveryJob: Job? = null
@@ -532,7 +560,7 @@ class PlayerController(
             while (true) {
                 delay(45_000)
                 Log.d(TAG, "backgroundRecoveryRetry firing")
-                exoPlayer.prepare()
+                forceReconnect()
             }
         }
     }
@@ -580,6 +608,13 @@ class PlayerController(
                     }
                     lastObservedPositionMs = position
                 } else {
+                    // Safety net for STATE_ENDED specifically, alongside the immediate reaction
+                    // in onPlaybackStateChanged above - covers the case where a single prepare()
+                    // doesn't cleanly clear ENDED (e.g. it lands right back in ENDED with no real
+                    // BUFFERING/READY cycle in between, which wouldn't re-fire that callback).
+                    if (exoPlayer.playbackState == Player.STATE_ENDED) {
+                        onStallDetected()
+                    }
                     lastObservedPositionMs = position
                 }
             }

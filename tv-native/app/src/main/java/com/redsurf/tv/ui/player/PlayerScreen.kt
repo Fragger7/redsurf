@@ -1266,8 +1266,12 @@ private fun VideoInfoOverlay(
         streamInfo.audioChannels?.let { "Audio channels" to it },
         streamInfo.audioBitrateBps?.let { "Audio bitrate" to formatBitrate(it) },
     )
-    val networkRows = listOfNotNull(
-        networkStats.bitrateEstimateBps?.let { "Network speed" to formatBitrate(it) },
+    // Network speed always present, like Buffer (user request, 2026-09-18) - a deliberate
+    // exception to this screen's own "omit, never a placeholder" rule elsewhere: the row itself
+    // being unpredictably there-or-not read as broken, and "Calculating…" while the first real
+    // sample lands is more honest than the row vanishing.
+    val networkRows = listOf(
+        "Network speed" to (networkStats.bitrateEstimateBps?.let { formatBitrate(it) } ?: "Calculating…"),
         "Buffer" to "${networkStats.bufferedMs / 1000}s (${networkStats.bufferedPercentage}%)",
     )
     // Server host only, deliberately - not the full stream URL (it embeds the provider password,
