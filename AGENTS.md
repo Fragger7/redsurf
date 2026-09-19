@@ -336,6 +336,26 @@ before the report comes in, not after.
 
 ## Backlog - explicitly logged, not forgotten
 
+- **"Teleport Menu" - a RedSurf-original quick-navigation overlay, toggle-able in Settings** - user
+  idea, 2026-09-18 ("shower thought," explicitly floated for feedback, not yet committed to
+  building). Long-press Back (once the "Teleport Menu" setting is on - default behavior stays the
+  TiviMate-parity fullscreen-jump/nav-strip-jump already built, see the long-press-Back entry
+  below) opens an overlay - working title "Teleport to..." - with a mastermind-style quick-jump
+  list: Nav-Strip, Playlist Root, Playlist Favorites, Root Category (the common prefix across
+  related categories, e.g. every "US -" group), Root Channel Group (the category the currently-
+  playing channel belongs to), Return to fullscreen, Exit RedSurf. Also wants a distinctive launch
+  animation ("a portal opening," on-brand) rather than a plain overlay fade.
+  **Assessed, not started - real prerequisites, not just menu entries:**
+  - *Playlist Favorites* needs an actual favorites view to jump to - today a channel can be marked
+    favorite (decision 12's context menu) but nothing in the app displays/filters by favorites yet.
+  - *Root Category* needs new logic - there's no modeled "category family" today, just naming
+    convention (e.g. "US - ABC" / "US - NFL" happen to share a "US -" prefix in the provider's own
+    strings); this would need a real prefix-parse-and-match step, not a lookup that already exists.
+  - *Root Channel Group* is the cheapest of the five destinations - `currentChannel.groupName` is
+    already real data.
+  - The portal-open animation is its own design pass, not a quick add.
+  **Recommendation on record:** worth building, but as its own dedicated sprint once the
+  prerequisites above are scoped - not a bolt-on to whatever else is in flight when it comes up.
 - **Provider Intelligence (unsupervised playlist fingerprinting, no brand names)** - user request,
   2026-09-17, explicitly low priority ("not a whole useful of a feature right now") - logged, not
   scheduled. Origin: the user wanted to identify which real-world IPTV reseller brand (e.g.
