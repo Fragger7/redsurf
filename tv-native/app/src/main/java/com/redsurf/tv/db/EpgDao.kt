@@ -10,9 +10,30 @@ interface EpgDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPrograms(programs: List<EpgProgramEntity>)
 
-    @Query("DELETE FROM epg_programs")
-    suspend fun clearAll()
+    // PHASE_3.md decision 1: scoped to one playlist, not the whole table - EpgSyncWorker runs
+    // per playlist now (decision 2), and a global clearAll() here would wipe every OTHER
+    // playlist's EPG data every time just one playlist re-syncs.
+    @Query("DELETE FROM epg_programs WHERE playlistId = :playlistId")
+    suspend fun clearForPlaylist(playlistId: String)
 
-    @Query("SELECT * FROM epg_programs WHERE channelEpgId = :channelId AND endTime >= :currentTime ORDER BY startTime ASC")
-    suspend fun getProgramsForChannel(channelId: String, currentTime: Long): List<EpgProgramEntity>
+    @Query(
+        "SELECT * FROM epg_programs WHERE playlistId = :playlistId AND channelEpgId = :channelId " +
+            "AND endTime >= :currentTime ORDER BY startTime ASC"
+    )
+    suspend fun getProgramsForChannel(playlistId: String, channelId: String, currentTime: Long): List<EpgProgramEntity>
+
+    /** The Guide grid's own query (PHASE_3.md decision 4) - every channel row visible in the
+     * currently-composed window, one query instead of one per channel. Bounded to the grid's
+     * rolling window (`windowStart`/`windowEnd`) so this never scales with how much EPG history
+     * a provider's feed happens to carry. */
+    @Query(
+        "SELECT * FROM epg_programs WHERE playlistId = :playlistId AND channelEpgId IN (:channelIds) " +
+            "AND endTime >= :windowStart AND startTime <= :windowEnd ORDER BY channelEpgId, startTime ASC"
+    )
+    suspend fun getProgramsForChannels(
+        playlistId: String,
+        channelIds: List<String>,
+        windowStart: Long,
+        windowEnd: Long,
+    ): List<EpgProgramEntity>
 }

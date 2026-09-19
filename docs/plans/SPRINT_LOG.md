@@ -2,6 +2,40 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-19 (evening) — Phase 3 P0 (EPG + Guide): code complete, sweep blocked mid-run
+
+Full account: `docs/plans/PHASE_3.md`'s "Sweep status" section - summarized here per the sprint
+skill's own Blocked-section requirement.
+
+**Built:** all of P0.1-P0.5 - `EpgProgramEntity`/`EpgDao` playlist-scoped, per-playlist
+`EpgSyncWorker`/`EpgSyncScheduler` (real `WorkManager` enqueue, the worker previously existed but
+was never scheduled anywhere), the Guide grid itself (`EpgGridColumn.kt`, new file) with a
+coordinator-requested visual-polish pass (static crescent "LIVE" glyph reusing `WaveSpinner`'s own
+brush, a brand-anchored `ic_mark` header, a cheap one-shot fade+rise entrance), grid key handling,
+and both nav entry points (`NavStrip`'s Guide pill, the player's "Guide" quick-action) wired to the
+real screen. `compileDebugKotlin` clean, 15/15 unit tests pass (result XML confirmed).
+
+**deviated: found and fixed a real data-loss bug mid-sweep.** The original migration used
+`fallbackToDestructiveMigration()` for the v8→v9 bump, reasoning "the one table that changed never
+held real data" - true, but destructive migration wipes the *entire* database, not just that
+table, and silently deleted the device's real playlist on install. Replaced with a real
+`MIGRATION_8_9` scoped to just `epg_programs`. Root-caused live via targeted logging on a debug
+build (one `-PversionCode=999` debug install, per the sprint protocol's own local-debugging
+carve-out - not counted against the release-cut cap). The device's playlist is gone as a result of
+the bug firing once before the fix landed.
+
+**Blocked: the device dropped off wireless ADB entirely mid-sweep**, after one real release build
+(v0.34.0, versionCode 119) had already installed and been confirmed running. `adb devices` shows
+`offline`; `adb mdns services` finds nothing. This is a deeper disconnect than "asleep" (already
+established elsewhere in this project as not a blocker on its own) - recovering needs a fresh
+pairing code read off the TV's own screen, which needs a person. Tried: `kill-server`/
+`start-server`, `disconnect`+`connect`, repeated `mdns services` over several minutes. Stopping
+here per the Blocked section rather than burning the window on further retries.
+
+**Not pushed to `main`.** Everything is committed locally. Resuming needs: the device reconnected
+(human re-pairing), the test playlist re-seeded, then the actual machine-verifiable sweep run
+against a real device before this can be called done and a release cut.
+
 ## 2026-09-19 (later same day) — Teleport Menu real-device feedback: most rows don't work
 
 Not a build session - the user tested v0.33.0 live on the real remote the same day it shipped.

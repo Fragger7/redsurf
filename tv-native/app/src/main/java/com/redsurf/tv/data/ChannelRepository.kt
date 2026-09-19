@@ -5,6 +5,8 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import com.redsurf.tv.db.ChannelDao
 import com.redsurf.tv.db.ChannelEntity
+import com.redsurf.tv.db.EpgDao
+import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.db.GroupCount
 import com.redsurf.tv.db.PlaylistDao
 import com.redsurf.tv.db.PlaylistEntity
@@ -21,6 +23,7 @@ class ChannelRepository(
     private val channelDao: ChannelDao,
     private val playlistDao: PlaylistDao,
     private val recentChannelDao: RecentChannelDao,
+    private val epgDao: EpgDao,
 ) {
     fun playlists(): Flow<List<PlaylistEntity>> = playlistDao.getAllPlaylists()
 
@@ -100,4 +103,19 @@ class ChannelRepository(
 
     suspend fun setHidden(playlistId: String, streamId: String, isHidden: Boolean) =
         channelDao.updateHidden(playlistId, streamId, isHidden)
+
+    /** PHASE_3.md decision 4 - the Guide grid's channel rows, non-paged (see
+     * `ChannelDao.allInGroup`'s own doc comment for why this is bounded per-category, not a
+     * return to loading a whole playlist into memory). */
+    suspend fun channelsInGroup(playlistId: String, groupName: String): List<ChannelEntity> =
+        channelDao.allInGroup(playlistId, groupName)
+
+    /** PHASE_3.md decision 4 - one batch EPG fetch for every channel row currently on screen,
+     * bounded to the grid's own rolling time window. */
+    suspend fun programsForChannels(
+        playlistId: String,
+        channelIds: List<String>,
+        windowStart: Long,
+        windowEnd: Long,
+    ): List<EpgProgramEntity> = epgDao.getProgramsForChannels(playlistId, channelIds, windowStart, windowEnd)
 }

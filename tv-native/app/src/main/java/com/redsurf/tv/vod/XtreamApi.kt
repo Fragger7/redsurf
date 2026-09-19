@@ -38,7 +38,18 @@ data class XtreamLiveStream(
  * M3U parsing is for Live TV. VOD requires hitting the actual Xtream Codes JSON API.
  */
 object XtreamApi {
-    
+
+    /** Every Xtream-imported channel's `streamId` already IS its full playback URL
+     * (`.../live/user/pass/id.ts`, see [XtreamUserInfo]'s own doc comment) - this pulls
+     * server/user/pass back out of it. Shared by the Connections badge (`PlayerScreen.kt`) and
+     * `PHASE_3.md`'s per-playlist EPG sync (`EpgSyncWorker.kt`), rather than each re-deriving
+     * credentials its own way. */
+    fun parseXtreamCredentials(streamUrl: String): Triple<String, String, String>? {
+        val match = Regex("^(https?://[^/]+)/live/([^/]+)/([^/]+)/").find(streamUrl) ?: return null
+        val (server, user, pass) = match.destructured
+        return Triple(server, user, pass)
+    }
+
     // Feature 2: Fetching Categories (Live, VOD, Series)
     suspend fun getCategories(serverUrl: String, user: String, pass: String, type: String, userAgent: String? = null): List<XtreamCategory> = withContext(Dispatchers.IO) {
         val action = when (type) {

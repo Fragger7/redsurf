@@ -118,12 +118,65 @@ don't block a first working version:
 
 | # | Task | State |
 |---|---|---|
-| P0.1 | `EpgProgramEntity`/`EpgDao` fix - `playlistId` scoping, migration | ⬜ not started |
-| P0.2 | Per-playlist EPG sync: URL resolution, `WorkManager` scheduling (periodic + on-add) | ⬜ not started |
-| P0.3 | Guide screen: grid layout, channel rows, programme cells, "now" line | ⬜ not started |
-| P0.4 | Grid key handling (decision 5), OK-on-current tunes, OK-on-future info card | ⬜ not started |
-| P0.5 | Wire `NavStrip` Guide pill + player's "Guide" button to the real screen | ⬜ not started |
-| **A** | **Checkpoint - user tests the guide on the real playlist** | ⬜ |
+| P0.1 | `EpgProgramEntity`/`EpgDao` fix - `playlistId` scoping, migration | ✅ built, compiles, real `MIGRATION_8_9` (see below) |
+| P0.2 | Per-playlist EPG sync: URL resolution, `WorkManager` scheduling (periodic + on-add) | ✅ built, compiles - not yet observed actually syncing real data on-device (blocked, see below) |
+| P0.3 | Guide screen: grid layout, channel rows, programme cells, "now" line | ✅ built, compiles - visual polish pass added (see below); not yet seen rendering real data on-device |
+| P0.4 | Grid key handling (decision 5), OK-on-current tunes, OK-on-future info card | ✅ built, compiles - not yet exercised on-device |
+| P0.5 | Wire `NavStrip` Guide pill + player's "Guide" button to the real screen | ✅ built, compiles - not yet exercised on-device |
+| **A** | **Checkpoint - user tests the guide on the real playlist** | ❌ blocked - device went unreachable mid-sweep, see "Sweep status" below |
+
+## Sweep status (2026-09-19) - code complete, device verification blocked
+
+**Everything above is "builds clean" and "tests pass" (15/15, confirmed via result XML) - nothing
+above is yet "verified on device" per this project's own one rule.** The sweep was under way (one
+real release build, v0.34.0/versionCode 119, installed successfully and confirmed running) when
+the Chromecast dropped off wireless ADB entirely - `adb devices` shows the last known transport as
+`offline`, and `adb mdns services` finds nothing to reconnect to. That combination (not just
+asleep - `WORKFLOW.md` already established this device stays reachable while asleep) means the
+wireless-debugging session itself ended, which needs a fresh pairing code read off the TV's own
+screen to recover - not something fixable by retrying `adb connect`. Tried: `kill-server`/
+`start-server`, `disconnect`+`connect` on the last known port, repeated `mdns services` discovery
+spaced over several minutes. Per the sprint skill's own "Blocked" section, not burning further
+window retrying past that.
+
+**A real, important bug was found and fixed during the part of the sweep that did run**, before
+the disconnect: the original v9 migration used `fallbackToDestructiveMigration()`, reasoning that
+`epg_programs` (the only table whose schema changed) had never held real data. True for that one
+table, but destructive migration drops and recreates the **entire** database, not just the changed
+table - it silently wiped the device's real playlist the moment the build installed. This is
+exactly the "playlist vanished after an update" bug class `RedSurfDatabase.kt`'s own v8 migration
+comment already says the user reported once before. Caught via the backfill scheduling logging
+zero playlists right after install, root-caused, and fixed with a real `MIGRATION_8_9` that only
+touches `epg_programs` (full account in `RedSurfDatabase.kt`'s own updated doc comment). The
+device's playlist is gone as a result - a re-seed is needed before the sweep can resume, in
+addition to reconnecting.
+
+**Coordinator guidance incorporated (2026-09-19, mid-sweep):** pushed harder on the Guide grid's
+visual quality than decision 4's plain-functional spec, per explicit direction ("jaw-dropping,
+lightning-fast, most usable UX," don't ship bare-functional if a cheap on-brand treatment exists).
+Added, all reusing established precedent rather than inventing a new style:
+- **A "LIVE" glyph** on each row's currently-airing cell - the exact same crescent arc/gradient
+  brush as `WaveSpinner`, held static (no rotation - "nothing animates at rest," the same rule
+  `TELEPORT_MENU.md` already established), replacing a plain "NOW" text badge.
+- **A brand-anchored header** - `ic_mark` at 24dp beside the "Guide" label, the same static-mark
+  pattern Teleport Menu's own header already established, instead of bare text.
+- **A cheap one-shot entrance** - fade + 24dp rise, ~220ms, one `Animatable` driving one
+  `graphicsLayer`, fired once per Guide-mode entry (not per category switch, not per row - no
+  staggering, no infinite transition). Same cost bracket as every other motion in this app.
+Decision 3 (Live TV/Guide as one consolidated screen) was reconfirmed by the user as settled - no
+change made, just noted as no longer an open question.
+**Explicitly not touched, per direct instruction:** no embedded-video channel preview - today's
+single-OK-jumps-to-fullscreen behavior in `openChannel` (`LiveTvScreen.kt`) is unchanged. That's
+real, separate engineering (a second decoder or surface-swapping, new OK semantics) already once
+deliberately descoped (see this file's own class doc comment history) - it's a dedicated follow-up
+sprint once P0 actually lands, not part of this one.
+
+**What's needed to finish:** (1) the device reconnected - needs a human to read a fresh pairing
+code off the TV screen, (2) the test playlist re-seeded (`scripts/tv-test.sh`'s `seed_playlist`),
+(3) the actual machine-verifiable sweep run against the still-installed-but-unverified v0.34.0
+build (or a fresh one if more changes land first). Not pushed to `main` / no CI release cut yet -
+that's tied to a completed, verified sweep per this project's own workflow, and this one isn't
+that yet. All code is committed locally so nothing here is at risk of being lost.
 
 ## Acceptance - machine-verifiable
 

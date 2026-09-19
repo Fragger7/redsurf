@@ -13,6 +13,7 @@ import com.redsurf.tv.parser.M3uParser
 import com.redsurf.tv.vod.StalkerApi
 import com.redsurf.tv.vod.XtreamApi
 import com.redsurf.tv.server.PairingServer
+import com.redsurf.tv.sync.EpgSyncScheduler
 import com.redsurf.tv.updater.UpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -140,7 +141,7 @@ class MainViewModel : ViewModel() {
     fun setDatabase(db: RedSurfDatabase, context: Context) {
         localDb = db
         appContext = context.applicationContext
-        repository = ChannelRepository(db.channelDao(), db.playlistDao(), db.recentChannelDao())
+        repository = ChannelRepository(db.channelDao(), db.playlistDao(), db.recentChannelDao(), db.epgDao())
         checkLocalCache(context)
     }
 
@@ -170,6 +171,12 @@ class MainViewModel : ViewModel() {
                 // Any pending "add playlist" snapshot is stale now that a load actually
                 // succeeded - the fresh Loaded state below already includes the new playlist.
                 stateBeforeAddingPlaylist = null
+                // PHASE_3.md decision 2 - cold-launch backfill for playlists added before this
+                // phase shipped (or any session where the one-time enqueue in loadXtreamCodes
+                // never got the chance to run). enqueueUniquePeriodicWork(KEEP) is a safe no-op
+                // for a playlist that's already scheduled, so this costs nothing on every other
+                // launch - it's the only way a playlist added in an older build ever gets EPG.
+                ctx?.let { c -> playlists.filter { it.type == "xtream" }.forEach { EpgSyncScheduler.schedulePeriodic(c, it.id) } }
                 withContext(Dispatchers.Main) {
                     _state.value = AppState.Loaded(playlists, pId)
                 }
@@ -271,6 +278,9 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             localDb?.channelDao()?.deleteChannelsByPlaylist(playlistId)
             localDb?.playlistDao()?.deletePlaylist(playlistId)
+            // An orphaned periodic sync would keep firing forever for a playlist that no longer
+            // exists (PHASE_3.md decision 2).
+            appContext?.let { EpgSyncScheduler.cancel(it, playlistId) }
             if (currentPlaylistId == playlistId) currentPlaylistId = null
             withContext(Dispatchers.Main) { checkLocalCache() }
         }
@@ -322,6 +332,14 @@ class MainViewModel : ViewModel() {
                 }
 
                 currentPlaylistId = playlistId
+                // PHASE_3.md decision 2 - schedule this playlist's own EPG sync now that its
+                // channels (and therefore a real channel URL to pull credentials from,
+                // EpgSyncWorker's own requirement) exist. The one-shot sync fires immediately so
+                // the Guide isn't empty for up to a day waiting on the periodic schedule.
+                appContext?.let { ctx ->
+                    EpgSyncScheduler.schedulePeriodic(ctx, playlistId)
+                    EpgSyncScheduler.syncNow(ctx, playlistId)
+                }
                 checkLocalCache()
             } catch (e: Exception) {
                 _state.value = AppState.Error(e.message ?: "Failed to load Xtream playlist")

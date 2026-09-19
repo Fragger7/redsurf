@@ -61,9 +61,17 @@ data class ChannelEntity(
     val isFavorite: Boolean = false
 )
 
-@Entity(tableName = "epg_programs")
+// PHASE_3.md decision 1 - playlistId scoping, the same cross-playlist collision fix already
+// applied to ChannelEntity (BACKLOG_SWEEP.md #13) and RecentChannelEntity (PHASE_2.md decision
+// 14): a raw epgChannelId is only unique within one provider's own XMLTV feed, so two playlists
+// can legitimately collide on the same id. Destructive migration - no live users.
+@Entity(
+    tableName = "epg_programs",
+    primaryKeys = ["playlistId", "channelEpgId", "startTime"],
+    indices = [Index(value = ["playlistId", "channelEpgId"])],
+)
 data class EpgProgramEntity(
-    @PrimaryKey val id: String, // channelId-startTime
+    val playlistId: String,
     val channelEpgId: String,
     val title: String,
     val description: String,

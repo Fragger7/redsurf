@@ -41,6 +41,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.db.ChannelEntity
+import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.ui.player.PlayerScreen
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.RedSurfType
@@ -132,6 +133,14 @@ fun LiveTvScreen(
     // ordinary focus change during normal browsing, repeatedly stealing focus back mid-session.
     claimInitialFocusTrigger: Boolean = false,
     onClaimInitialFocusTriggerConsumed: () -> Unit = {},
+    // PHASE_3.md decision 3 - Live TV and Guide are the same screen with two entry points, not
+    // two separate implementations. Recomputed fresh from AppShell's `destination` on every call
+    // (not remembered here), so switching between the two nav pills while already on this screen
+    // just follows the new value like any other parameter change.
+    guideMode: Boolean = false,
+    // PHASE_3.md P0.5 - lets AppShell switch `destination` to Guide when the player's own "Guide"
+    // quick-action fires, in addition to this screen exiting fullscreen locally the normal way.
+    onOpenGuideFromPlayer: () -> Unit = {},
 ) {
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     // PLAYER_ENGINEERING_BRIEF.md §6/§9 - resolved here, reactively, well before any fullscreen
@@ -165,6 +174,18 @@ fun LiveTvScreen(
     // Debounced: a D-pad flying down the list must not start a stream per row it passes over.
     // Only the channel the user rests on for 500ms actually loads.
     var previewUrl by remember { mutableStateOf<String?>(null) }
+
+    // Shared by the plain channel list's onChannelOpen and the Guide grid's onTuneChannel
+    // (PHASE_3.md P0.3/P0.5) - both are "a deliberate open, not a fly-by," so both bypass the
+    // 500ms browse-debounce below and set previewUrl on this same frame, same reasoning the two
+    // call sites already independently had before this was pulled into one place.
+    fun openChannel(channel: ChannelEntity) {
+        onFocusedChannelChanged(channel)
+        previewUrl = channel.streamId
+        recordRecent(channel)
+        isFullscreen = true
+        onFullscreenChanged(true)
+    }
 
     // Auto-play last channel on launch, the trigger's actual effect - see the parameter doc
     // above for why this reacts to the dedicated trigger, not to focusedChannel itself. By the
@@ -213,12 +234,53 @@ fun LiveTvScreen(
         }
     }
 
+    // PHASE_3.md P0.3 - the Guide grid's own data, fetched only in guideMode (the plain channel
+    // list already has its own paged source above and doesn't need this). Non-paged and debounced
+    // the same 200ms as queriedGroup, for the same reason - a fast D-pad flight through Categories
+    // shouldn't fire one grid query per row flown over.
+    var gridChannels by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
+    var gridPrograms by remember { mutableStateOf<Map<String, List<EpgProgramEntity>>>(emptyMap()) }
+    LaunchedEffect(queriedGroup, guideMode) {
+        val group = queriedGroup
+        if (!guideMode || group == null) {
+            gridChannels = emptyList()
+            gridPrograms = emptyMap()
+            return@LaunchedEffect
+        }
+        val channelsInGroup = viewModel.repository.channelsInGroup(group.playlistId, group.groupName)
+        gridChannels = channelsInGroup
+        val epgIds = channelsInGroup.mapNotNull { it.epgChannelId?.takeIf { id -> id.isNotBlank() } }.distinct()
+        gridPrograms = if (epgIds.isEmpty()) {
+            emptyMap()
+        } else {
+            val now = System.currentTimeMillis()
+            viewModel.repository.programsForChannels(group.playlistId, epgIds, now, now + 6 * 3_600_000L)
+                .groupBy { it.channelEpgId }
+        }
+    }
+
     // Back-while-fullscreen moved into PlayerScreen itself (PHASE_2.md #2.1b) - it now owns real
     // overlay state to peel through first (decision 4), not just "exit fullscreen" in one step.
     // onExitFullscreen below is what PlayerScreen calls once nothing is left to peel.
 
     val fullscreenFocus = remember { FocusRequester() }
     val channelReturnFocus = remember { FocusRequester() }
+    // PHASE_3.md P0.3/decision 3 - the grid's own entry point. Coarser than channelReturnFocus on
+    // purpose for this first pass: it always lands on the grid's first row rather than the exact
+    // channel just watched (the grid has no per-channel return-focus tracking yet, unlike the list
+    // view's long-established one) - a real, logged scope trim, not a silent gap. What matters
+    // per this project's own state/focus discipline rule is that this never falls through to
+    // nothing and lets focus land on the NavStrip by accident; landing one row off is a much
+    // smaller miss than that.
+    val gridFocus = remember { FocusRequester() }
+    LaunchedEffect(guideMode, gridChannels) {
+        if (guideMode && gridChannels.isNotEmpty()) {
+            repeat(10) {
+                delay(150)
+                if (runCatching { gridFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+            }
+        }
+    }
     LaunchedEffect(isFullscreen) {
         if (isFullscreen) {
             // User-found bug, 2026-09-18: "Auto-play last channel on launch" jumps straight into
@@ -238,7 +300,7 @@ fun LiveTvScreen(
             }
         } else if (focusedChannel != null) {
             delay(100)
-            runCatching { channelReturnFocus.requestFocus() }
+            runCatching { (if (guideMode) gridFocus else channelReturnFocus).requestFocus() }
         }
     }
 
@@ -310,44 +372,47 @@ fun LiveTvScreen(
             )
 
             val currentGroup = queriedGroup
-            if (currentGroup != null) {
-                val channelsFlow = remember(currentGroup) {
-                    viewModel.repository.liveChannels(currentGroup.playlistId, currentGroup.groupName)
-                        .cachedIn(viewModel.viewModelScope)
-                }
-                val pagedChannels = channelsFlow.collectAsLazyPagingItems()
-                val groupInfo = groups.firstOrNull { it.key() == currentGroup }
-                val multiplePlaylists = remember(groups) { groups.map { it.playlistId }.distinct().size > 1 }
-                val groupTitle = groupInfo?.let {
-                    val name = formatGroupName(it.groupName)
-                    if (multiplePlaylists) "${it.playlistName} › $name" else name
-                } ?: ""
-
-                ChannelsColumn(
-                    groupTitle = groupTitle,
-                    groupCount = groupInfo?.count ?: 0,
-                    channels = pagedChannels,
-                    focusedChannelId = focusedChannel?.streamId,
-                    onChannelFocused = { onFocusedChannelChanged(it) },
-                    returnFocusRequester = channelReturnFocus,
+            if (guideMode) {
+                // PHASE_3.md decision 3/P0.3 - the grid replaces ChannelsColumn+PreviewStub
+                // entirely rather than sitting alongside them; combined weight matches their
+                // former 1.2 + 1.05 so the overall column proportions are unchanged.
+                EpgGridColumn(
+                    channels = gridChannels,
+                    programsByChannel = gridPrograms,
+                    onTuneChannel = { channel -> openChannel(channel) },
+                    firstCellFocusRequester = gridFocus,
                     onFocusStateChanged = { channelsHasFocus = it },
-                    onChannelOpen = { channel ->
-                        onFocusedChannelChanged(channel)
-                        // Bypass the 500ms browse-debounce above: opening is a deliberate action,
-                        // not a D-pad fly-by, so PlayerHost must get the URL on this same frame.
-                        // Without this, isFullscreen flips true immediately but previewUrl (what
-                        // PlayerHost actually plays) only catches up after the debounce delay,
-                        // which read to the user as a "duplicate 2-step" to get a channel playing.
-                        previewUrl = channel.streamId
-                        recordRecent(channel)
-                        isFullscreen = true
-                        onFullscreenChanged(true)
-                    },
-                    modifier = Modifier.weight(1.2f),
+                    modifier = Modifier.weight(2.25f),
                 )
-            }
+            } else {
+                if (currentGroup != null) {
+                    val channelsFlow = remember(currentGroup) {
+                        viewModel.repository.liveChannels(currentGroup.playlistId, currentGroup.groupName)
+                            .cachedIn(viewModel.viewModelScope)
+                    }
+                    val pagedChannels = channelsFlow.collectAsLazyPagingItems()
+                    val groupInfo = groups.firstOrNull { it.key() == currentGroup }
+                    val multiplePlaylists = remember(groups) { groups.map { it.playlistId }.distinct().size > 1 }
+                    val groupTitle = groupInfo?.let {
+                        val name = formatGroupName(it.groupName)
+                        if (multiplePlaylists) "${it.playlistName} › $name" else name
+                    } ?: ""
 
-            PreviewStub(channel = focusedChannel, modifier = Modifier.weight(1.05f))
+                    ChannelsColumn(
+                        groupTitle = groupTitle,
+                        groupCount = groupInfo?.count ?: 0,
+                        channels = pagedChannels,
+                        focusedChannelId = focusedChannel?.streamId,
+                        onChannelFocused = { onFocusedChannelChanged(it) },
+                        returnFocusRequester = channelReturnFocus,
+                        onFocusStateChanged = { channelsHasFocus = it },
+                        onChannelOpen = { channel -> openChannel(channel) },
+                        modifier = Modifier.weight(1.2f),
+                    )
+                }
+
+                PreviewStub(channel = focusedChannel, modifier = Modifier.weight(1.05f))
+            }
         }
 
         if (isFullscreen) {
@@ -367,6 +432,11 @@ fun LiveTvScreen(
                 onExitFullscreen = {
                     isFullscreen = false
                     onFullscreenChanged(false)
+                },
+                onOpenGuide = {
+                    isFullscreen = false
+                    onFullscreenChanged(false)
+                    onOpenGuideFromPlayer()
                 },
                 currentChannel = focusedChannel,
                 repository = viewModel.repository,

@@ -317,7 +317,9 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             // One call site, always reached when destination == LiveTv, regardless of
             // liveTvFullscreen - see the class doc above for why that matters.
             when {
-                destination == NavDestination.LiveTv && activePlaylistId != null ->
+                // PHASE_3.md decision 3 - Live TV and Guide are one screen, two entry points.
+                // `guideMode` is the only thing that differs between them.
+                (destination == NavDestination.LiveTv || destination == NavDestination.Guide) && activePlaylistId != null ->
                     LiveTvScreen(
                         viewModel = viewModel,
                         onFullscreenChanged = { liveTvFullscreen = it },
@@ -332,9 +334,13 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
                         claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,
                         onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
+                        guideMode = destination == NavDestination.Guide,
+                        onOpenGuideFromPlayer = { destination = NavDestination.Guide },
                     )
                 destination == NavDestination.LiveTv ->
                     PlaceholderScreen("Live TV", "No active playlist")
+                destination == NavDestination.Guide ->
+                    PlaceholderScreen("Guide", "No active playlist")
                 destination == NavDestination.Settings -> {
                     val updateStatus by viewModel.updateStatus.collectAsState()
                     val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())

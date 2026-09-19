@@ -25,7 +25,11 @@ object XmlTvParser {
 
     private const val BATCH_SIZE = 1000
 
-    suspend fun parseAndInsert(inputStream: InputStream, epgDao: EpgDao) = withContext(Dispatchers.IO) {
+    /** [playlistId] stamps every row (PHASE_3.md decision 1) so two playlists whose providers
+     * happen to reuse the same `channel` id in their own XMLTV feeds never collide. Returns the
+     * real inserted count - `EpgSyncWorker` logs it so a sweep can assert real data landed,
+     * not just that the worker ran without throwing. */
+    suspend fun parseAndInsert(inputStream: InputStream, epgDao: EpgDao, playlistId: String): Int = withContext(Dispatchers.IO) {
         val programsBatch = mutableListOf<EpgProgramEntity>()
         var insertedCount = 0
 
@@ -61,7 +65,7 @@ object XmlTvParser {
                         if (name == "programme" && currentChannelId.isNotEmpty()) {
                             programsBatch.add(
                                 EpgProgramEntity(
-                                    id = "$currentChannelId-$currentStart",
+                                    playlistId = playlistId,
                                     channelEpgId = currentChannelId,
                                     title = currentTitle,
                                     description = currentDesc,
@@ -89,8 +93,8 @@ object XmlTvParser {
                 epgDao.insertPrograms(programsBatch)
                 insertedCount += programsBatch.size
             }
-            Log.d("XmlTvParser", "Successfully parsed and inserted $insertedCount EPG programs.")
-
+            Log.d("XmlTvParser", "Successfully parsed and inserted $insertedCount EPG programs for playlist $playlistId.")
+            insertedCount
         } catch (e: Exception) {
             Log.e("XmlTvParser", "Fatal error during EPG parsing", e)
             throw e

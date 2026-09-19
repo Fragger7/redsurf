@@ -128,6 +128,11 @@ fun PlayerScreen(
     streamUrl: String?,
     focusRequester: FocusRequester,
     onExitFullscreen: () -> Unit,
+    // PHASE_3.md P0.5 - the "Guide" quick-action (used to just alias onExitFullscreen, a
+    // placeholder from before a real Guide screen existed) now exits fullscreen AND tells AppShell
+    // to switch to the Guide nav destination. Defaults to onExitFullscreen so any other caller
+    // that doesn't care about Guide keeps today's behavior unchanged.
+    onOpenGuide: () -> Unit = onExitFullscreen,
     currentChannel: ChannelEntity?,
     repository: ChannelRepository,
     onChannelChanged: (ChannelEntity) -> Unit,
@@ -195,7 +200,7 @@ fun PlayerScreen(
         while (true) {
             val playlist = repository.getPlaylist(ch.playlistId)
             providerConnections = if (playlist?.type == "xtream") {
-                val (server, user, pass) = parseXtreamCredentials(ch.streamId) ?: Triple(null, null, null)
+                val (server, user, pass) = XtreamApi.parseXtreamCredentials(ch.streamId) ?: Triple(null, null, null)
                 if (server != null && user != null && pass != null) {
                     val info = XtreamApi.getUserInfo(server, user, pass, playlist.userAgent)
                     if (info?.activeConnections != null && info.maxConnections != null) {
@@ -625,7 +630,7 @@ fun PlayerScreen(
                             PlayerOverlay.Controls.Floor.Tiles -> TileRow(
                                 recentChannels = recentChannels,
                                 initialFocus = tilesFloorFocus,
-                                onOpenGuide = onExitFullscreen,
+                                onOpenGuide = onOpenGuide,
                                 onOpenHistory = { overlay = PlayerOverlay.Picker(PickerKind.History) },
                                 onOpenChannel = { channel ->
                                     onChannelChanged(channel)
@@ -1216,12 +1221,6 @@ private fun formatBitrate(bps: Int): String = formatBitrate(bps.toLong())
  * Null for anything that doesn't match (M3U/Stalker channels have no fixed shape here - correctly
  * skipped, not guessed at).
  */
-private fun parseXtreamCredentials(streamUrl: String): Triple<String, String, String>? {
-    val match = Regex("^(https?://[^/]+)/live/([^/]+)/([^/]+)/").find(streamUrl) ?: return null
-    val (server, user, pass) = match.destructured
-    return Triple(server, user, pass)
-}
-
 /**
  * Decision 9/10's Video info screen, redesigned full-screen 2026-09-17 per direct user feedback
  * on the first pass ("that tiny box in the bottom right... think about the VLC player when it's
@@ -1249,7 +1248,7 @@ private fun VideoInfoOverlay(
         val ch = channel ?: return@LaunchedEffect
         val playlist = repository.getPlaylist(ch.playlistId) ?: return@LaunchedEffect
         if (playlist.type != "xtream") return@LaunchedEffect
-        val (server, user, pass) = parseXtreamCredentials(ch.streamId) ?: return@LaunchedEffect
+        val (server, user, pass) = XtreamApi.parseXtreamCredentials(ch.streamId) ?: return@LaunchedEffect
         providerInfo = XtreamApi.getUserInfo(server, user, pass, playlist.userAgent)
     }
 
@@ -1278,7 +1277,7 @@ private fun VideoInfoOverlay(
     // and this is an on-screen overlay, not a copy-to-clipboard field; showing it plaintext isn't
     // worth the exposure for what it'd add here).
     val providerRows = buildList {
-        parseXtreamCredentials(channel?.streamId ?: "")?.first?.let { add("Server" to it.removePrefix("https://").removePrefix("http://")) }
+        XtreamApi.parseXtreamCredentials(channel?.streamId ?: "")?.first?.let { add("Server" to it.removePrefix("https://").removePrefix("http://")) }
         providerInfo?.let { info ->
             if (info.activeConnections != null && info.maxConnections != null) {
                 add("Connections" to "${info.activeConnections}/${info.maxConnections}")

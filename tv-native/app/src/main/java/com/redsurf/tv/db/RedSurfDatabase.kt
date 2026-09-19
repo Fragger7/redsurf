@@ -98,6 +98,28 @@ interface ChannelDao {
     )
     suspend fun lastInGroup(playlistId: String, groupName: String): ChannelEntity?
 
+    /** PHASE_3.md decision 2 - any live channel belonging to this playlist, group-agnostic.
+     * `EpgSyncWorker` uses this to pull real server/user/pass back out of a channel's own
+     * `streamId` (`XtreamApi.parseXtreamCredentials`) rather than this app persisting the
+     * password a second time anywhere - same reasoning as the Connections badge. */
+    @Query(
+        "SELECT * FROM channels WHERE playlistId = :playlistId AND streamType = 'live' " +
+            "AND isHidden = 0 LIMIT 1"
+    )
+    suspend fun firstForPlaylist(playlistId: String): ChannelEntity?
+
+    /** PHASE_3.md decision 4 - the Guide grid's own channel rows for one category, non-paged
+     * (unlike [getLiveChannelsInGroup]): the grid needs every channel's `epgChannelId` up front
+     * to batch-query [EpgDao.getProgramsForChannels] in one call rather than one query per row as
+     * Paging pages load. Real categories in this app's own test data top out in the low hundreds
+     * (`SPRINT_LOG.md`), so loading one category's full row list is bounded, not a return to the
+     * whole-playlist-in-memory pattern `HARDWARE.md` forbids. */
+    @Query(
+        "SELECT * FROM channels WHERE playlistId = :playlistId AND groupName = :groupName " +
+            "AND streamType = 'live' AND isHidden = 0 ORDER BY num, name"
+    )
+    suspend fun allInGroup(playlistId: String, groupName: String): List<ChannelEntity>
+
     /** Zap-order diagnostics (AGENTS.md, 2026-09-14 mini-sprint) - the same order/filter as
      * [getLiveChannelsInGroup] and the zap neighbour queries above, capped, so a debug build can
      * log "what the app thinks this group's sequence actually is" without loading the whole
@@ -218,7 +240,7 @@ interface PlaylistDao {
     PlaylistEntity::class,
     ChannelGroupEntity::class,
     RecentChannelEntity::class,
-], version = 8, exportSchema = false)
+], version = 9, exportSchema = false)
 // v6: added the (playlistId, streamType, groupName) index (PHASE_1.md #2b).
 // v7: ChannelEntity's primary key is now composite (playlistId, streamId) - see EpgEntities.kt's
 // doc comment on ChannelEntity (BACKLOG_SWEEP.md #13). Destructive migration was acceptable then -
@@ -227,6 +249,17 @@ interface PlaylistDao {
 // decision 14 is explicit about why: real playlists exist now (unlike v7's migration), and "the
 // playlist vanished after an update" is a bug the user has already reported once. See
 // MIGRATION_7_8 below.
+// v9: EpgProgramEntity's primary key is now composite (playlistId, channelEpgId, startTime) -
+// PHASE_3.md decision 1, the same collision class as v7's ChannelEntity fix. A REAL migration
+// (MIGRATION_8_9), not destructive - caught live during this same phase's own device sweep:
+// `fallbackToDestructiveMigration()` drops and recreates the WHOLE database, not just the one
+// table whose schema actually changed, which silently wiped the device's real playlist the moment
+// this build installed over v8. Exactly the "playlist vanished after an update" bug v8's own
+// migration comment above already says the user reported once - reintroduced here by the same
+// wrong reasoning ("this table never had real data" is true of epg_programs specifically, but
+// destructive migration doesn't scope itself to one table). `epg_programs` itself genuinely never
+// held real data (EpgSyncWorker was never scheduled before this phase), so a plain drop+recreate
+// of just that table is safe and sufficient - no data-preserving copy needed, unlike MIGRATION_7_8.
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao
@@ -252,6 +285,27 @@ abstract class RedSurfDatabase : RoomDatabase() {
             }
         }
 
+        /** `epg_programs` only, dropped and recreated - see the v9 doc comment above for why this
+         * is a real (if simple) migration rather than `fallbackToDestructiveMigration()`. Safe to
+         * plain-drop here specifically because this table has never held real data (unlike
+         * MIGRATION_7_8, which had to preserve it) - every other table is untouched. */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `epg_programs`")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `epg_programs` (" +
+                        "`playlistId` TEXT NOT NULL, `channelEpgId` TEXT NOT NULL, " +
+                        "`title` TEXT NOT NULL, `description` TEXT NOT NULL, " +
+                        "`startTime` INTEGER NOT NULL, `endTime` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`playlistId`, `channelEpgId`, `startTime`))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_epg_programs_playlistId_channelEpgId` " +
+                        "ON `epg_programs` (`playlistId`, `channelEpgId`)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): RedSurfDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -259,7 +313,7 @@ abstract class RedSurfDatabase : RoomDatabase() {
                     RedSurfDatabase::class.java,
                     "redsurf_tv_database"
                 )
-                    .addMigrations(MIGRATION_7_8)
+                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9)
                     // Still the fallback for any *other* version jump this app doesn't carry an
                     // explicit migration for (e.g. a real install predating v6) - decision 14's
                     // protection is specifically for this release's own upgrade path (v7 -> v8),
