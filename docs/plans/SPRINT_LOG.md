@@ -2,6 +2,30 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-19 (later same day) — Teleport Menu real-device feedback: most rows don't work
+
+Not a build session - the user tested v0.33.0 live on the real remote the same day it shipped.
+No code touched tonight; full detail folded into `docs/plans/TELEPORT_MENU.md`'s new "User
+feedback after real device testing" section and `AGENTS.md`'s Teleport Menu entries. Summary:
+
+- **Portal animation lands well** - user's own words, "the portal effect works well and it's
+  nicely done." Two refinements requested for next session: slow the open/close slightly; add a
+  cheap animated treatment to the panel's outline while open (performance over aesthetics).
+- **Most rows don't actually work** - direct contradiction of this same build's own
+  `uiautomator`/logcat-based sweep, which had claimed Nav-Strip/Playlist Root/Root
+  Category/Return to fullscreen all device-verified. User's real remote: only Exit RedSurf
+  worked. "Even 'Nav-Strip' does not work" - the simplest of the five real rows. Needs a real
+  debugging session next time, with the user's own remote in hand rather than synthetic
+  `adb`-driven verification alone - the gap between "the trigger fired" and "it looked right" is
+  exactly the failure mode this project's "don't claim it works because the code looks plausible"
+  rule exists to catch, and it slipped through here.
+- **Root Category can't be independently re-checked right now** - the "Random Strong" test
+  playlist used to verify it during the build has since been deleted by the user. Needs a working
+  playlist re-added, and the original pitch examples re-grounded against it, before this row can
+  be trusted again.
+- **Explicitly deferred, not being worked tonight** - user is done for the session; this is a
+  clean stopping point with everything written down for a cold start next time.
+
 ## 2026-09-19 — Teleport Menu built (T.1-T.4), device-verified, v0.33.0
 
 Full brief and account: `docs/plans/TELEPORT_MENU.md`. Built T.1-T.4 of the brief in one pass -

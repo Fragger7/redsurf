@@ -176,10 +176,10 @@ scenario and still not connect it to the other.)**
 |---|---|---|
 | T.1 | Settings toggle + grey-row plumbing for the two unbuilt destinations | ✅ done & device-verified |
 | T.2 | Menu overlay: layout, focus, key handling, portal open/close animation | ✅ done & device-verified |
-| T.3 | Five real destinations (Nav-Strip, Playlist Root, Root Channel Group, Return to fullscreen, Exit) | ✅ done - Nav-Strip/Playlist Root/Return to fullscreen device-verified; Root Channel Group/Exit RedSurf built on the same proven code paths, not independently exercised live (see below) |
-| T.4 | Root Category prefix-parsing - built for real this sprint, not left grey (pulled forward per the Non-goals section's own "only if cheap once this sprint is already touching the relevant code" carve-out - it was) | ✅ done & device-verified against real messy provider data |
+| T.3 | Five real destinations (Nav-Strip, Playlist Root, Root Channel Group, Return to fullscreen, Exit) | ⚠️ built; build-time sweep claimed device-verified, but the user's real-remote testing found only Exit RedSurf actually working (see "User feedback after real device testing" below) - needs real debugging next session, not just re-confirmation |
+| T.4 | Root Category prefix-parsing - built for real this sprint, not left grey (pulled forward per the Non-goals section's own "only if cheap once this sprint is already touching the relevant code" carve-out - it was) | ⚠️ built & build-time-verified; independent re-confirmation blocked - the test playlist was deleted before the user could retest, see note below |
 | T.5 | Discoverability tips (both named triggers, plus whatever else the brainstorm adds) | ⬜ not started - deferred, see note below |
-| **A** | **Checkpoint - user tests the menu on the real list** | ⬜ ready for the user |
+| **A** | **Checkpoint - user tests the menu on the real list** | ❌ failed - most rows non-functional for the user; portal animation itself passed with two refinement requests |
 
 **T.5 deferred, not forgotten.** Built T.1-T.4 (the mechanism itself) this pass; the two named
 discoverability triggers plus further brainstorming are real remaining work, explicitly called out
@@ -235,6 +235,64 @@ result XML, not just exit code), real `assembleRelease -PversionName=v0.33.0 -Pv
 (matching the next real CI run number) signed with the project's real keystore (fingerprint
 `1b13f1d9…d2510d8a`, matches every prior release), installed and confirmed running on-device before
 push.
+
+## User feedback after real device testing (2026-09-19) - work deferred to next session
+
+The user tested this build live on the real remote (not synthetic `adb` key injection) the same
+day it shipped. **Explicitly not building tonight - this section is notes for next session, not
+a live bug report to chase right now.**
+
+**1. Portal animation - lands well.** Direct quote: "the portal effect works well and it's nicely
+done." Two refinements requested, both to be judged for feel next session, not spec'd to an exact
+number tonight:
+   - **A. Slow the open and close down slightly** - "just a fraction" - so it reads as something
+     to be enjoyed rather than blown past. Decision 5's ~260ms open / ~180ms close are a starting
+     point to nudge up, not a locked spec.
+   - **B. While the panel is open, add a cheap, low-cost animated treatment on its outline** to
+     keep the eye engaged without materially increasing cost - the user's own framing: "like it's
+     a selected rail," or "something moving on the rails of the modal outline, looping back to the
+     starting point." Explicitly: **favor performance over complete aesthetics** - be creative on
+     the exact mechanism next session (a single animated highlight segment travelling the rim on a
+     slow loop, reusing the existing static `Accent` rim as its base, is one direction worth
+     exploring - not a locked decision).
+
+**2. Serious discrepancy - most rows do not actually work for the user, contradicting the
+"Live-verified end to end" section above.** Direct quotes: "Even 'Nav-Strip' does not work, unless
+this is expected?" and "it feels real, but it's mostly inert and the working items don't jump
+correctly" - **only Exit RedSurf worked** for the user. This is a direct contradiction of this same
+document's own claims (Nav-Strip initial-focus, Playlist Root, Root Category, and Return to
+fullscreen were all logged above as confirmed via `uiautomator`/logcat during the build). Possible
+explanations, none confirmed - **next session needs to re-verify with the user's own remote in
+hand, not rely on the prior `adb`-driven sweep alone**:
+   - The prior sweep's `uiautomator`/logcat checks may have confirmed the *trigger* fired (e.g. a
+     log line) without confirming the *visible* outcome the user actually sees - a gap between
+     "the code path ran" and "it looked right," which this project's own "never claim something
+     works because you wrote plausible code" rule exists to catch.
+   - Real remote long-press timing (physical button, human hand) may differ meaningfully from the
+     synthetic `adb shell input keyevent --longpress KEYCODE_BACK` used during the build sweep, in
+     a way that changes which row actually receives the resulting action.
+   - Device/app state may have shifted between the build sweep and the user's session (see Root
+     Category note below) in a way that changed what a given row's target resolution actually
+     found.
+
+   **User's own request:** review the original examples given when Teleport Menu was first pitched
+   (decision 3's own text already carries these - "US - ABC, US - NBC, US - FOX, US - NFL" etc.)
+   to make sure the built behavior actually matches intent, rather than re-guessing from scratch;
+   ask the user for fresh anchor examples against a real current playlist if the existing ones
+   aren't enough to pin down expected behavior for a given row.
+
+**3. Root Category - the playlist used to verify it live is gone.** The user deleted the "Random
+Strong" playlist (added earlier this session specifically as backup test data) - user's own words:
+"not sure how you can test Root Category... you can't really test that option in the playlist
+categories, as-stated." This casts real doubt on independently re-confirming the "VIP | CHRISTMAS"
+→ "VIP | 4 GOLDEN RELAX" result claimed above without either finding equivalent structure in a
+playlist that still exists, or the user re-adding a suitable playlist and walking through the
+original examples live next session.
+
+**Net effect on the status board below: treat every "✅ device-verified" line for T.3 as
+unconfirmed pending real re-testing next session** - not retracted (the sweep genuinely happened
+and genuinely logged what it logged), but not to be relied on either until it matches what the
+user sees with the actual remote.
 
 ## Acceptance - machine-verifiable
 

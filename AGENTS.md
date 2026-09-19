@@ -91,10 +91,14 @@ merging.
   sprint (Phase 2 #2.3 Actions row, #2.4, #2.5) → EPG + Guide (Phase 3) → **Cloud Sync** →
   VOD/Series. **Phase 2 is fully closed, 2026-09-19** (`PHASE_2.md`'s "2.6 - closed" entry - #2.6's
   zap-latency and memory items both explicitly waived by user decision, everything else confirmed).
-  **"Teleport Menu" - no longer inserted-but-pending: built and device-verified, 2026-09-19**
-  (see Backlog entry and `docs/plans/TELEPORT_MENU.md`'s "What actually happened" for the full
-  account). T.1-T.4 done; T.5 (discoverability tips) deferred, not forgotten - needs the user's own
-  gut-check on a tuning number more than more code. Phase 3 (EPG + Guide) is next.
+  **"Teleport Menu" - built, but NOT device-verified: real user testing on 2026-09-19 found most
+  rows non-functional** (only Exit RedSurf worked; the portal animation itself landed well with
+  two refinement requests) - contradicts the build sweep's own `uiautomator`/logcat-based claims,
+  see `docs/plans/TELEPORT_MENU.md`'s "User feedback after real device testing" section for the
+  full account and next-session plan. T.1-T.4 built, T.3 needs real debugging (not just
+  re-confirmation), T.4 needs a working test playlist re-added before it can be independently
+  re-checked. T.5 (discoverability tips) still deferred. **Teleport Menu is not closed - it blocks
+  Phase 3 start until the real rows actually work on the real remote.**
   Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud
@@ -340,7 +344,8 @@ before the report comes in, not after.
 ## Backlog - explicitly logged, not forgotten
 
 - **"Teleport Menu" - a RedSurf-original quick-navigation overlay, toggle-able in Settings** -
-  **no longer backlog: built and device-verified, 2026-09-19.** Full brief and build account:
+  **built, but real-remote user testing (2026-09-19) found most of it doesn't actually work -
+  needs a real debugging session, not just polish.** Full brief and build account:
   `docs/plans/TELEPORT_MENU.md`. Origin: user idea, 2026-09-18 ("shower thought"). Long-press Back
   (once the "Teleport Menu" setting is on under Settings → Remote control, default off - the
   default behavior stays the TiviMate-parity fullscreen-jump/nav-strip-jump, see the long-press-
@@ -348,13 +353,22 @@ before the report comes in, not after.
   Root, Playlist Favorites, Root Category, Root Channel Group, Return to fullscreen, Exit RedSurf.
   Visual treatment ("The Curl" - the reveal mask is the brand mark's own crescent, closing shut into
   a disc then stretching into the panel, riding `WaveSpinner`'s own arc) came from an Opus design
-  consultation, 2026-09-19 - full spec in the brief.
+  consultation, 2026-09-19 - full spec in the brief. **The portal animation itself works and reads
+  well to the user** - two refinements requested (slow the open/close slightly; add a cheap
+  animated treatment to the panel's outline while open, favoring performance over aesthetics -
+  "like it's a selected rail" was the user's own framing) - but only Exit RedSurf actually
+  navigated correctly for the user; Nav-Strip, Playlist Root, Root Category, Root Channel Group,
+  and Return to fullscreen all need real debugging with the user's own remote next session, not a
+  re-run of the automated sweep that originally (and wrongly) called them verified.
   - *Playlist Favorites* - still grey (`SETTINGS.md`'s established pattern), permanently until a
     real favorites view exists to jump to.
   - *Root Category* - built for real this pass, not left grey: prefix-parsing on the earliest of
-    `-`/`|`/`•`/`:` in a category's raw name, scoped to the same playlist, live-verified against
-    real messy provider category names (not just synthetic examples).
-  - *Root Channel Group*, *Return to fullscreen*, *Exit RedSurf* - all real.
+    `-`/`|`/`•`/`:` in a category's raw name, scoped to the same playlist. Claimed live-verified
+    during the build, but the test playlist ("Random Strong") was deleted before the user could
+    independently re-check it - needs a working test playlist re-added, and the user's original
+    pitch examples re-grounded against it, before this can be trusted.
+  - *Root Channel Group*, *Return to fullscreen*, *Exit RedSurf* - Exit confirmed working by the
+    user; the other two need real re-verification (see above).
   - **Discoverability tips - deferred, T.5 in the brief's status board.** The mechanism itself is
     done; contextual tips (surfacing a hint at the moment Teleport Menu would genuinely help, not
     just a one-time dismissible one) are real remaining work, not chased this pass. Two triggers
