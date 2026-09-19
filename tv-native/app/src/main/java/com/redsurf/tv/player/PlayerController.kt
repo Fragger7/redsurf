@@ -11,13 +11,15 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.BehindLiveWindowException
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -62,9 +64,12 @@ data class StreamInfo(
 /**
  * Live network/buffer state for decision 9's Video info screen (redesigned full-screen 2026-09-17,
  * user request - "some live network data like speed, buffer size or time"). [bitrateEstimateBps]
- * comes from ExoPlayer's own [DefaultBandwidthMeter] (§7's shared client isn't this - this measures
- * the *media* connection's actual observed throughput, not a client config value) - null until it
- * has seen enough traffic to estimate, same "omit, don't placeholder" rule as [StreamInfo].
+ * is measured directly (raw bytes transferred per 2s window, see `PlayerController`'s own
+ * `transferListener`), not via `DefaultBandwidthMeter`'s built-in estimate - that estimate only
+ * finalizes a sample on transfer-end, which never happens for a live IPTV stream's one continuous
+ * connection, so it froze at whatever the initial connection produced (found live, 2026-09-18,
+ * user report: "sticks to when the channel is changed"). Null until the first 2s window completes,
+ * same "omit, don't placeholder" rule as [StreamInfo].
  */
 data class NetworkStats(
     val bufferedMs: Long = 0,
@@ -137,11 +142,25 @@ class PlayerController(
 
     private val trackManager = TrackManager(context)
 
-    // Video info screen's "network speed" (decision 9, redesigned 2026-09-17) - a real handle on
-    // the estimate ExoPlayer's media data source is already computing internally by default, just
-    // never previously kept. Passed into the builder below via `setBandwidthMeter` so it measures
-    // this player's actual media traffic, not a second unused instance.
-    private val bandwidthMeter = DefaultBandwidthMeter.Builder(context).build()
+    // Video info screen's "network speed" (decision 9, redesigned 2026-09-17, fixed 2026-09-18 -
+    // user found it "sticks to when the channel is changed and remains there," not dynamic like
+    // Buffer). Root cause: `DefaultBandwidthMeter`'s own sliding-window estimate only finalizes a
+    // sample on `onTransferEnd()` - fine for segmented HLS (each segment fetch is its own
+    // transfer), wrong for this app's live IPTV streams, which are one continuous, never-ending
+    // HTTP connection per channel. That transfer never "ends" until the next zap, so the estimate
+    // just freezes at whatever the initial connection ramp-up produced. Fixed by counting raw
+    // bytes myself via a `TransferListener` wired directly onto the data source (below) instead of
+    // depending on that estimate at all - `AtomicLong`, since `onBytesTransferred` fires on
+    // ExoPlayer's loading thread while [startNetworkStatsPoll] reads it from [scope].
+    private val bytesTransferredSinceLastSample = java.util.concurrent.atomic.AtomicLong(0)
+    private val transferListener = object : TransferListener {
+        override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
+        override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
+        override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
+            if (isNetwork) bytesTransferredSinceLastSample.addAndGet(bytesTransferred.toLong())
+        }
+        override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
+    }
 
     /**
      * §2.2 (renderer fallback) + §2.6 (TS extractor flag) + §3.1 (buffer byte ceiling) + §2.4
@@ -151,7 +170,7 @@ class PlayerController(
      * got the global one for its actual stream requests while its API requests got the right one).
      */
     val exoPlayer: ExoPlayer = run {
-        val dataSourceFactory = IptvNetworkModule.getDataSourceFactory(playlistUserAgent)
+        val dataSourceFactory = IptvNetworkModule.getDataSourceFactory(playlistUserAgent, transferListener)
 
         val extractorsFactory = DefaultExtractorsFactory()
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES)
@@ -184,7 +203,6 @@ class PlayerController(
             .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackManager.trackSelector)
             .setLoadControl(loadControl)
-            .setBandwidthMeter(bandwidthMeter)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -254,10 +272,14 @@ class PlayerController(
         scope.launch {
             while (true) {
                 delay(2_000)
+                val bytes = bytesTransferredSinceLastSample.getAndSet(0)
                 _networkStats.value = NetworkStats(
                     bufferedMs = exoPlayer.totalBufferedDuration,
                     bufferedPercentage = exoPlayer.bufferedPercentage,
-                    bitrateEstimateBps = bandwidthMeter.bitrateEstimate.takeIf { it > 0 },
+                    // bytes over this exact 2s window, in bits/sec - see [transferListener]'s own
+                    // doc comment for why this is measured directly instead of via a bandwidth
+                    // meter's estimate.
+                    bitrateEstimateBps = (bytes * 8 / 2).takeIf { it > 0 },
                 )
             }
         }
@@ -317,6 +339,7 @@ class PlayerController(
                 _firstFrameRenderedTick.value++
                 retryAttempt = 0
                 cancelStallWatchdog()
+                cancelBackgroundRecoveryRetry()
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -371,6 +394,7 @@ class PlayerController(
         retryAttempt = 0
         _errorPresentation.value = null
         cancelStallWatchdog()
+        cancelBackgroundRecoveryRetry() // a genuinely new channel - never keep retrying the old one
         lastObservedPositionMs = 0L // a fresh channel's position must not compare against the last one's
         exoPlayer.stop()
         exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
@@ -442,7 +466,18 @@ class PlayerController(
     }
 
     /** Shared give-up-after-two logic (§4.5), now fed by two independent detectors - see
-     * [positionWatchdogJob]'s own doc comment for why a second one exists. */
+     * [positionWatchdogJob]'s own doc comment for why a second one exists.
+     *
+     * User report, 2026-09-18: a channel "continued to get frozen, after buffer runs out" and
+     * stayed that way - couldn't be live-reproduced to root-cause directly (the specific playlist
+     * was gone by the next session), so this is a real, reasoned hardening rather than a fix for
+     * a confirmed mechanism. The one genuine gap in the logic as it stood: hitting the 2-strike
+     * limit stopped retrying *forever*, silently, even though "2 stalls within 60s" doesn't mean
+     * the connection is permanently dead - a provider-side hiccup that clears up 90s later would
+     * previously never get another chance without the user manually re-tuning. [stalled()] still
+     * fires immediately (accurate, honest feedback - this channel *is* having real trouble right
+     * now), but [armBackgroundRecoveryRetry] now keeps trying quietly at a slow, provider-friendly
+     * cadence underneath that message instead of truly giving up. */
     private fun onStallDetected() {
         val now = System.currentTimeMillis()
         if (now - stallWindowStartMs > 60_000) {
@@ -454,10 +489,38 @@ class PlayerController(
             "position=${exoPlayer.currentPosition} bufferedPct=${exoPlayer.bufferedPercentage}")
         if (stallCountInWindow >= 2) {
             _errorPresentation.value = PlayerErrorMapper.stalled()
+            armBackgroundRecoveryRetry()
         } else {
             _errorPresentation.value = PlayerErrorMapper.reconnecting()
             exoPlayer.prepare()
         }
+    }
+
+    private var backgroundRecoveryJob: Job? = null
+
+    /** See [onStallDetected]'s own doc comment for why this exists. 45s, not a tight loop - a
+     * provider with `max_connections: 1` (`IPTV_DOMAIN_KNOWLEDGE.md` §10) only has one socket to
+     * give; hammering `prepare()` on a channel that's genuinely still down burns that connection
+     * repeatedly for nothing, so this trades faster recovery for not making a real outage worse.
+     * Cancelled by [cancelBackgroundRecoveryRetry] the moment real recovery is observed (either
+     * `onRenderedFirstFrame` or the position watchdog's own recovery-clear, added last session)
+     * or a genuinely new channel is tuned - this must never keep retrying a channel the user has
+     * already left. */
+    private fun armBackgroundRecoveryRetry() {
+        if (backgroundRecoveryJob?.isActive == true) return
+        Log.d(TAG, "backgroundRecoveryRetry armed - will keep retrying quietly every 45s")
+        backgroundRecoveryJob = scope.launch {
+            while (true) {
+                delay(45_000)
+                Log.d(TAG, "backgroundRecoveryRetry firing")
+                exoPlayer.prepare()
+            }
+        }
+    }
+
+    private fun cancelBackgroundRecoveryRetry() {
+        backgroundRecoveryJob?.cancel()
+        backgroundRecoveryJob = null
     }
 
     /** See [positionWatchdogJob]'s own doc comment. Runs for this controller's whole lifetime
@@ -478,7 +541,7 @@ class PlayerController(
                 if (exoPlayer.playWhenReady && exoPlayer.playbackState == Player.STATE_READY) {
                     if (kotlin.math.abs(delta) < 500) {
                         onStallDetected()
-                    } else if (_errorPresentation.value?.isTerminal == false) {
+                    } else if (_errorPresentation.value != null) {
                         // Real recovery, confirmed live 2026-09-17: after onStallDetected's
                         // prepare() call, position/buffer both came back healthy (advancing
                         // steadily, 100% buffered) but the "Reconnecting…" spinner never cleared
@@ -487,9 +550,14 @@ class PlayerController(
                         // video renderer specifically never signalled a new frame). The same
                         // signal that detects a stall (position advancing again) now also clears
                         // it, instead of depending solely on a callback that isn't reliable here.
+                        // Not gated to non-terminal any more (2026-09-18) - the background
+                        // recovery retry (see onStallDetected) can bring a *terminal* "stalled"
+                        // channel back too, and that recovery deserves clearing the message just
+                        // as much as an ordinary reconnect does.
                         Log.d(TAG, "positionWatchdog: position resumed advancing, clearing errorPresentation")
                         _errorPresentation.value = null
                         retryAttempt = 0
+                        cancelBackgroundRecoveryRetry()
                     }
                     lastObservedPositionMs = position
                 } else {
@@ -502,6 +570,7 @@ class PlayerController(
     fun release() {
         retryJob?.cancel()
         cancelStallWatchdog()
+        cancelBackgroundRecoveryRetry()
         positionWatchdogJob?.cancel()
         afrManager.restoreOriginalMode()
         exoPlayer.release()

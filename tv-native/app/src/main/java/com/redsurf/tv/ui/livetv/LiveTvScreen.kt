@@ -221,7 +221,21 @@ fun LiveTvScreen(
     val channelReturnFocus = remember { FocusRequester() }
     LaunchedEffect(isFullscreen) {
         if (isFullscreen) {
-            fullscreenFocus.requestFocus()
+            // User-found bug, 2026-09-18: "Auto-play last channel on launch" jumps straight into
+            // fullscreen with no browse-screen detour, and unlike every other focus-claim in this
+            // codebase, this one call had no `runCatching`/retry at all - on that fast cold-launch
+            // path, `PlayerScreen`'s root hadn't finished attaching this `FocusRequester` yet when
+            // this coroutine ran, the uncaught throw silently killed the effect, and nothing ever
+            // retried. Result: the player was genuinely alive (audio/video playing, confirmed via
+            // logcat - PlayerController's own watchdogs were ticking normally) but D-pad input had
+            // no focused node anywhere in the tree to reach, so *every* key was a silent no-op -
+            // the app looked completely frozen despite playback being fine underneath. Same
+            // bounded retry shape as the cold-launch channel-focus fix (PHASE_2.md, 2026-09-17),
+            // since the exact same "racing first composition" reasoning applies here too.
+            repeat(20) {
+                delay(150)
+                if (runCatching { fullscreenFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+            }
         } else if (focusedChannel != null) {
             delay(100)
             runCatching { channelReturnFocus.requestFocus() }

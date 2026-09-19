@@ -167,6 +167,52 @@ fun PlayerScreen(
     val isBuffering by controller.isBuffering.collectAsState()
     val resizeMode by controller.resizeMode.collectAsState()
 
+    // Spinner shows only after a real delay, not immediately on every zap (user request,
+    // 2026-09-18: most zaps resolve in a second or two thanks to the last-frame-held zap trick, so
+    // an instant spinner would flash on almost every channel change for no reason - only a
+    // genuinely slow load should surface it). Hiding is immediate the moment buffering/retrying
+    // stops - only the *appearance* is delayed, never how fast it goes away.
+    var showBufferingSpinner by remember { mutableStateOf(false) }
+    val shouldBuffer = isBuffering || errorPresentation?.isRetrying == true
+    LaunchedEffect(shouldBuffer) {
+        if (shouldBuffer) {
+            delay(5_000)
+            showBufferingSpinner = true
+        } else {
+            showBufferingSpinner = false
+        }
+    }
+
+    // "Active connections" badge (user request, 2026-09-18) - the zap-banner's own info block,
+    // not the full Video info screen. Keyed on playlistId, not the channel - `active_cons`/
+    // `max_connections` are per-account, not per-channel, so refetching on every zap within the
+    // same playlist would spam the provider's API for no new information; this fetches once per
+    // playlist and refreshes periodically while that playlist stays current, same reasoning
+    // VideoInfoOverlay's own (per-open) fetch already established.
+    var providerConnections by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(currentChannel?.playlistId) {
+        val ch = currentChannel ?: return@LaunchedEffect
+        while (true) {
+            val playlist = repository.getPlaylist(ch.playlistId)
+            providerConnections = if (playlist?.type == "xtream") {
+                val (server, user, pass) = parseXtreamCredentials(ch.streamId) ?: Triple(null, null, null)
+                if (server != null && user != null && pass != null) {
+                    val info = XtreamApi.getUserInfo(server, user, pass, playlist.userAgent)
+                    if (info?.activeConnections != null && info.maxConnections != null) {
+                        "${info.activeConnections}/${info.maxConnections}"
+                    } else {
+                        null
+                    }
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+            delay(60_000)
+        }
+    }
+
     // Shared by Level 0's zap and the Controls elevator's ceiling/floor fallback below (user
     // decision, 2026-09-12, after comparing against real TiviMate behavior: TiviMate stops UP/DOWN
     // dead once its own player-controls step is also showing, but that step doesn't exist here yet
@@ -502,7 +548,7 @@ fun PlayerScreen(
                     }
                 }
             }
-        } else if (isBuffering || errorPresentation?.isRetrying == true) {
+        } else if (showBufferingSpinner) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     WaveSpinner()
@@ -569,6 +615,7 @@ fun PlayerScreen(
                         channel = currentChannel,
                         streamInfo = streamInfo,
                         showRawResolution = showRawResolution,
+                        providerConnections = providerConnections,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     val controlsOverlay = overlay as? PlayerOverlay.Controls
@@ -706,6 +753,7 @@ private fun ContextMenuPanel(
 ) {
     val scope = rememberCoroutineScope()
     var isFavorite by remember(channel.streamId) { mutableStateOf(channel.isFavorite) }
+    // Claims focus onto the "Add/Remove favourites" row the moment the long-press context menu opens.
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(50)
@@ -927,6 +975,7 @@ private fun ChannelTile(channel: ChannelEntity, onClick: () -> Unit, modifier: M
  */
 @Composable
 private fun HistoryPicker(channels: List<ChannelEntity>, onSelect: (ChannelEntity) -> Unit, modifier: Modifier = Modifier) {
+    // Claims focus onto the most-recently-watched row the moment this picker opens from the Tiles floor.
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(50)
@@ -1011,6 +1060,7 @@ private fun AudioPicker(controller: com.redsurf.tv.player.PlayerController, modi
             (0 until group.length).map { index -> Triple(group, index, group.isTrackSelected(index)) }
         }
     }
+    // Claims focus onto the first audio track row the moment this picker opens from the Actions floor.
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(50)
@@ -1078,6 +1128,7 @@ private fun SubtitlePicker(controller: com.redsurf.tv.player.PlayerController, m
         }
     }
     val offSelected = rows.none { it.third }
+    // Claims focus onto the "Off" row the moment this picker opens from the Actions floor.
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(50)
@@ -1277,6 +1328,7 @@ private fun PlayerInfoBlock(
     channel: ChannelEntity?,
     streamInfo: StreamInfo,
     showRawResolution: Boolean = false,
+    providerConnections: String? = null,
     modifier: Modifier = Modifier,
 ) {
     if (channel == null) return
@@ -1322,6 +1374,7 @@ private fun PlayerInfoBlock(
                 streamInfo.frameRate?.let { "$it FPS" },
                 streamInfo.audioChannels,
                 streamInfo.audioCodec,
+                providerConnections?.let { "Connections: $it" },
             )
             if (badges.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))

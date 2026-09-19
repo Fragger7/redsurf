@@ -2,6 +2,7 @@ package com.redsurf.tv.network
 
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import okhttp3.Dns
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -140,11 +141,16 @@ object IptvNetworkModule {
      * is threaded all the way from the playing channel's own playlist (§6/§9) - previously this
      * was called with no argument from the player, so a playlist configured with a custom
      * User-Agent got the *global* one for its actual stream requests while its API requests got
-     * the right one, a 403 waiting to happen on exactly the providers a custom UA was added for. */
-    fun getDataSourceFactory(playlistUserAgent: String? = null): HttpDataSource.Factory {
+     * the right one, a 403 waiting to happen on exactly the providers a custom UA was added for.
+     * [transferListener], when given, gets every raw `onBytesTransferred` call for this stream's
+     * connection - see `PlayerController`'s own doc comment on why it needs this instead of
+     * `DefaultBandwidthMeter`'s built-in estimate. */
+    fun getDataSourceFactory(playlistUserAgent: String? = null, transferListener: TransferListener? = null): HttpDataSource.Factory {
         val finalUserAgent = playlistUserAgent?.takeIf { it.isNotBlank() } ?: globalUserAgent
         // Use OkHttpDataSource so ExoPlayer uses our DoH enabled client
-        return OkHttpDataSource.Factory(getMediaOkHttpClient(playlistUserAgent))
+        val factory = OkHttpDataSource.Factory(getMediaOkHttpClient(playlistUserAgent))
             .setUserAgent(finalUserAgent)
+        if (transferListener != null) factory.setTransferListener(transferListener)
+        return factory
     }
 }
