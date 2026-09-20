@@ -105,6 +105,9 @@ fun SettingsScreen(
     // BACKLOG_SWEEP.md #10/#11/#12 - AppPreferences-backed, owned by AppShell.
     blackScreenBetweenZaps: Boolean,
     onToggleBlackScreenBetweenZaps: () -> Unit,
+    // PREVIEW.md, 2026-09-20 - same AppPreferences pattern as the row above.
+    previewOnSelect: Boolean,
+    onTogglePreviewOnSelect: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
     // AGENTS.md backlog, 2026-09-15 - same AppPreferences pattern as the two above.
@@ -215,6 +218,8 @@ fun SettingsScreen(
             onDeletePlaylist = onDeletePlaylist,
             blackScreenBetweenZaps = blackScreenBetweenZaps,
             onToggleBlackScreenBetweenZaps = onToggleBlackScreenBetweenZaps,
+            previewOnSelect = previewOnSelect,
+            onTogglePreviewOnSelect = onTogglePreviewOnSelect,
             showRawResolution = showRawResolution,
             onToggleShowRawResolution = onToggleShowRawResolution,
             autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
@@ -373,6 +378,9 @@ private fun SettingsPane(
     onDeletePlaylist: (String) -> Unit,
     blackScreenBetweenZaps: Boolean,
     onToggleBlackScreenBetweenZaps: () -> Unit,
+    // PREVIEW.md, 2026-09-20 - same AppPreferences pattern as the row above.
+    previewOnSelect: Boolean,
+    onTogglePreviewOnSelect: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
     autoPlayLastChannelOnLaunch: Boolean,
@@ -425,6 +433,8 @@ private fun SettingsPane(
                 SettingsCategory.Playback -> playbackContent(
                     blackScreenBetweenZaps = blackScreenBetweenZaps,
                     onToggle = onToggleBlackScreenBetweenZaps,
+                    previewOnSelect = previewOnSelect,
+                    onTogglePreviewOnSelect = onTogglePreviewOnSelect,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.Appearance -> appearanceContent(
@@ -683,6 +693,8 @@ private fun TvLazyListScope.generalContent(
 private fun TvLazyListScope.playbackContent(
     blackScreenBetweenZaps: Boolean,
     onToggle: () -> Unit,
+    previewOnSelect: Boolean,
+    onTogglePreviewOnSelect: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
@@ -691,6 +703,15 @@ private fun TvLazyListScope.playbackContent(
             value = if (blackScreenBetweenZaps) "On" else "Off",
             onClick = onToggle,
             modifier = Modifier.focusRequester(firstRowFocus),
+        )
+    }
+    item {
+        // docs/plans/PREVIEW.md, built 2026-09-20 - default on. Off restores the old single-OK-
+        // jumps-straight-to-fullscreen behavior exactly.
+        LiveRow(
+            label = "Preview channel on select",
+            value = if (previewOnSelect) "On" else "Off",
+            onClick = onTogglePreviewOnSelect,
         )
     }
     items(SETTINGS_GREY_ROWS[SettingsCategory.Playback].orEmpty()) { GreyRowContent(it) }

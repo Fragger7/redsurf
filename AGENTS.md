@@ -114,6 +114,14 @@ merging.
   finished downloading, so a populated programme cell was never actually seen rendering - the
   mechanism is confirmed genuinely working, just not seen through to a visible result). Pushed to
   `main`, real release cut. **Checkpoint A (user tests on the real playlist) is the next step.**
+  **Preview-on-OK - built and device-verified, 2026-09-20.** Brief: `docs/plans/PREVIEW.md`.
+  TiviMate-parity: a single OK on a focused channel now previews it for real (audio on, stays in
+  browse view) instead of jumping straight to fullscreen; a second OK on that same still-previewing
+  channel promotes it. Full account and live-verification detail (real `dumpsys audio` focus-holder
+  checks, not just log lines) in the brief itself. Settings → Playback gained "Preview channel on
+  select" (default on; off restores the old single-OK-to-fullscreen behavior exactly, verified both
+  ways). Not yet exercised: cold-launch auto-play's unchanged behavior (reasoned correct by
+  inspection, not re-tested via a disruptive relaunch this session).
   Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud

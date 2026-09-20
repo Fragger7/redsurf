@@ -54,6 +54,18 @@ class AppPreferences(context: Context) {
         _autoPlayLastChannelOnLaunch.value = enabled
     }
 
+    // Preview-on-OK (docs/plans/PREVIEW.md, built 2026-09-20) - default ON: this is the new
+    // TiviMate-parity default behavior (first OK previews in the browse view, second OK on the
+    // same channel fullscreens it). Off restores the old single-OK-jumps-straight-to-fullscreen
+    // behavior exactly, for anyone who'd rather not have the extra decoder/step.
+    private val _previewOnSelect = MutableStateFlow(prefs.getBoolean(KEY_PREVIEW_ON_SELECT, true))
+    val previewOnSelect: StateFlow<Boolean> = _previewOnSelect.asStateFlow()
+
+    fun setPreviewOnSelect(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_PREVIEW_ON_SELECT, enabled).apply()
+        _previewOnSelect.value = enabled
+    }
+
     // Teleport Menu (docs/plans/TELEPORT_MENU.md decision 1, built 2026-09-19) - default OFF:
     // long-press Back already has real, working, TiviMate-parity behavior (see AppShell.kt); this
     // opts a user into the fuller quick-jump menu instead of changing established behavior out
@@ -106,5 +118,6 @@ class AppPreferences(context: Context) {
         private const val KEY_LAST_STREAM_ID = "last_watched_stream_id"
         private const val KEY_PREFERRED_AUDIO_LANGUAGE = "preferred_audio_language"
         private const val KEY_TELEPORT_MENU_ENABLED = "teleport_menu_enabled"
+        private const val KEY_PREVIEW_ON_SELECT = "preview_on_select"
     }
 }

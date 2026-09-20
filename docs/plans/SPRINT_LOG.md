@@ -2,6 +2,47 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-20 — Preview-on-OK built and device-verified
+
+Full brief and account: `docs/plans/PREVIEW.md`. TiviMate parity: a single OK on a focused
+channel in Live TV's plain browse list now starts it playing for real in the preview column
+(audio on, stays in browse) instead of jumping straight to fullscreen; a second OK on that same
+still-previewing channel promotes it. OK on a different channel while one's already previewing
+swaps immediately, no backing out required. New file `player/PreviewPlayerHost.kt` - a second,
+deliberately minimal ExoPlayer instance for the preview area, mutually exclusive in time with the
+fullscreen controller (never both alive at once), no stall watchdog/reconnect ladder, silent
+fallback to the static stub on error. New Settings row, "Preview channel on select" under
+Playback, default on.
+
+**Verified live on the real device (Chromecast, real Xtream playlist), not just by log lines** -
+this project's own established gap from the last two sprints (Teleport Menu's discrepancy, Phase
+3's log-line-only claims) was deliberately avoided here by checking `dumpsys audio`'s live focus
+holder directly, which only shows a real value while a decoder is actually producing audio:
+- First OK: RedSurf genuinely held live `GAIN` audio focus, browse UI stayed fully composed.
+- Second OK (same channel): promoted to fullscreen (full-screen focus bounds), and a *new*
+  `AudioFocusListener` instance took over from the preview's - confirmed real release, not reuse.
+- OK on a different channel while one previewed: preview panel's channel name swapped immediately
+  (`GHANA - JOY PRIME SD` → `GHANA - 3ABN INTERNATIONAL HD` on one press).
+- Focus movement alone (no OK): preview kept playing the same channel; only the hint text changed.
+- Leaving Live TV for Settings: RedSurf dropped out of `dumpsys audio`'s live holder entirely.
+- Settings toggle: exists, defaults on, flipping off restored the exact old single-OK-to-
+  fullscreen behavior (verified both directions).
+
+**Not independently re-tested:** cold-launch auto-play's still-unchanged fullscreen jump -
+reasoned correct by code inspection (the only change in that path is a no-op `previewingChannel =
+null` assignment), not re-verified via a disruptive force-stop/relaunch cycle this session.
+
+**One bug caught before it ever reached the device:** a `previewFailed` state variable was
+originally declared inside a nested `Box` block but referenced again outside it in the hint-text
+logic - a real scoping error that failed to compile. Fixed by hoisting it to the composable's own
+top level before any device time was spent; also cleaned up a confusingly-named helper function
+in the same pass (it checked "is this the same channel," not what its original name implied).
+
+Build/test: `compileDebugKotlin` clean, 15/15 unit tests (result XML confirmed). Real signed
+release **v0.35.0** (versionCode 120), installed and confirmed running (`mResumed=true`, no
+crash) before push. Device data was wiped by the debug/release swap mid-sprint (expected, per
+protocol) - the test playlist needs re-seeding before the user's own hands-on testing.
+
 ## 2026-09-19 (evening, resumed) — Phase 3 P0: device reconnected, sweep substantially passed
 
 Follow-up to the entry directly below (same sprint, same session) - the device came back on its

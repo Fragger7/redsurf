@@ -142,6 +142,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val prefsContext = LocalContext.current
     val appPreferences = remember { AppPreferences(prefsContext) }
     val blackScreenBetweenZaps by appPreferences.blackScreenBetweenZaps.collectAsState()
+    val previewOnSelect by appPreferences.previewOnSelect.collectAsState()
     val showRawResolution by appPreferences.showRawResolution.collectAsState()
     val autoPlayLastChannelOnLaunch by appPreferences.autoPlayLastChannelOnLaunch.collectAsState()
     val teleportMenuEnabled by appPreferences.teleportMenuEnabled.collectAsState()
@@ -325,6 +326,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         onFullscreenChanged = { liveTvFullscreen = it },
                         onChannelsFocusChanged = { liveTvChannelsFocused = it },
                         blackScreenBetweenZaps = blackScreenBetweenZaps,
+                        previewOnSelect = previewOnSelect,
                         showRawResolution = showRawResolution,
                         selectedGroup = liveTvSelectedGroup,
                         onSelectedGroupChanged = { liveTvSelectedGroup = it },
@@ -357,6 +359,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         blackScreenBetweenZaps = blackScreenBetweenZaps,
                         onToggleBlackScreenBetweenZaps = {
                             appPreferences.setBlackScreenBetweenZaps(!blackScreenBetweenZaps)
+                        },
+                        previewOnSelect = previewOnSelect,
+                        onTogglePreviewOnSelect = {
+                            appPreferences.setPreviewOnSelect(!previewOnSelect)
                         },
                         showRawResolution = showRawResolution,
                         onToggleShowRawResolution = {

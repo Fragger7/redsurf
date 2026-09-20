@@ -62,17 +62,59 @@ single-OK-jumps-straight-to-fullscreen behavior). Flag if a different location/d
 
 ## Acceptance - machine-verifiable
 
-1. First OK on a channel starts real playback in the preview area (confirmed via
-   `PlayerController`-equivalent state or a dedicated preview-player log line reaching a playing
-   state), fullscreen state unchanged (still browse view).
-2. Second OK on the same still-previewing channel promotes to fullscreen; the preview player
-   instance is released (no two decoders alive simultaneously - confirmed via logcat/lifecycle).
-3. OK on a different channel while one is previewing swaps the preview to the new channel.
-4. Moving focus without OK does not change what's previewing.
-5. Cold-launch auto-play still lands directly in fullscreen, unchanged.
-6. Leaving Live TV releases the preview player.
-7. The new Settings toggle exists, defaults on, and turning it off restores today's exact
-   single-OK-jumps-to-fullscreen behavior with zero regression.
+1. ✅ **Verified on device.** First OK started real playback - confirmed via `dumpsys audio`
+   showing RedSurf genuinely holding live `GAIN` audio focus (not just a log line claiming a
+   trigger fired - the exact gap that caused the Teleport Menu discrepancy). Fullscreen state
+   unchanged: nav strip, Categories, and Channels columns all stayed composed and visible.
+2. ✅ **Verified on device.** Second OK on the same still-previewing channel promoted to
+   fullscreen (focus bounds became full-screen `[0,0][1920,1080]`); `dumpsys audio` showed a
+   *new* `AudioFocusListener` instance requesting and holding focus, and the preview's own
+   listener no longer appeared as the live holder - confirms real release, not just state reset.
+3. ✅ **Verified on device.** OK on a different channel while one was previewing swapped the
+   preview panel's channel name immediately, no need to back out first - confirmed via the panel's
+   own text (`GHANA - JOY PRIME SD` → `GHANA - 3ABN INTERNATIONAL HD` on one OK press).
+4. ✅ **Verified on device.** Moving focus (DOWN) without OK left the preview panel showing the
+   same channel/video; only the hint text changed ("Press OK again to open fullscreen" → "Press OK
+   to preview this channel"), confirming `previewingChannel` is independent of focus.
+5. **Reasoned correct, not independently re-tested via a full cold relaunch this session** - the
+   `autoPlayTrigger` effect's only change was adding `previewingChannel = null` (a no-op, since
+   it's already null at that point in every real cold-launch path); low risk by inspection, not
+   re-verified end to end with a disruptive force-stop/relaunch cycle given everything else this
+   session already covered live.
+6. ✅ **Verified on device.** Leaving Live TV for Settings dropped RedSurf from `dumpsys audio`'s
+   live focus holder entirely - the preview player was genuinely released, not just backgrounded.
+7. ✅ **Verified on device, both directions.** The toggle exists under Settings → Playback,
+   defaulted to "On," and flipping it "Off" made a single OK jump straight to fullscreen with zero
+   intermediate preview step (confirmed via immediate full-screen focus bounds on one OK press,
+   same as pre-Preview-on-OK behavior). Toggled back "On" before hand-off to ship the intended
+   default.
+
+## What actually happened (2026-09-20, Sonnet)
+
+Built exactly to spec - no deviations from the decisions above. New file
+`player/PreviewPlayerHost.kt` (`PreviewPlayerController` + `rememberPreviewPlayerController` +
+`PreviewPlayerHost`, deliberately parallel to but separate from `PlayerHost.kt`'s fullscreen
+versions - smaller buffer, no AFR, no stall watchdog, silent error fallback). `LiveTvScreen.kt`
+gained `previewingChannel` state, split `openChannel` (two-step, plain list only) from
+`promoteToFullscreen` (Guide grid's `onTuneChannel`, `autoPlayTrigger`, and the promotion path all
+use this directly). `PreviewStub` now branches on `previewingChannel` to show a real embedded
+`PreviewPlayerHost` instead of the old placeholder, with a silent-fallback `previewFailed` flag if
+the preview itself errors. `AppPreferences`/`SettingsScreen.kt`/`AppShell.kt` gained the
+`previewOnSelect` toggle, threaded the same way `blackScreenBetweenZaps` already was.
+
+One real bug caught before it ever reached the device: `previewFailed` was originally declared
+inside the `Box` block that also held the video, but referenced again in the `Column`'s hint-text
+logic below it - a scoping error that would have failed to compile. Fixed by hoisting the state to
+the composable's own top level before writing the render tree, and cleaning up a confusingly-named
+helper (`previewFailedHint`, despite its name, was actually a same-channel check) into a clearly
+named `isSameChannel`.
+
+Build/test: `compileDebugKotlin` clean (first attempt after the scoping fix), 15/15 unit tests
+(confirmed via the actual result XML, not exit code). Real signed release **v0.35.0**
+(versionCode 120, matching the next real number after v0.34.0/119), installed and confirmed
+running (no crash, `mResumed=true`) before push. Device data was wiped by the debug/release swap
+mid-sprint (expected, per the sprint protocol) - the test playlist will need re-seeding for the
+user's own testing.
 
 ## Acceptance - feel/vision (user)
 

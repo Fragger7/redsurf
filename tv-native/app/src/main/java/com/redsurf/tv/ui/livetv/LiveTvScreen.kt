@@ -42,6 +42,8 @@ import androidx.tv.material3.Text
 import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.EpgProgramEntity
+import com.redsurf.tv.player.PreviewPlayerHost
+import com.redsurf.tv.player.rememberPreviewPlayerController
 import com.redsurf.tv.ui.player.PlayerScreen
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.RedSurfType
@@ -101,6 +103,11 @@ fun LiveTvScreen(
     // use for either value itself, it's just the composable in between AppShell (which owns
     // AppPreferences) and PlayerScreen (which actually reads them).
     blackScreenBetweenZaps: Boolean = false,
+    // PREVIEW.md, 2026-09-20 - default true. When true, a single OK on a focused channel starts
+    // it playing for real in the preview column instead of jumping straight to fullscreen; a
+    // second OK on that same still-previewing channel promotes it. When false, restores the
+    // original single-OK-jumps-straight-to-fullscreen behavior exactly (see [openChannel] below).
+    previewOnSelect: Boolean = true,
     showRawResolution: Boolean = false,
     // Hoisted to AppShell (found live, 2026-09-15, user report) - same conditional-composition
     // trap SettingsScreen's own selectedCategory already had to escape: this composable is torn
@@ -175,16 +182,49 @@ fun LiveTvScreen(
     // Only the channel the user rests on for 500ms actually loads.
     var previewUrl by remember { mutableStateOf<String?>(null) }
 
-    // Shared by the plain channel list's onChannelOpen and the Guide grid's onTuneChannel
-    // (PHASE_3.md P0.3/P0.5) - both are "a deliberate open, not a fly-by," so both bypass the
-    // 500ms browse-debounce below and set previewUrl on this same frame, same reasoning the two
-    // call sites already independently had before this was pulled into one place.
-    fun openChannel(channel: ChannelEntity) {
+    // PREVIEW.md - the channel currently playing for real in the preview column (distinct from
+    // [focusedChannel], which just tracks where the D-pad is; this only changes on an explicit
+    // OK). Local `remember` state, not hoisted to AppShell like selectedGroup/focusedChannel are
+    // - deliberately: PREVIEW.md point 6 wants this to persist across category switches *within*
+    // Live TV but reset on leaving the screen entirely, which is exactly what plain `remember`
+    // state already does here (this whole composable is torn down and recomposed fresh on
+    // destination change - see the class doc above), no extra plumbing needed.
+    var previewingChannel by remember { mutableStateOf<ChannelEntity?>(null) }
+
+    // Guide grid's onTuneChannel and the autoPlayTrigger/claimInitialFocusTrigger paths all want
+    // "go straight to fullscreen," never the two-step preview - Guide mode has no preview column
+    // composed at all (PHASE_3.md decision 3/P0.3: the grid replaces ChannelsColumn+PreviewStub
+    // entirely), and auto-play/cold-launch-resume are "resume where I left off," not a fresh
+    // browse-and-select action (PREVIEW.md point 5).
+    fun promoteToFullscreen(channel: ChannelEntity) {
         onFocusedChannelChanged(channel)
         previewUrl = channel.streamId
         recordRecent(channel)
+        previewingChannel = null
         isFullscreen = true
         onFullscreenChanged(true)
+    }
+
+    // The plain channel list's own onChannelOpen (PHASE_3.md P0.3/P0.5's doc history: this used
+    // to also be shared by the Guide grid's onTuneChannel, no longer - see promoteToFullscreen
+    // above). PREVIEW.md's two-step: first OK previews and stays in browse; a second OK on that
+    // exact still-previewing channel promotes. OK on a *different* channel while one is already
+    // previewing swaps the preview immediately, never requiring a step back out first (PREVIEW.md
+    // point 3, confirmed user behavior, not a guess).
+    fun openChannel(channel: ChannelEntity) {
+        if (!previewOnSelect) {
+            promoteToFullscreen(channel)
+            return
+        }
+        val alreadyPreviewing = previewingChannel?.let {
+            it.playlistId == channel.playlistId && it.streamId == channel.streamId
+        } == true
+        if (alreadyPreviewing) {
+            promoteToFullscreen(channel)
+        } else {
+            onFocusedChannelChanged(channel)
+            previewingChannel = channel
+        }
     }
 
     // Auto-play last channel on launch, the trigger's actual effect - see the parameter doc
@@ -196,9 +236,13 @@ fun LiveTvScreen(
     LaunchedEffect(autoPlayTrigger) {
         if (autoPlayTrigger) {
             val channel = focusedChannel
+            // PREVIEW.md point 5 - resume-on-launch always goes straight to fullscreen, never
+            // through the two-step preview (onFocusedChannelChanged is skipped here on purpose:
+            // AppShell already set focusedChannel in the same coroutine as this trigger).
             if (channel != null) {
                 previewUrl = channel.streamId
                 recordRecent(channel)
+                previewingChannel = null
                 isFullscreen = true
                 onFullscreenChanged(true)
             }
@@ -379,7 +423,9 @@ fun LiveTvScreen(
                 EpgGridColumn(
                     channels = gridChannels,
                     programsByChannel = gridPrograms,
-                    onTuneChannel = { channel -> openChannel(channel) },
+                    // Straight to fullscreen, never the two-step preview - Guide mode has no
+                    // preview column composed at all (see promoteToFullscreen's own doc comment).
+                    onTuneChannel = { channel -> promoteToFullscreen(channel) },
                     firstCellFocusRequester = gridFocus,
                     onFocusStateChanged = { channelsHasFocus = it },
                     modifier = Modifier.weight(2.25f),
@@ -411,7 +457,14 @@ fun LiveTvScreen(
                     )
                 }
 
-                PreviewStub(channel = focusedChannel, modifier = Modifier.weight(1.05f))
+                PreviewStub(
+                    channel = focusedChannel,
+                    previewingChannel = previewingChannel,
+                    playlistUserAgent = remember(previewingChannel?.playlistId, playlists) {
+                        playlists.firstOrNull { it.id == previewingChannel?.playlistId }?.userAgent
+                    },
+                    modifier = Modifier.weight(1.05f),
+                )
             }
         }
 
@@ -471,16 +524,37 @@ fun LiveTvScreen(
     }
 }
 
+private fun isSameChannel(a: ChannelEntity?, b: ChannelEntity?): Boolean =
+    a != null && b != null && a.playlistId == b.playlistId && a.streamId == b.streamId
+
 /**
- * Right column: the preview card (references/streamvault/LiveTV.png) - a 16:9 thumbnail area
- * (the channel's initial until embedded live preview lands, see the scope note above), title,
+ * Right column: the preview card (references/streamvault/LiveTV.png) - a 16:9 area, title,
  * programme line, and an accent-coloured action hint, all inside one panel card. The header is
  * accent-coloured like the reference's, which is what visually ties this column to the focus
  * ring and the LIVE badge - the three places the brand red appears on this screen besides the
  * active nav pill.
+ *
+ * PREVIEW.md, 2026-09-20: the 16:9 area shows a real embedded player whenever [previewingChannel]
+ * is set (an explicit OK, not just D-pad focus - see [LiveTvScreen]'s own `openChannel`), falling
+ * back to the plain single-letter placeholder both when nothing's previewing and, silently, if
+ * the preview itself errors (no branded error panel here - that's for the fullscreen player; a
+ * preview is just a glance, PREVIEW.md's own "Technical approach" section).
  */
 @Composable
-private fun PreviewStub(channel: ChannelEntity?, modifier: Modifier = Modifier) {
+private fun PreviewStub(
+    channel: ChannelEntity?,
+    previewingChannel: ChannelEntity? = null,
+    playlistUserAgent: String? = null,
+    modifier: Modifier = Modifier,
+) {
+    // Scoped at this composable's own top level (not inside the Box below) so the hint text
+    // further down can read it too - re-armed per distinct previewing channel, so switching the
+    // preview to a different channel always gets a fresh attempt rather than staying stuck failed.
+    var previewFailed by remember(previewingChannel?.streamId, previewingChannel?.playlistId) {
+        mutableStateOf(false)
+    }
+    val showingRealPreview = previewingChannel != null && !previewFailed
+
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -501,12 +575,30 @@ private fun PreviewStub(channel: ChannelEntity?, modifier: Modifier = Modifier) 
                 .background(SurfaceRaised),
             contentAlignment = Alignment.Center,
         ) {
-            if (channel != null) {
+            if (showingRealPreview) {
+                val previewController = rememberPreviewPlayerController(playlistUserAgent)
+                val hasError by previewController.hasError.collectAsState()
+                LaunchedEffect(hasError) { if (hasError) previewFailed = true }
+                PreviewPlayerHost(
+                    controller = previewController,
+                    streamUrl = previewingChannel!!.streamId,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
+                )
+            } else if (channel != null) {
                 Text(
                     channel.name.take(1).uppercase(),
                     style = MaterialTheme.typography.displayMedium,
                     color = TextSecondary.copy(alpha = 0.5f),
                 )
+            } else {
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = TextSecondary.copy(alpha = 0.35f),
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+            if (showingRealPreview || channel != null) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -517,13 +609,6 @@ private fun PreviewStub(channel: ChannelEntity?, modifier: Modifier = Modifier) 
                 ) {
                     Text("LIVE", style = RedSurfType.badge, color = TextPrimary)
                 }
-            } else {
-                Icon(
-                    Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    tint = TextSecondary.copy(alpha = 0.35f),
-                    modifier = Modifier.size(40.dp),
-                )
             }
         }
 
@@ -539,7 +624,14 @@ private fun PreviewStub(channel: ChannelEntity?, modifier: Modifier = Modifier) 
             Spacer(modifier = Modifier.height(4.dp))
             Text("No schedule information", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Press OK again to open this channel", style = RedSurfType.rowSecondary, color = Accent)
+            // Same "is this the channel already previewing" check as openChannel's own promotion
+            // condition - the hint always names the action the next OK will actually take.
+            val hint = if (isSameChannel(previewingChannel, channel)) {
+                "Press OK again to open fullscreen"
+            } else {
+                "Press OK to preview this channel"
+            }
+            Text(hint, style = RedSurfType.rowSecondary, color = Accent)
         } else {
             Text("Focus a channel to preview it here", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
