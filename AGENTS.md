@@ -8,7 +8,7 @@ a Next.js web portal at the repo root.
 
 | Path | What it is |
 |---|---|
-| `docs/vision/PRODUCT_VISION.md` | **The product.** D-pad control matrix, "The Player IS The App", the cloud credential-locker model. Outranks everything else. |
+| `docs/vision/PRODUCT_VISION.md` | Early product framing - "The Player IS The App," the cloud credential-locker model. **Correction, user, 2026-09-20: this file is significantly older knowledge/decisions and no longer outranks anything.** Its D-pad control matrix in particular is stale (assumes a drawer-based nav RedSurf explicitly rejected 2026-09-11 in favor of the top-pill nav-strip; describes OK short-press as a Bottom HUD and long-press as a Context Menu, not this app's actual Back-peel/long-press-Back-jump model). **The dated decisions in this file (`AGENTS.md`) and the `docs/plans/*.md` briefs from roughly the last two weeks are the real source of truth** - read those first; treat this file as background color only, and verify against something more recent before trusting a specific claim in it. |
 | `docs/vision/UI_SPEC.md` | The design language: palette, focus model, screen layouts. |
 | `docs/vision/IPTV_DOMAIN_KNOWLEDGE.md` | Hard-won IPTV engineering knowledge. Read before touching parsing, networking or playback. |
 | `docs/plans/HARDWARE.md` | The target device's real, measured limits. |
