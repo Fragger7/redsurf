@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,12 +32,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,6 +46,7 @@ import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.TvLazyRow
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.R
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.EpgProgramEntity
@@ -67,26 +68,32 @@ private val PxPerMinute = 3.dp
 private val RowHeight = 64.dp
 private const val WINDOW_HOURS = 6L
 
+/** Fixed width of each row's leading number+logo+name block (LIVE_TV_GUIDE_MERGE.md M.4) - shared
+ * by the header row and the "now" line below so everything lines up against the same left edge,
+ * the same way TiviMate's own reference (`RedThemedEPGLiveTVScreen.jpg`) keeps its channel column
+ * and its timeline in fixed alignment. */
+private val ChannelLabelWidth = 168.dp
+
 /**
- * PHASE_3.md P0.3/P0.4 - the Guide's timeline grid. Rows = every live channel in [groupKey]
- * (channels with no `epgChannelId` or no programme data in the window still get a row, with an
- * honest empty-slot cell - PHASE_3.md acceptance #3). Columns = a rolling [WINDOW_HOURS]-hour
- * window from "now."
+ * PHASE_3.md P0.3/P0.4, enriched LIVE_TV_GUIDE_MERGE.md M.4/M.5 - the Guide's timeline grid. Rows
+ * = every live channel in [groupKey] (channels with no `epgChannelId` or no programme data in the
+ * window still get a row, with an honest empty-slot cell - PHASE_3.md acceptance #3). Columns = a
+ * rolling [WINDOW_HOURS]-hour window from "now."
  *
- * **Deviation from the brief's literal decision 4, logged here rather than silently:** decision 4
- * describes "a static 'now' vertical line drawn once." That presumes every row shares one
- * synchronized horizontal scroll position - a real feature (TiviMate itself works this way), but
- * a meaningfully bigger build (one shared scroll offset every row's `TvLazyRow` obeys, fighting
- * against D-pad focus's own per-row bring-into-view behavior) than P0's time budget allows.
- * Shipped instead: each row scrolls independently (standard Compose), and the currently-airing
- * cell in every row gets a distinct `Accent`-tinted treatment - same information ("what's on now"
- * is visually distinct from "what's next"), cheaper, and arguably more usable on a D-pad (no
- * swipe gesture exists to chase a moving line anyway). A synced-scroll now-line is real P1 work,
- * not a cut corner being hidden.
+ * **"Now" line, real this time (LIVE_TV_GUIDE_MERGE.md M.5):** a genuinely synced now-line, not
+ * the per-cell-highlight fallback P0 shipped. The trick that makes this cheap rather than needing
+ * a shared `LazyListState` across every row: the window always starts at "now" (decision 4), so
+ * every row's own `TvLazyRow`, in its default/unscrolled position, already begins exactly at the
+ * current moment - a single static vertical line drawn once at [ChannelLabelWidth] (the boundary
+ * between the label column and the first cell) is therefore correctly aligned with *every* row
+ * that hasn't been individually scrolled, at zero per-frame cost. Honest limitation, not hidden:
+ * scrolling one specific row right (LEFT/RIGHT to browse that channel's later programmes) desyncs
+ * only that one row from the line - every other row stays correctly aligned. A true per-frame
+ * synced-scroll line (every row sharing one scroll offset, fighting D-pad focus's own per-row
+ * bring-into-view behavior) remains real future work if this approximation isn't good enough live.
  *
  * UP/DOWN between rows and LEFT/RIGHT between cells are Compose's own default 2D focus traversal
- * across a `TvLazyColumn` of `TvLazyRow`s - no hand-written key interception needed, the same way
- * `GroupsColumn`/`ChannelsColumn` rely on default focus search for their own 1D case.
+ * across a `TvLazyColumn` of `TvLazyRow`s - no hand-written key interception needed.
  */
 @Composable
 fun EpgGridColumn(
@@ -102,12 +109,9 @@ fun EpgGridColumn(
 
     BackHandler(enabled = infoCardProgramme != null) { infoCardProgramme = null }
 
-    // Cheap one-shot entrance (coordinator request, 2026-09-19: push visual quality harder than
-    // a bare-functional grid) - fade + slight rise on first composition only (guideMode entering
-    // is what gives this a fresh composition; switching categories while already in Guide mode
-    // does NOT re-trigger it, since only the row/cell content changes then, not this whole
-    // composable). One `Animatable` driving `graphicsLayer`, same cost shape as every other
-    // motion in this app (`WaveSpinner`, "The Curl") - nothing per-row, nothing that runs at rest.
+    // Cheap one-shot entrance - fade + slight rise on first composition only. One `Animatable`
+    // driving `graphicsLayer`, same cost shape as every other motion in this app (`WaveSpinner`,
+    // "The Curl") - nothing per-row, nothing that runs at rest.
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(Unit) { entrance.animateTo(1f, tween(220, easing = FastOutSlowInEasing)) }
 
@@ -121,9 +125,6 @@ fun EpgGridColumn(
                 }
                 .onFocusChanged { state -> onFocusStateChanged(state.hasFocus) },
         ) {
-            // Brand-anchored header (Teleport Menu's own header established this pattern first -
-            // the static mark costs nothing per-frame and ties this screen to the brand the same
-            // way that one does), not a bare text label.
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 10.dp)) {
                 Image(
                     painter = painterResource(R.drawable.ic_mark),
@@ -144,16 +145,28 @@ fun EpgGridColumn(
                     color = TextSecondary,
                 )
             } else {
-                TvLazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    itemsIndexedChannels(channels, key = { _, c -> c.streamId }) { index, channel ->
-                        EpgChannelRow(
-                            channel = channel,
-                            programmes = programsByChannel[channel.epgChannelId].orEmpty(),
-                            now = now,
-                            onTune = onTuneChannel,
-                            onShowInfo = { infoCardProgramme = it },
-                            firstCellFocusRequester = if (index == 0) firstCellFocusRequester else null,
-                        )
+                GridTimeHeader(now = now, modifier = Modifier.padding(bottom = 6.dp))
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // The "now" line - see class doc above for why a static line at this one x
+                    // offset is a real, correctly-aligned signal, not a placeholder.
+                    Box(
+                        modifier = Modifier
+                            .padding(start = ChannelLabelWidth)
+                            .width(2.dp)
+                            .fillMaxHeight()
+                            .background(Accent.copy(alpha = 0.85f)),
+                    )
+                    TvLazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        itemsIndexedChannels(channels, key = { _, c -> c.streamId }) { index, channel ->
+                            EpgChannelRow(
+                                channel = channel,
+                                programmes = programsByChannel[channel.epgChannelId].orEmpty(),
+                                now = now,
+                                onTune = onTuneChannel,
+                                onShowInfo = { infoCardProgramme = it },
+                                firstCellFocusRequester = if (index == 0) firstCellFocusRequester else null,
+                            )
+                        }
                     }
                 }
             }
@@ -161,6 +174,36 @@ fun EpgGridColumn(
 
         infoCardProgramme?.let { programme ->
             ProgrammeInfoCard(programme = programme)
+        }
+    }
+}
+
+/** LIVE_TV_GUIDE_MERGE.md M.4 - date + half-hour tick labels above the grid, aligned to
+ * [ChannelLabelWidth] and [PxPerMinute] so each label sits directly above the cells it describes. */
+@Composable
+private fun GridTimeHeader(now: Long, modifier: Modifier = Modifier) {
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            headerDateFormat.format(Date(now)),
+            style = RedSurfType.rowSecondary,
+            color = TextSecondary,
+            maxLines = 1,
+            modifier = Modifier.width(ChannelLabelWidth),
+        )
+        val stepMinutes = 30
+        val stepWidth = (stepMinutes * PxPerMinute.value).dp
+        val steps = ((WINDOW_HOURS * 60) / stepMinutes).toInt()
+        Row {
+            repeat(steps) { i ->
+                Text(
+                    timeFormat.format(Date(now + i * stepMinutes * 60_000L)),
+                    style = RedSurfType.rowSecondary,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.width(stepWidth),
+                )
+            }
         }
     }
 }
@@ -176,6 +219,10 @@ private inline fun androidx.tv.foundation.lazy.list.TvLazyListScope.itemsIndexed
     items(count = list.size, key = { key(it, list[it]) }) { index -> itemContent(index, list[index]) }
 }
 
+/** LIVE_TV_GUIDE_MERGE.md M.4 - restructured from a stacked Column (name above a horizontal cell
+ * strip) to a Row with a fixed-width leading label block, matching TiviMate's own reference
+ * layout (number + logo + name beside the timeline, not above it) and keeping every row aligned
+ * to the header/now-line above via the shared [ChannelLabelWidth]. */
 @Composable
 private fun EpgChannelRow(
     channel: ChannelEntity,
@@ -185,15 +232,27 @@ private fun EpgChannelRow(
     onShowInfo: (EpgProgramEntity) -> Unit,
     firstCellFocusRequester: FocusRequester?,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            channel.name,
-            style = RedSurfType.rowSecondary,
-            color = TextSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(bottom = 2.dp),
-        )
+    Row(modifier = Modifier.fillMaxWidth().height(RowHeight), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.width(ChannelLabelWidth).padding(end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                channel.num.toString(),
+                style = RedSurfType.rowSecondary,
+                color = TextSecondary,
+                maxLines = 1,
+                modifier = Modifier.widthIn(min = 26.dp),
+            )
+            ChannelLogoChip(channel, modifier = Modifier.padding(start = 2.dp, end = 8.dp))
+            Text(
+                channel.name,
+                style = RedSurfType.rowSecondary,
+                color = TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (programmes.isEmpty()) {
             // Honest empty slot (PHASE_3.md acceptance #3) - a channel with no provider EPG
             // listing (or no epgChannelId at all) is real, common P0 behavior, not an error.
@@ -208,7 +267,7 @@ private fun EpgChannelRow(
                 border = RedSurfFocus.border(),
                 glow = RedSurfFocus.glow(),
             ) {
-                Box(modifier = Modifier.height(RowHeight).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
+                Box(modifier = Modifier.fillMaxHeight().padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
                     Text("No programme data", style = RedSurfType.rowSecondary, color = TextSecondary)
                 }
             }
@@ -230,6 +289,30 @@ private fun EpgChannelRow(
                     )
                 }
             }
+        }
+    }
+}
+
+/** Small logo chip, same fallback shape as `ChannelsColumn.kt`'s own `ChannelLogo` (initial
+ * letter when the icon is blank or fails to load) - reused pattern, smaller size for the grid's
+ * denser rows. */
+@Composable
+private fun ChannelLogoChip(channel: ChannelEntity, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.size(32.dp).clip(RoundedCornerShape(6.dp)).background(SurfaceRaised),
+        contentAlignment = Alignment.Center,
+    ) {
+        val icon = channel.streamIcon
+        if (icon.isNullOrBlank()) {
+            Text(channel.name.take(1).uppercase(), style = RedSurfType.badge, color = TextPrimary)
+        } else {
+            SubcomposeAsyncImage(
+                model = icon,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().padding(3.dp),
+                error = { Text(channel.name.take(1).uppercase(), style = RedSurfType.badge, color = TextPrimary) },
+                loading = { /* blank while loading - avoids flicker on a fast-scrolling grid */ },
+            )
         }
     }
 }
@@ -278,14 +361,9 @@ private fun ProgrammeCell(
     }
 }
 
-/** The "on now" glyph (coordinator request, 2026-09-19: reuse RedSurf's established visual
- * language rather than a plain text badge). Exact same brush/arc geometry as `WaveSpinner`
- * (`ui/theme/RedSurfSpinner.kt`) at a tiny static size - the same crescent-wave motif the mark
- * itself and "The Curl" (Teleport Menu) already established, just held still: only ever one or
- * two of these are on screen at once (one per row's currently-airing cell), so even the cost of
- * `WaveSpinner`'s own rotation would be affordable here, but a resting grid shouldn't animate
- * anything it doesn't have to (`TELEPORT_MENU.md`'s own "nothing animates at rest" rule) - the
- * shape alone already reads as distinctly RedSurf's, without spending a frame on it. */
+/** The "on now" glyph - exact same brush/arc geometry as `WaveSpinner`, held static (only ever
+ * one or two of these on screen at once, but a resting grid shouldn't animate anything it doesn't
+ * have to - `TELEPORT_MENU.md`'s own "nothing animates at rest" rule). */
 @Composable
 private fun LiveCrescentGlyph(size: androidx.compose.ui.unit.Dp = 12.dp) {
     Canvas(modifier = Modifier.size(size)) {
@@ -311,8 +389,7 @@ private fun LiveCrescentGlyph(size: androidx.compose.ui.unit.Dp = 12.dp) {
 @Composable
 private fun ProgrammeInfoCard(programme: EpgProgramEntity) {
     // Dismissed by the caller's own BackHandler (PHASE_3.md decision 5: "lightweight, dismissible"
-    // - Back alone satisfies that without needing to claim D-pad focus onto the card itself, which
-    // would also mean remembering to restore focus back onto the grid cell underneath on close).
+    // - Back alone satisfies that without needing to claim D-pad focus onto the card itself).
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -344,5 +421,6 @@ private fun ProgrammeInfoCard(programme: EpgProgramEntity) {
 }
 
 private val timeFormat = SimpleDateFormat("h:mm a", Locale.US)
+private val headerDateFormat = SimpleDateFormat("EEE, MMM d", Locale.US)
 private fun formatTimeRange(start: Long, end: Long): String =
     "${timeFormat.format(Date(start))} – ${timeFormat.format(Date(end))}"

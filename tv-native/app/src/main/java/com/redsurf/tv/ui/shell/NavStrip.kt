@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -35,13 +34,15 @@ import com.redsurf.tv.ui.theme.RedSurfType
 import com.redsurf.tv.ui.theme.Surface as SurfaceColor
 import com.redsurf.tv.ui.theme.TextPrimary
 
-/** The seven destinations from docs/vision/UI_SPEC.md #3. LiveTv is the only one that's real. */
+/** The destinations from docs/vision/UI_SPEC.md #3, minus Guide - LIVE_TV_GUIDE_MERGE.md M.1
+ * collapsed it into Live TV itself (one screen, the merged hero band + categories + EPG grid;
+ * see LiveTvScreen.kt's own class doc), matching TiviMate, which has no separate Guide pill
+ * either. LiveTv is the only entry that's real. */
 enum class NavDestination(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
     LiveTv("Live TV", Icons.Filled.PlayArrow),
     Movies("Movies", Icons.Filled.Star),
     Series("Series", Icons.Filled.List),
-    Guide("Guide", Icons.Filled.Info),
     Search("Search", Icons.Filled.Search),
     Settings("Settings", Icons.Filled.Settings),
 }

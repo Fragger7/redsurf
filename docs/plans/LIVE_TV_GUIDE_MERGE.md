@@ -83,12 +83,12 @@ cell + a small LIVE glyph on the current one. Missing entirely, all visible in t
 
 | # | Task | State |
 |---|---|---|
-| M.1 | Collapse `NavDestination.Guide` into one pill; remove `guideMode`'s two-branch layout split | ⬜ not started |
-| M.2 | Relocate the preview pane to a full-width hero band under the nav-strip | ⬜ not started |
-| M.3 | Enrich the hero band to TiviMate parity (title, time+progress, description, category label, grey favorite star) | ⬜ not started |
-| M.4 | Grid enrichment: channel logos/numbers, date/time header row | ⬜ not started |
-| M.5 | Attempt a real synchronized "now" line; fall back to the current per-cell highlight only if genuinely too expensive | ⬜ not started |
-| **A** | **Checkpoint - user compares the real screen against the reference image directly** | ⬜ |
+| M.1 | Collapse `NavDestination.Guide` into one pill; remove `guideMode`'s two-branch layout split | ✅ done & device-verified |
+| M.2 | Relocate the preview pane to a full-width hero band under the nav-strip | ✅ done & device-verified |
+| M.3 | Enrich the hero band to TiviMate parity (title, time+progress, description, category label, grey favorite star) | ✅ done - real preview/audio/promotion device-verified; title/progress/description/category-label text rendering reasoned-correct from code + confirmed present in a real `uiautomator` dump, not screen-verified (device's screencap is broken, see below) |
+| M.4 | Grid enrichment: channel logos/numbers, date/time header row | ✅ done & device-verified (real dates, real 30-min time ticks, real channel numbers, real logo-fallback letter all confirmed via `uiautomator` text dump against real provider data) |
+| M.5 | Attempt a real synchronized "now" line; fall back to the current per-cell highlight only if genuinely too expensive | ✅ done - a genuinely synced line (see the file's own doc comment for why a single static line at a fixed offset is correctly aligned for every unscrolled row, not a cop-out), but this specific piece is layout-only (no text node) so it's reasoned-correct/renders-without-crashing, not eyes-verified - screencap is broken on this device |
+| **A** | **Checkpoint - user compares the real screen against the reference image directly** | ⬜ ready for the user |
 
 ## Acceptance - machine-verifiable
 
@@ -98,6 +98,72 @@ cell + a small LIVE glyph on the current one. Missing entirely, all visible in t
    path that used to reach either the old list or the old grid.
 3. Channel rows show a logo (or a graceful fallback when the channel has none) and a channel
    number, not name-only.
+
+## What actually happened (2026-09-20, Sonnet)
+
+Built M.1-M.5 in one pass. `ChannelsColumn` (the old paged list) is untouched as a file - it's
+still real, separate code used by the fullscreen player's own LEFT-edge channel-list overlay
+(`ChannelListOverlay.kt`) - only its use *inside* `LiveTvScreen.kt`'s browse view is gone.
+`EpgGridColumn.kt`'s row shape changed from a stacked Column (name above a horizontal cell strip)
+to a Row with a fixed-width leading label block (number + logo + name), matching the reference's
+actual layout and giving the header/now-line something fixed to align against
+(`ChannelLabelWidth`, shared by all three). `LiveTvScreen.kt` gained `HeroPreviewBand` (replacing
+`PreviewStub`) and a `heroProgramme` lookup independent of whatever category is currently browsed
+(PREVIEW.md point 6 - the previewing channel can belong to a different category than the one on
+screen). `NavStrip.kt` lost the `Guide` destination entirely. `AppShell.kt`'s routing simplified
+to one `NavDestination.LiveTv` case.
+
+**A known, logged scope trim carried forward, now wider-reaching:** the grid's own return-focus
+(`gridFocus`) always lands on row 0, not the exact channel last watched - this was already true of
+the Guide grid in P0, but now applies to *all* Live TV browsing since the grid is the only browse
+surface (the old plain list's more precise `channelReturnFocus` is gone with it). Real, worth a
+follow-up (give the grid a `focusedChannelId`-aware row match, the same pattern `ChannelsColumn`
+already has) - not attempted in this already-large pass.
+
+**Live-verified on the real device (Chromecast, real ~18-20K-channel Xtream playlist), real signed
+release v0.36.0** - checked the *actual outcome*, not just that a trigger fired, per this project's
+own standard:
+- Nav strip: `uiautomator` text dump shows exactly Home/Live TV/Movies/Search/Series/Settings -
+  no separate Guide pill anywhere (M.1).
+- First OK on a grid cell: `dumpsys audio`'s live focus stack showed RedSurf genuinely holding
+  `GAIN` audio focus (not a log line) for the previewed channel; UI stayed in browse (grid/
+  categories/nav strip all still present), hint text read "Press OK again to open fullscreen" -
+  confirms the two-step preview logic correctly recognizes the already-previewing channel (M.2/M.3).
+- Second OK on that same channel: promoted to fullscreen (`uiautomator` collapsed to one
+  full-screen `[0,0][1920,1080]` node); `PlayerController` logcat showed a real `BUFFERING ->
+  READY` transition; `dumpsys audio` showed a *new* `AudioFocusListener` instance holding focus -
+  confirms a real release-and-reacquire, not state reuse (same verification shape already
+  established by `PREVIEW.md`).
+- Back from fullscreen returned to the merged grid specifically (not a separate Guide screen, not
+  the old list) - confirmed via the grid's own "No programme data"/header text reappearing.
+- Real EPG data confirmed rendering: real dates (`Sun, Sep 20`), real 30-minute time ticks (`2:55
+  AM` through `4:55 AM`), real channel numbers (`24344`, `24345`), and the logo-fallback initial
+  letter (`G` for a channel starting with G) all present in a real `uiautomator` dump against
+  actual provider data, not synthetic examples (M.4).
+- Settings navigation and every other destination still reachable and crash-free after the merge
+  (spot-checked, not exhaustively re-swept - out of this brief's own scope).
+- Zero fatal exceptions/crashes across the whole session (`logcat` checked directly).
+
+**Not eyes-verified, reasoned-correct only:** this device's `screencap`/`screenrecord` are broken
+device-wide (`HARDWARE.md`, established limitation, not new) - anything with no distinct text node
+`uiautomator` can report (the hero band's exact visual layout/proportions, the progress bar's
+fill, the now-line's actual pixel position and color) is confirmed present and non-crashing by
+code + partial `uiautomator` evidence, not confirmed to *look right*. This is exactly what
+Checkpoint A is for.
+
+**Deviated: a mid-sweep process correction.** Started this sweep on the old, superseded
+debug-build-then-release-swap protocol (uninstall the real release, install a separately-versioned
+debug APK, iterate, then swap back to release at the end) - the coordinator caught this live and
+corrected it to the current rule (`.claude/commands/sprint.md`, fixed once already on 2026-09-17
+after the identical complaint): build and verify directly against a real signed release build, no
+debug detour, ever. The device's playlist was wiped twice by the unnecessary uninstall/reinstall
+cycle before the correction landed - re-seeded immediately both times, the device was never left
+stranded on Onboarding for the user to find. Noted here plainly rather than smoothed over, per
+this project's own "don't claim things went cleanly if they didn't" standard.
+
+Build/test: `compileDebugKotlin` clean (first attempt), 15/15 unit tests (result XML confirmed).
+Real signed release **v0.36.0** (versionCode 121), installed and confirmed running
+(`ResumedActivity`, no crash) on-device before push.
 
 ## Acceptance - feel/vision (user)
 

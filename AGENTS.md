@@ -122,6 +122,32 @@ merging.
   select" (default on; off restores the old single-OK-to-fullscreen behavior exactly, verified both
   ways). Not yet exercised: cold-launch auto-play's unchanged behavior (reasoned correct by
   inspection, not re-tested via a disruptive relaunch this session).
+  **Live TV/Guide real merge - built and device-verified, 2026-09-20.** Brief:
+  `docs/plans/LIVE_TV_GUIDE_MERGE.md`, filed after the user saw Phase 3 P0 live and reported both
+  "I still see the Live TV and Guide being two different sections" and the grid looking "so, so, so
+  far off" from `RedThemedEPGLiveTVScreen.jpg` - both confirmed real, not a misunderstanding.
+  `NavDestination.Guide` is gone entirely (confirmed via a real `uiautomator` nav-strip dump - only
+  Home/Live TV/Movies/Search/Series/Settings); Live TV is now one screen: a hero preview band
+  (TiviMate-parity title/time+progress/description/category label, a grey non-functional favorite
+  star since Favorites still doesn't exist) directly under the nav-strip, with Preview-on-OK's
+  player relocated into it, then categories + an enriched EPG grid below (real channel logos/
+  numbers, a real date/time header, a genuinely-synced "now" line - see the brief for why a single
+  static line is a real, correct, cheap solution rather than the per-cell-highlight fallback P0
+  shipped). Live-verified end to end: real audio focus during preview, real fullscreen promotion
+  with a fresh `AudioFocusListener`, Back returning to the merged grid, real EPG dates/times/
+  channel numbers all present against actual provider data. Not eyes-verified (this device's
+  screencap is broken, `HARDWARE.md`) - Checkpoint A is the user comparing the real screen against
+  the reference image directly. One known, wider-reaching scope trim: the grid's return-focus
+  always lands on row 0, not the exact channel last watched (inherited from Phase 3 P0, now
+  applies to all Live TV browsing since the grid is the only browse surface) - logged as a real
+  follow-up, not attempted this pass.
+  **Process note, 2026-09-20:** this sweep briefly reverted to the old, already-once-fixed
+  debug-build-then-release-swap protocol before being corrected mid-flight back to the current
+  rule (`.claude/commands/sprint.md`) - build and verify directly against a real signed release,
+  no debug detour. Wiped the device's playlist twice as a result; re-seeded immediately both
+  times, never left stranded on Onboarding. Full account in the brief's own "What actually
+  happened" section - if this keeps recurring, the fix belongs in `.claude/commands/sprint.md`
+  itself or wherever agents are actually reading instructions from, not another one-off correction.
   Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud

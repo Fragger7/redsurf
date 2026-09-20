@@ -2,6 +2,44 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-20 (later) — Live TV/Guide real merge built and device-verified
+
+Full brief and account: `docs/plans/LIVE_TV_GUIDE_MERGE.md`. Filed after the user saw Phase 3 P0
+live and reported the merge wasn't real (Live TV and Guide still read as two sections despite
+sharing one composable) and the grid looked nothing like the TiviMate reference - both confirmed
+true by reading the actual code and the actual reference image before building anything.
+
+**Built:** `NavDestination.Guide` removed entirely - one nav pill reaches Live TV now. The old
+`guideMode` two-branch layout split is gone; there is one screen: a hero preview band (TiviMate
+parity - title, time range + progress bar, description, category label, a grey non-functional
+favorite star) directly under the nav-strip, hosting Preview-on-OK's player relocated from the old
+right column, then categories + an enriched `EpgGridColumn` below (real channel logos/numbers, a
+real date/time header, a genuinely synced "now" line built from the observation that the grid's
+rolling window always starts at "now," so a single static line at a fixed offset stays correctly
+aligned with every row that hasn't been individually scrolled - a real solution, not the per-cell-
+highlight fallback P0 shipped). `ChannelsColumn.kt` itself is untouched - still real code, used by
+the fullscreen player's own LEFT-edge overlay, just no longer used inside the browse view.
+
+**Live-verified on the real device** (Chromecast, real ~18-20K-channel Xtream playlist, real
+signed release v0.36.0): nav strip has exactly six pills, no Guide; first OK on a grid cell held
+real `GAIN` audio focus (`dumpsys audio`, not a log line) while staying in browse; second OK
+promoted to fullscreen with a *new* `AudioFocusListener` instance and a real `BUFFERING -> READY`
+transition; Back returned to the merged grid specifically; real EPG dates/time-ticks/channel
+numbers/logo-fallback letters all confirmed present via `uiautomator` against real provider data.
+Not eyes-verified (screencap is broken device-wide on this box, `HARDWARE.md`) - the hero band's
+exact visual proportions and the now-line's actual appearance are reasoned-correct/non-crashing,
+not seen; that's what Checkpoint A is for.
+
+**deviated: briefly ran the wrong build protocol.** Started this sweep on the superseded debug-
+build-then-release-swap cycle (already fixed once, 2026-09-17) instead of building/verifying
+directly against a real signed release - the coordinator caught it live mid-sweep and corrected
+it. The unnecessary uninstall/reinstall wiped the device's playlist twice; re-seeded immediately
+both times rather than leaving the device stranded on Onboarding. Full account in the brief.
+
+Build/test: `compileDebugKotlin` clean (first attempt), 15/15 unit tests (result XML confirmed).
+Real signed release **v0.36.0** (versionCode 121), installed and confirmed running
+(`ResumedActivity`, no crash) before push.
+
 ## 2026-09-20 — Preview-on-OK built and device-verified
 
 Full brief and account: `docs/plans/PREVIEW.md`. TiviMate parity: a single OK on a focused
