@@ -16,6 +16,19 @@ that must not be confused with each other:
    limits. When something looks like a hardware ceiling, the Shield is how to tell a Chromecast
    limit from an app bug.
 
+## Correction, 2026-09-20: `adb exec-out screencap -p` works fine on this device
+
+Every sprint this project ever ran cited "this device's screencap/screenrecord are broken
+device-wide" as an established `HARDWARE.md` fact - but that claim was never actually written
+here; it was a telephone-game citation of a citation, all the way back to whichever session first
+hit it. The real cause, found 2026-09-20: `ADB="adb -s <device>"` followed by `$ADB shell ...` in
+a shell one-liner silently fails (word-splitting) and was being misread as the device itself
+refusing to capture. The fully-qualified inline form works correctly:
+`"$ANDROID_HOME/platform-tools/adb" -s <device> exec-out screencap -p > out.png` produced a real,
+valid 1920x1080 PNG on the first try once quoted properly. **Screenshots are a real, available
+verification tool on this device going forward** - use them for actual visual/design checks
+instead of defaulting to "reasoned-correct, not eyes-verified."
+
 ## Primary test device: Chromecast with Google TV (1st gen, 4K, "Sabrina")
 
 **All values below were read off the device over ADB on 2026-09-10 — measured, not assumed.**

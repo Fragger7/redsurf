@@ -135,9 +135,10 @@ merging.
   static line is a real, correct, cheap solution rather than the per-cell-highlight fallback P0
   shipped). Live-verified end to end: real audio focus during preview, real fullscreen promotion
   with a fresh `AudioFocusListener`, Back returning to the merged grid, real EPG dates/times/
-  channel numbers all present against actual provider data. Not eyes-verified (this device's
-  screencap is broken, `HARDWARE.md`) - Checkpoint A is the user comparing the real screen against
-  the reference image directly. One known, wider-reaching scope trim: the grid's return-focus
+  channel numbers all present against actual provider data. Not eyes-verified by the build itself
+  (see the correction directly below - this turned out to be a shell-quoting bug on the
+  coordinator's end, not a real device limitation; a real screenshot was taken minutes later and
+  is what drove the very next redesign pass). One known, wider-reaching scope trim: the grid's return-focus
   always lands on row 0, not the exact channel last watched (inherited from Phase 3 P0, now
   applies to all Live TV browsing since the grid is the only browse surface) - logged as a real
   follow-up, not attempted this pass.
