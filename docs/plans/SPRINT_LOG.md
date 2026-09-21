@@ -2,6 +2,40 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-21 (later) — EPG sync never completed on the device: root-caused and fixed
+
+Not a sprint - a follow-up to the Lattice build's one open question ("why was every reachable
+category empty when 66,807 EPG rows exist?"). Answered from the provider's own data, fetched
+directly from the Mac (the provider drops any client not sending the app's own `User-Agent`):
+
+- **Matching is correct.** 28,444 live streams; 7,753 (27%) carry an `epg_channel_id` at all;
+  7,744 of those match the XMLTV feed's `<channel id>` exactly (99.9%). The categories the build
+  reached (AF | AFRICA: 0 of 222 have an id; the SKYMIX and US local-affiliate categories
+  likewise) are simply in the 73% the provider doesn't map. BBC/CNN/sports do have ids. The
+  other 73% is what the P1 public-source supplement exists for.
+- **The sync was a partial, every time.** Full feed measured: **67MB, 201,463 programmes**, three
+  days (yesterday/today/tomorrow). The device held 66,807 - exactly a third. Root cause, three
+  parts: the EPG download went through the shared client's **15s read timeout** (right for API
+  calls, fatal for a 67MB stream on this box); the worker **cleared the playlist's rows before
+  parsing**, so every interrupted attempt left less data than it found; and WorkManager's default
+  **exponential backoff** pushed retries out hours after a run of provider 502s. The "150MB and
+  growing" netstats figure from the P0 sprint was the same 67MB feed being re-attempted.
+
+**Fixed (commit on `main`, real release cut by CI):** 120s read timeout for the EPG pull only;
+no clear-before-parse (the composite key + REPLACE already makes the parse an upsert, so an
+interrupted sync now leaves the DB strictly better than it found it), with a prune of
+already-ended programmes only after a full parse succeeds; the parser skips already-ended and
+unparseable-date programmes (a third of this feed is yesterday); linear 5-minute backoff on both
+work requests, applied to existing schedules via `ExistingPeriodicWorkPolicy.UPDATE`; and the
+cold-launch backfill now keys off a real per-playlist "last completed" marker (`EpgSyncState`)
+instead of a row count that can't tell "complete" from "died a third of the way in."
+
+Builds clean, 23/23 unit tests. **Not yet verified on device** - the user was testing v0.37.0
+on the TV at the time, so nothing was installed over them. Verification is a single check once
+the TV is free: install, cold-launch, and confirm `epgSync -> done ... inserted=` in logcat lands
+near the feed's real count (~150K after the ended-programme skip), then a mainstream category
+(UK| NEWS, US| NEWS) shows real cells.
+
 ## 2026-09-21 — EPG grid redesign, "The Lattice" (G.1-G.9), v0.37.0
 
 Full brief and as-built account: `docs/plans/EPG_GRID_REDESIGN.md`. One pass, all nine items:

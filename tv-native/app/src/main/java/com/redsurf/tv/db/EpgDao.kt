@@ -16,6 +16,13 @@ interface EpgDao {
     @Query("DELETE FROM epg_programs WHERE playlistId = :playlistId")
     suspend fun clearForPlaylist(playlistId: String)
 
+    /** Post-sync cleanup, run only after a full parse succeeded: drops programmes that ended
+     * before [before]. Replaces the old clear-before-parse, which turned every interrupted sync
+     * into data loss (2026-09-21 - the feed is an upsert on the composite key, so nothing needs
+     * clearing up front). */
+    @Query("DELETE FROM epg_programs WHERE playlistId = :playlistId AND endTime < :before")
+    suspend fun pruneEnded(playlistId: String, before: Long)
+
     /** Cold-launch check (EPG_GRID_REDESIGN.md, found live 2026-09-21): whether this playlist has
      * any EPG at all, so a one-time sync stuck in WorkManager's exponential backoff after a
      * transient provider error (observed: a run of 502s pushed the retry out 4+ hours) gets

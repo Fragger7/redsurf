@@ -15,6 +15,7 @@ import com.redsurf.tv.vod.StalkerApi
 import com.redsurf.tv.vod.XtreamApi
 import com.redsurf.tv.server.PairingServer
 import com.redsurf.tv.sync.EpgSyncScheduler
+import com.redsurf.tv.sync.EpgSyncState
 import com.redsurf.tv.updater.UpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -26,6 +27,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URL
 import java.util.UUID
+
+private const val EPG_STALE_AFTER_MS = 24 * 60 * 60 * 1000L
 
 /**
  * Idle: nothing checked yet this session. Checking: a request is in flight - Settings shows this
@@ -180,14 +183,18 @@ class MainViewModel : ViewModel() {
                 ctx?.let { c ->
                     playlists.filter { it.type == "xtream" }.forEach { playlist ->
                         EpgSyncScheduler.schedulePeriodic(c, playlist.id)
-                        // A playlist with no EPG rows at all on launch is either brand new or
-                        // its one-time sync is stuck in retry backoff after a transient provider
-                        // error (seen live: a burst of 502s pushed the retry out 4+ hours, guide
-                        // empty the whole time). syncNow's REPLACE policy discards that backed-off
-                        // request for a fresh attempt - one per launch, then backoff as normal.
+                        // Re-sync on launch when no sync has ever run to completion for this
+                        // playlist, or the last complete one is older than the daily cadence.
+                        // A row count can't tell "complete" from "died a third of the way in"
+                        // (2026-09-21: 66,807 rows of a 201,463-row feed looked populated) - only
+                        // the worker knows whether the parser reached </tv>, via EpgSyncState.
+                        // syncNow's REPLACE policy also discards a retry stuck in backoff.
                         val epgRows = localDb?.epgDao()?.countForPlaylist(playlist.id)
-                        Log.d("RedSurf", "epgBackfill playlist=${playlist.id} rows=$epgRows")
-                        if (epgRows == 0) {
+                        val lastCompleted = EpgSyncState.lastCompleted(c, playlist.id)
+                        val stale = lastCompleted == 0L ||
+                            System.currentTimeMillis() - lastCompleted > EPG_STALE_AFTER_MS
+                        Log.d("RedSurf", "epgBackfill playlist=${playlist.id} rows=$epgRows lastCompleted=$lastCompleted stale=$stale")
+                        if (stale) {
                             EpgSyncScheduler.syncNow(c, playlist.id)
                         }
                     }
@@ -295,7 +302,10 @@ class MainViewModel : ViewModel() {
             localDb?.playlistDao()?.deletePlaylist(playlistId)
             // An orphaned periodic sync would keep firing forever for a playlist that no longer
             // exists (PHASE_3.md decision 2).
-            appContext?.let { EpgSyncScheduler.cancel(it, playlistId) }
+            appContext?.let {
+                EpgSyncScheduler.cancel(it, playlistId)
+                EpgSyncState.clear(it, playlistId)
+            }
             if (currentPlaylistId == playlistId) currentPlaylistId = null
             withContext(Dispatchers.Main) { checkLocalCache() }
         }

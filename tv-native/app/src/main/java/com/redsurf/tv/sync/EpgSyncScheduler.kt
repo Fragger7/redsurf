@@ -1,6 +1,7 @@
 package com.redsurf.tv.sync
 
 import android.content.Context
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -26,17 +27,25 @@ object EpgSyncScheduler {
 
     private fun inputData(playlistId: String) = workDataOf(EPG_SYNC_INPUT_PLAYLIST_ID to playlistId)
 
+    /** Linear, not WorkManager's default exponential: a burst of provider 502s once pushed the
+     * retry out 4+ hours with the guide empty the whole time (2026-09-21). A flaky provider is
+     * the normal case for this app, so a stall should cost minutes, not the afternoon. */
+    private const val BACKOFF_MINUTES = 5L
+
     /** Daily cadence - matches the public-source refresh cadence already on record in
-     * `AGENTS.md`'s EPG data-source notes. `KEEP`, not `REPLACE`: re-adding the same playlist
-     * (e.g. re-running onboarding) shouldn't reset an already-running schedule's timer. */
+     * `AGENTS.md`'s EPG data-source notes. `UPDATE` (WorkManager 2.8+), not `KEEP`: it keeps an
+     * already-running schedule's timer like `KEEP` did, but also applies changed criteria (the
+     * backoff policy below) to the existing request - `KEEP` would have left every already-
+     * installed device on the old exponential backoff forever. */
     fun schedulePeriodic(context: Context, playlistId: String) {
         val request = PeriodicWorkRequestBuilder<EpgSyncWorker>(24, TimeUnit.HOURS)
             .setInputData(inputData(playlistId))
             .setConstraints(constraints())
+            .setBackoffCriteria(BackoffPolicy.LINEAR, BACKOFF_MINUTES, TimeUnit.MINUTES)
             .build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             periodicWorkName(playlistId),
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             request,
         )
     }
@@ -47,6 +56,7 @@ object EpgSyncScheduler {
         val request = OneTimeWorkRequestBuilder<EpgSyncWorker>()
             .setInputData(inputData(playlistId))
             .setConstraints(constraints())
+            .setBackoffCriteria(BackoffPolicy.LINEAR, BACKOFF_MINUTES, TimeUnit.MINUTES)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             oneTimeWorkName(playlistId),

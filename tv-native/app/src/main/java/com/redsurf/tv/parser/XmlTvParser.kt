@@ -29,9 +29,15 @@ object XmlTvParser {
      * happen to reuse the same `channel` id in their own XMLTV feeds never collide. Returns the
      * real inserted count - `EpgSyncWorker` logs it so a sweep can assert real data landed,
      * not just that the worker ran without throwing. */
-    suspend fun parseAndInsert(inputStream: InputStream, epgDao: EpgDao, playlistId: String): Int = withContext(Dispatchers.IO) {
+    suspend fun parseAndInsert(
+        inputStream: InputStream,
+        epgDao: EpgDao,
+        playlistId: String,
+        skipEndedBefore: Long = 0L,
+    ): Int = withContext(Dispatchers.IO) {
         val programsBatch = mutableListOf<EpgProgramEntity>()
         var insertedCount = 0
+        var skippedCount = 0
 
         try {
             val parser = Xml.newPullParser()
@@ -63,6 +69,18 @@ object XmlTvParser {
                     }
                     XmlPullParser.END_TAG -> {
                         if (name == "programme" && currentChannelId.isNotEmpty()) {
+                            // An unparseable date would land at startTime 0 and collide on the
+                            // composite key; an already-ended programme is dead weight (a third
+                            // of this provider's feed is yesterday). Neither is worth a row.
+                            val usable = currentStart > 0L && currentEnd > currentStart &&
+                                currentEnd >= skipEndedBefore
+                            if (!usable) {
+                                skippedCount++
+                                currentTitle = ""
+                                currentDesc = ""
+                                eventType = parser.next()
+                                continue
+                            }
                             programsBatch.add(
                                 EpgProgramEntity(
                                     playlistId = playlistId,
@@ -93,7 +111,7 @@ object XmlTvParser {
                 epgDao.insertPrograms(programsBatch)
                 insertedCount += programsBatch.size
             }
-            Log.d("XmlTvParser", "Successfully parsed and inserted $insertedCount EPG programs for playlist $playlistId.")
+            Log.d("XmlTvParser", "Successfully parsed and inserted $insertedCount EPG programs for playlist $playlistId (skipped $skippedCount ended/unparseable).")
             insertedCount
         } catch (e: Exception) {
             Log.e("XmlTvParser", "Fatal error during EPG parsing", e)

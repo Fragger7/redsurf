@@ -14,6 +14,8 @@ import okhttp3.Request
 
 private const val TAG = "EpgSyncWorker"
 const val EPG_SYNC_INPUT_PLAYLIST_ID = "PLAYLIST_ID"
+private const val EPG_READ_TIMEOUT_SECONDS = 120L
+private const val PRUNE_ENDED_BEFORE_MS = 6 * 60 * 60 * 1000L
 
 /**
  * PHASE_3.md decision 2 - one worker instance per playlist, scheduled by [EpgSyncScheduler].
@@ -61,7 +63,13 @@ class EpgSyncWorker(
 
         try {
             Log.d(TAG, "epgSync -> start playlist=$playlistId")
-            val client = IptvNetworkModule.getOkHttpClient(playlist.userAgent)
+            // The shared client's 15s read timeout is right for API calls and wrong for a
+            // 67MB XMLTV stream on this hardware: one 15s stall mid-stream killed the download,
+            // which is why the device only ever held a third of the feed (found 2026-09-21).
+            val client = IptvNetworkModule.getOkHttpClient(
+                playlist.userAgent,
+                readTimeoutSeconds = EPG_READ_TIMEOUT_SECONDS,
+            )
             val request = Request.Builder().url(epgUrl).build()
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
@@ -69,14 +77,20 @@ class EpgSyncWorker(
                 return@withContext Result.retry()
             }
 
+            // No clear-before-parse. The composite key (playlistId, channelEpgId, startTime) with
+            // REPLACE makes the parse an upsert, so a sync that dies partway leaves the DB strictly
+            // better than it found it - never a partial slice where a complete set used to be.
+            // Rows the feed no longer carries are pruned only after a full parse succeeds.
+            val now = System.currentTimeMillis()
             var inserted = 0
             response.body?.byteStream()?.use { stream ->
-                // Scoped to this playlist only (EpgDao.clearForPlaylist) - a global wipe here
-                // would erase every OTHER playlist's EPG on every single sync (PHASE_3.md's
-                // EpgDao doc comment).
-                db.epgDao().clearForPlaylist(playlistId)
-                inserted = XmlTvParser.parseAndInsert(stream, db.epgDao(), playlistId)
+                inserted = XmlTvParser.parseAndInsert(
+                    stream, db.epgDao(), playlistId,
+                    skipEndedBefore = now - PRUNE_ENDED_BEFORE_MS,
+                )
             }
+            db.epgDao().pruneEnded(playlistId, now - PRUNE_ENDED_BEFORE_MS)
+            EpgSyncState.markCompleted(applicationContext, playlistId, now)
             Log.d(TAG, "epgSync -> done playlist=$playlistId inserted=$inserted")
             Result.success()
         } catch (e: Exception) {
