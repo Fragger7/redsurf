@@ -29,6 +29,8 @@ import java.net.URL
 import java.util.UUID
 
 private const val EPG_STALE_AFTER_MS = 24 * 60 * 60 * 1000L
+private const val EPG_UPDATE_POLL_INTERVAL_MS = 3_000L
+private const val EPG_UPDATE_POLL_MAX_MS = 10 * 60 * 1000L
 
 /**
  * Idle: nothing checked yet this session. Checking: a request is in flight - Settings shows this
@@ -42,6 +44,18 @@ sealed class UpdateCheckStatus {
     object UpToDate : UpdateCheckStatus()
     data class Available(val info: UpdateManager.UpdateInfo) : UpdateCheckStatus()
 }
+
+/**
+ * Settings → EPG's view of the sync (2026-09-21): [lastCompleted] is the newest full parse across
+ * every Xtream playlist, [lastAttempt]/[lastError] the newest attempt of any kind - so a provider
+ * 502 shows up as "Last attempt · Failed · HTTP 502" instead of leaving the row silent.
+ */
+data class EpgSyncStatus(
+    val running: Boolean = false,
+    val lastCompleted: Long = 0L,
+    val lastAttempt: Long = 0L,
+    val lastError: String? = null,
+)
 
 sealed class AppState {
     data class Loading(val message: String = "Loading...") : AppState()
@@ -137,6 +151,49 @@ class MainViewModel : ViewModel() {
         _updateStatus.value = UpdateCheckStatus.Idle
     }
 
+    private val _epgSyncStatus = MutableStateFlow(EpgSyncStatus())
+    val epgSyncStatus: StateFlow<EpgSyncStatus> = _epgSyncStatus.asStateFlow()
+    private var epgStatusPoller: kotlinx.coroutines.Job? = null
+
+    /** Re-reads the per-playlist markers and WorkManager's running state. Cheap; called when the
+     * EPG settings pane shows and while an update is in flight. */
+    fun refreshEpgSyncStatus() {
+        val ctx = appContext ?: return
+        val db = localDb ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val ids = db.playlistDao().getAllPlaylists().first().filter { it.type == "xtream" }.map { it.id }
+            var completed = 0L; var attempt = 0L; var error: String? = null
+            ids.forEach { id ->
+                completed = maxOf(completed, EpgSyncState.lastCompleted(ctx, id))
+                val a = EpgSyncState.lastAttempt(ctx, id)
+                if (a > attempt) { attempt = a; error = EpgSyncState.lastError(ctx, id) }
+            }
+            val running = ids.any { runCatching { EpgSyncScheduler.isRunning(ctx, it) }.getOrDefault(false) }
+            _epgSyncStatus.value = EpgSyncStatus(running, completed, attempt, error)
+        }
+    }
+
+    /** Settings → EPG "Update EPG now": one request per playlist (EpgSyncScheduler), then poll
+     * the status until nothing is running - bounded, so a hung provider can't leave the row
+     * saying "Updating…" forever. */
+    fun updateEpgNow() {
+        val ctx = appContext ?: return
+        val db = localDb ?: return
+        epgStatusPoller?.cancel()
+        epgStatusPoller = viewModelScope.launch(Dispatchers.IO) {
+            db.playlistDao().getAllPlaylists().first().filter { it.type == "xtream" }
+                .forEach { EpgSyncScheduler.schedule(ctx, it.id, runNow = true) }
+            _epgSyncStatus.value = _epgSyncStatus.value.copy(running = true)
+            val deadline = System.currentTimeMillis() + EPG_UPDATE_POLL_MAX_MS
+            do {
+                delay(EPG_UPDATE_POLL_INTERVAL_MS)
+                refreshEpgSyncStatus()
+                delay(300) // let the refresh land before reading it
+            } while (_epgSyncStatus.value.running && System.currentTimeMillis() < deadline)
+            refreshEpgSyncStatus()
+        }
+    }
+
     companion object {
         private const val MIN_UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000L
         private const val PERIODIC_UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000L
@@ -182,21 +239,19 @@ class MainViewModel : ViewModel() {
                 // launch - it's the only way a playlist added in an older build ever gets EPG.
                 ctx?.let { c ->
                     playlists.filter { it.type == "xtream" }.forEach { playlist ->
-                        EpgSyncScheduler.schedulePeriodic(c, playlist.id)
                         // Re-sync on launch when no sync has ever run to completion for this
                         // playlist, or the last complete one is older than the daily cadence.
                         // A row count can't tell "complete" from "died a third of the way in"
                         // (2026-09-21: 66,807 rows of a 201,463-row feed looked populated) - only
                         // the worker knows whether the parser reached </tv>, via EpgSyncState.
-                        // syncNow's REPLACE policy also discards a retry stuck in backoff.
+                        // One request per playlist either way (EpgSyncScheduler) - runNow
+                        // re-enqueues the single periodic job so it fires immediately.
                         val epgRows = localDb?.epgDao()?.countForPlaylist(playlist.id)
                         val lastCompleted = EpgSyncState.lastCompleted(c, playlist.id)
                         val stale = lastCompleted == 0L ||
                             System.currentTimeMillis() - lastCompleted > EPG_STALE_AFTER_MS
                         Log.d("RedSurf", "epgBackfill playlist=${playlist.id} rows=$epgRows lastCompleted=$lastCompleted stale=$stale")
-                        if (stale) {
-                            EpgSyncScheduler.syncNow(c, playlist.id)
-                        }
+                        EpgSyncScheduler.schedule(c, playlist.id, runNow = stale)
                     }
                 }
                 withContext(Dispatchers.Main) {
@@ -359,12 +414,9 @@ class MainViewModel : ViewModel() {
                 currentPlaylistId = playlistId
                 // PHASE_3.md decision 2 - schedule this playlist's own EPG sync now that its
                 // channels (and therefore a real channel URL to pull credentials from,
-                // EpgSyncWorker's own requirement) exist. The one-shot sync fires immediately so
-                // the Guide isn't empty for up to a day waiting on the periodic schedule.
-                appContext?.let { ctx ->
-                    EpgSyncScheduler.schedulePeriodic(ctx, playlistId)
-                    EpgSyncScheduler.syncNow(ctx, playlistId)
-                }
+                // EpgSyncWorker's own requirement) exist. runNow so the Guide isn't empty for
+                // up to a day waiting on the daily schedule.
+                appContext?.let { ctx -> EpgSyncScheduler.schedule(ctx, playlistId, runNow = true) }
                 checkLocalCache()
             } catch (e: Exception) {
                 _state.value = AppState.Error(e.message ?: "Failed to load Xtream playlist")

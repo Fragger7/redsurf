@@ -49,6 +49,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.redsurf.tv.BuildConfig
 import com.redsurf.tv.R
+import com.redsurf.tv.EpgSyncStatus
 import com.redsurf.tv.UpdateCheckStatus
 import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.ui.theme.Accent
@@ -99,6 +100,9 @@ fun SettingsScreen(
     updateStatus: UpdateCheckStatus,
     playlists: List<PlaylistEntity>,
     onCheckForUpdates: () -> Unit,
+    // 2026-09-21 - Settings → EPG's live rows, owned by MainViewModel like updateStatus.
+    epgSyncStatus: EpgSyncStatus,
+    onUpdateEpgNow: () -> Unit,
     onResetPlaylist: () -> Unit,
     onAddPlaylist: () -> Unit,
     onDeletePlaylist: (String) -> Unit,
@@ -163,8 +167,10 @@ fun SettingsScreen(
     // Remote control joined this list (TELEPORT_MENU.md decision 1, 2026-09-19) - "Teleport Menu"
     // is now its one live toggle row, same layering as every other category's live-rows-then-
     // grey-rows shape.
+    // EPG joined this list (2026-09-21) - "Update EPG now" is its live action row.
     val hasLiveContent = selectedCategory == SettingsCategory.Playlists ||
         selectedCategory == SettingsCategory.About ||
+        selectedCategory == SettingsCategory.Epg ||
         selectedCategory == SettingsCategory.Playback ||
         selectedCategory == SettingsCategory.Appearance ||
         selectedCategory == SettingsCategory.General ||
@@ -213,6 +219,8 @@ fun SettingsScreen(
             playlists = playlists,
             updateStatus = updateStatus,
             onCheckForUpdates = onCheckForUpdates,
+            epgSyncStatus = epgSyncStatus,
+            onUpdateEpgNow = onUpdateEpgNow,
             onResetPlaylist = onResetPlaylist,
             onAddPlaylist = onAddPlaylist,
             onDeletePlaylist = onDeletePlaylist,
@@ -373,6 +381,8 @@ private fun SettingsPane(
     playlists: List<PlaylistEntity>,
     updateStatus: UpdateCheckStatus,
     onCheckForUpdates: () -> Unit,
+    epgSyncStatus: EpgSyncStatus,
+    onUpdateEpgNow: () -> Unit,
     onResetPlaylist: () -> Unit,
     onAddPlaylist: () -> Unit,
     onDeletePlaylist: (String) -> Unit,
@@ -428,6 +438,11 @@ private fun SettingsPane(
                 SettingsCategory.About -> aboutContent(
                     updateStatus = updateStatus,
                     onCheckForUpdates = onCheckForUpdates,
+                    firstRowFocus = firstRowFocus,
+                )
+                SettingsCategory.Epg -> epgContent(
+                    status = epgSyncStatus,
+                    onUpdateNow = onUpdateEpgNow,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.Playback -> playbackContent(
@@ -607,6 +622,62 @@ private fun ResetRow(onReset: () -> Unit) {
         }
     }
 }
+
+/**
+ * EPG (2026-09-21): the first live rows this category has had. "Update EPG now" is the manual
+ * counterpart to the daily sync - and the retry button for the provider-502 case the sync fix
+ * surfaced. Two static info rows (same non-interactive shape as About's "Version") show the last
+ * completed sync and, only when the newest attempt failed, what it failed with. Grey rows stay
+ * for Sources (P1 public supplement), Time offset, and Refresh every.
+ */
+private fun TvLazyListScope.epgContent(
+    status: EpgSyncStatus,
+    onUpdateNow: () -> Unit,
+    firstRowFocus: FocusRequester,
+) {
+    item {
+        LiveRow(
+            label = "Update EPG now",
+            value = if (status.running) "Updating…" else "Update now",
+            onClick = { if (!status.running) onUpdateNow() },
+            modifier = Modifier.focusRequester(firstRowFocus),
+        )
+    }
+    item {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Last updated", style = RedSurfType.rowTitle, color = TextPrimary)
+            Text(
+                if (status.lastCompleted == 0L) "Never" else formatEpgTime(status.lastCompleted),
+                style = RedSurfType.rowSecondary,
+                color = TextSecondary,
+            )
+        }
+    }
+    if (status.lastError != null && status.lastAttempt > status.lastCompleted) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Last attempt", style = RedSurfType.rowTitle, color = TextPrimary)
+                Text(
+                    "Failed · ${status.lastError} · ${formatEpgTime(status.lastAttempt)}",
+                    style = RedSurfType.rowSecondary,
+                    color = TextSecondary,
+                )
+            }
+        }
+    }
+    items(SETTINGS_GREY_ROWS.getValue(SettingsCategory.Epg)) { GreyRowContent(it) }
+}
+
+private val epgTimeFormat = java.text.SimpleDateFormat("EEE h:mm a", java.util.Locale.getDefault())
+private fun formatEpgTime(millis: Long): String = epgTimeFormat.format(java.util.Date(millis))
 
 /**
  * About (`SETTINGS.md`): version + Check for updates moved here from the old screen's top - "this

@@ -342,14 +342,22 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     PlaceholderScreen("Live TV", "No active playlist")
                 destination == NavDestination.Settings -> {
                     val updateStatus by viewModel.updateStatus.collectAsState()
+                    val epgSyncStatus by viewModel.epgSyncStatus.collectAsState()
                     val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
                     val context = LocalContext.current
+                    // The EPG pane's "Last updated"/"Last attempt" rows read persisted markers -
+                    // refresh them whenever that category is shown, not once per process.
+                    LaunchedEffect(selectedSettingsCategory) {
+                        if (selectedSettingsCategory == SettingsCategory.Epg) viewModel.refreshEpgSyncStatus()
+                    }
                     SettingsScreen(
                         selectedCategory = selectedSettingsCategory,
                         onCategorySelected = { selectedSettingsCategory = it },
                         updateStatus = updateStatus,
                         playlists = playlists,
                         onCheckForUpdates = { viewModel.checkForUpdates(force = true) },
+                        epgSyncStatus = epgSyncStatus,
+                        onUpdateEpgNow = { viewModel.updateEpgNow() },
                         onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
                         onAddPlaylist = { viewModel.beginAddPlaylist(context) },
                         onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },

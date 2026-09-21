@@ -23,8 +23,29 @@ object EpgSyncState {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getLong(key(playlistId), 0L)
 
-    fun clear(context: Context, playlistId: String) {
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(key(playlistId)).apply()
+    /** Every attempt's outcome, success or not - what Settings → EPG shows as "Last attempt"
+     * when the most recent one failed, so a provider 502 is visible instead of silent. */
+    fun markAttempt(context: Context, playlistId: String, error: String?, at: Long = System.currentTimeMillis()) {
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putLong(attemptKey(playlistId), at)
+            .apply { if (error == null) remove(errorKey(playlistId)) else putString(errorKey(playlistId), error) }
+            .apply()
     }
+
+    fun lastAttempt(context: Context, playlistId: String): Long =
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getLong(attemptKey(playlistId), 0L)
+
+    fun lastError(context: Context, playlistId: String): String? =
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(errorKey(playlistId), null)
+
+    fun clear(context: Context, playlistId: String) {
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove(key(playlistId)).remove(attemptKey(playlistId)).remove(errorKey(playlistId))
+            .apply()
+    }
+
+    private fun attemptKey(playlistId: String) = "last_attempt_$playlistId"
+    private fun errorKey(playlistId: String) = "last_error_$playlistId"
 }

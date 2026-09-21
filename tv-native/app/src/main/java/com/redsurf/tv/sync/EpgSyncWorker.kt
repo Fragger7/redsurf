@@ -62,7 +62,8 @@ class EpgSyncWorker(
         val epgUrl = "$server/xmltv.php?username=$user&password=$pass"
 
         try {
-            Log.d(TAG, "epgSync -> start playlist=$playlistId")
+            // Host only, never the credentials - enough to tell which provider a 502 came from.
+            Log.d(TAG, "epgSync -> start playlist=$playlistId host=${server.substringAfter("://")}")
             // The shared client's 15s read timeout is right for API calls and wrong for a
             // 67MB XMLTV stream on this hardware: one 15s stall mid-stream killed the download,
             // which is why the device only ever held a third of the feed (found 2026-09-21).
@@ -73,7 +74,12 @@ class EpgSyncWorker(
             val request = Request.Builder().url(epgUrl).build()
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
-                Log.e(TAG, "epgSync -> http ${response.code} for playlist $playlistId")
+                // A panel's error body says *why* (max connections, bad credentials, a proxy
+                // page) - the status code alone didn't (2026-09-21: repeatable 502s that the same
+                // URL never produced from a desktop).
+                val body = runCatching { response.body?.string()?.take(200) }.getOrNull()
+                Log.e(TAG, "epgSync -> http ${response.code} for playlist $playlistId body=${body?.replace('\n', ' ')}")
+                EpgSyncState.markAttempt(applicationContext, playlistId, "HTTP ${response.code}")
                 return@withContext Result.retry()
             }
 
@@ -91,10 +97,12 @@ class EpgSyncWorker(
             }
             db.epgDao().pruneEnded(playlistId, now - PRUNE_ENDED_BEFORE_MS)
             EpgSyncState.markCompleted(applicationContext, playlistId, now)
+            EpgSyncState.markAttempt(applicationContext, playlistId, null, now)
             Log.d(TAG, "epgSync -> done playlist=$playlistId inserted=$inserted")
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "epgSync -> failed playlist=$playlistId", e)
+            EpgSyncState.markAttempt(applicationContext, playlistId, e.message ?: e.javaClass.simpleName)
             Result.retry()
         }
     }
