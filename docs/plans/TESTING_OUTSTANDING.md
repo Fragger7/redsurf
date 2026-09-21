@@ -62,7 +62,20 @@ Hold next to `docs/vision/references/tivimate/RedThemedEPGLiveTVScreen.jpg`.
 
 ## F. Decisions pending (not tests)
 
-- Nav-strip auto-hide on idle - confirmed wanted 2026-09-20, still a grey Settings row.
+- **Nav-strip auto-hide on idle - scoped 2026-09-21, not built (no allowance left; user
+  sequences it against the testing results above).** Estimate: ~1 hour of background build,
+  ~150-250 lines. Settings side is trivial - flip the existing grey row under Appearance via the
+  usual `AppPreferences` → row → `AppShell` pattern. Mechanism: an idle timer fed by `AppShell`'s
+  existing root `onPreviewKeyEvent`, one animated offset on the strip; the grid already sizes
+  itself from available height (the ~8→10 rows Opus measured), so it gains rows for free.
+  **The part that needs real device verification, not a compile:** reveal must be
+  "focus reaches for it" (UP from content's top row, Back-peel to Home, long-press-Back's nav
+  jump, Teleport Menu's Nav-Strip row) - never "any key press" (it'd pop back on every cursor
+  move). All those paths call `requestFocus()` on a pill, so the strip must stay *composed* while
+  hidden (slid off, not removed) or every jump silently fails; and it must never hide while focus
+  is already on it. Proposed defaults, unconfirmed: **default On**; one Settings row cycling
+  **3s / 5s / 10s / Off** (5s default) rather than a separate toggle; **applies everywhere**, not
+  just Live TV.
 - App-wide density pass beyond the grid (user asked for foundational consistency, 2026-09-20) -
   `RedSurfDensity` exists now; nothing outside the grid uses it yet.
 - Time-preserving UP/DOWN cursor (land on the same time-of-day in the next row) - deferred from

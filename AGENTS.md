@@ -161,6 +161,18 @@ merging.
   times, never left stranded on Onboarding. Full account in the brief's own "What actually
   happened" section - if this keeps recurring, the fix belongs in `.claude/commands/sprint.md`
   itself or wherever agents are actually reading instructions from, not another one-off correction.
+  **EPG grid redesign "The Lattice" - built and screenshot-verified, 2026-09-21 (v0.37.0), and the
+  EPG sync root-caused and fixed the same day (v0.37.1/v0.37.2).** Briefs: `docs/plans/
+  EPG_GRID_REDESIGN.md` (Opus design consultation → 9-item rebuild: slot-list time model, density
+  tokens, drawn lattice, gap slots, grid cursor + The Wash, ticking now-line, shared scroll,
+  channel-row fixes; 6-8 rows visible, was ~2) and `SPRINT_LOG.md`'s 2026-09-21 entries (the sync
+  had never completed on the device - 15s read timeout on a 67MB feed, clear-before-parse, and
+  exponential backoff; plus a duplicate-request bug; Settings → EPG got its first live rows).
+  Screenshots are real on this device now (`HARDWARE.md` correction) - every claim above that says
+  "verified" has a PNG behind it. **`docs/plans/TESTING_OUTSTANDING.md` is the consolidated list
+  of everything the user hasn't yet tested across v0.33-v0.37.2 - next session starts there, with
+  the user sequencing fixes from the results.** Nothing else is in flight; nav-strip auto-hide is
+  scoped there (~1 hour) and deliberately not started.
   Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud
