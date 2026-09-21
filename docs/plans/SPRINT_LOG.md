@@ -2,6 +2,43 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-21 — EPG grid redesign, "The Lattice" (G.1-G.9), v0.37.0
+
+Full brief and as-built account: `docs/plans/EPG_GRID_REDESIGN.md`. One pass, all nine items:
+the slot-list time model (`EpgSlots.kt`, unit-tested), `RedSurfDensity` tokens with a
+viewport-derived minute scale and a :00/:30-snapped window, the redundant "Guide" title row gone
+and a two-state hero band (136dp / 56dp collapsed bar with a live clock), the drawn lattice
+replacing per-cell `Surface`s, time-gridded gap slots, a grid-specific cursor (`RedSurfFocus.
+gridCell()` sibling, row band, 1.5dp outline, leading bar, The Wash), a ticking now-line drawn on
+top with cap and wake, a shared horizontal axis, and the channel-row fixes.
+
+**Workflow:** real release-signed builds only (`assembleRelease -PversionName=v0.37.0
+-PversionCode=122`, keystore fingerprint `1b13f1d9…d2510d8a`), `adb install -r` in place three
+times, **no uninstall, playlist survived the whole sprint.** `.claude/commands/sprint.md` read
+fresh, as the coordinator asked. Screenshots (`scratchpad/epg-design/*.png`) were the primary
+visual verification - the first sprint in this project to have them.
+
+**Verified on device (screenshots):** 6 rows with the hero expanded, 8 collapsed (was ~2); the
+two-tier ruler; the now-line on top with cap and wake, re-snapping itself across two half-hour
+boundaries; gap rows as dashed time-gridded spans; the cursor's band/outline/bar; marquee on the
+cursor row; the collapsed hero bar. **Not eyes-verified:** aired-cell rendering and LEFT/RIGHT
+shared scrolling (no category reached had channel ids matching the provider's feed - the DB had
+66,807 rows, just not for those categories), and the 180ms Wash (under screencap latency).
+
+**deviated:** label column 180dp not 150 (real names ellipsized at 74dp); per-row shared
+`horizontalScroll` instead of one column-level scroll (pinned label would cover revealed cells);
+gap dash clears the "No listings" caption; hero text follows the D-pad cursor via a new
+`cursorChannel`/`cursorSlot` (the band collapsed while browsing otherwise); one out-of-scope fix -
+cold launch re-enqueues EPG sync for a playlist with zero rows (a run of provider 502s had pushed
+WorkManager's backoff out 4+ hours).
+
+**Stopped early, deliberately:** mid-sweep the launcher and then Nuvio took the foreground,
+launched from the launcher's own uid right after an HDMI-CEC input-active event - a person in the
+household had the remote. Key injection stopped there; nothing was relaunched over them. The
+remaining three checks need a free TV and a category with real listings.
+
+**Real release v0.37.0** cut via CI on push (run #122 → versionCode 122, matching the device).
+
 ## 2026-09-20 (later) — Live TV/Guide real merge built and device-verified
 
 Full brief and account: `docs/plans/LIVE_TV_GUIDE_MERGE.md`. Filed after the user saw Phase 3 P0

@@ -1,5 +1,9 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,14 +21,15 @@ import androidx.compose.foundation.layout.width
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -33,18 +38,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.MainViewModel
+import com.redsurf.tv.R
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.player.PreviewPlayerHost
 import com.redsurf.tv.player.rememberPreviewPlayerController
 import com.redsurf.tv.ui.player.PlayerScreen
 import com.redsurf.tv.ui.theme.Accent
+import com.redsurf.tv.ui.theme.RedSurfDensity
 import com.redsurf.tv.ui.theme.RedSurfType
 import com.redsurf.tv.ui.theme.Surface
 import com.redsurf.tv.ui.theme.SurfaceRaised
@@ -242,13 +253,28 @@ fun LiveTvScreen(
         }
     }
 
+    // EPG_GRID_REDESIGN.md G.7 - one ticking clock for the whole screen, not a `remember`ed
+    // timestamp that silently went stale (the previous build's now-line, "current" cell, and
+    // "N min remaining" all decayed the longer the screen stayed open). Two recompositions a
+    // minute; at ~84dp per half-hour that moves the now-line ~1.4dp per tick.
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            delay(30_000)
+            value = System.currentTimeMillis()
+        }
+    }
+    // G.2 - the grid's window starts on the previous :00/:30, and only changes value at those
+    // boundaries even though `now` ticks every 30s (same Long → nothing keyed on it recomposes).
+    val windowStart = remember(now) { floorToHalfHour(now) }
+    val windowEnd = windowStart + WINDOW_MINUTES * MINUTE_MS
+
     // The grid's own data (PHASE_3.md decision 4) - now unconditional, the grid is the only
     // browse surface. Non-paged and debounced the same 200ms as queriedGroup, for the same
     // reason - a fast D-pad flight through Categories shouldn't fire one grid query per row flown
-    // over.
+    // over. Re-queried when the window re-snaps (every 30 minutes), so the far edge stays filled.
     var gridChannels by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
     var gridPrograms by remember { mutableStateOf<Map<String, List<EpgProgramEntity>>>(emptyMap()) }
-    LaunchedEffect(queriedGroup) {
+    LaunchedEffect(queriedGroup, windowStart) {
         val group = queriedGroup
         if (group == null) {
             gridChannels = emptyList()
@@ -261,28 +287,71 @@ fun LiveTvScreen(
         gridPrograms = if (epgIds.isEmpty()) {
             emptyMap()
         } else {
-            val now = System.currentTimeMillis()
-            viewModel.repository.programsForChannels(group.playlistId, epgIds, now, now + 6 * 3_600_000L)
+            viewModel.repository.programsForChannels(group.playlistId, epgIds, windowStart, windowEnd)
                 .groupBy { it.channelEpgId }
         }
     }
 
-    // LIVE_TV_GUIDE_MERGE.md M.3 - the hero band's own current-programme lookup, independent of
-    // queriedGroup: PREVIEW.md point 6 means [previewingChannel] can belong to a *different*
-    // category than the one currently browsed (preview persists across category switches), so it
-    // can't just read from [gridPrograms], which is scoped to whatever category is on screen.
-    var heroProgramme by remember { mutableStateOf<EpgProgramEntity?>(null) }
-    LaunchedEffect(previewingChannel) {
+    // LIVE_TV_GUIDE_MERGE.md M.3 - the hero band's own programme lookup for the *previewing*
+    // channel, independent of queriedGroup: PREVIEW.md point 6 means [previewingChannel] can
+    // belong to a different category than the one browsed (preview persists across category
+    // switches), so it can't read from [gridPrograms]. Fetched once per channel/window; which
+    // one is "current" is derived from the ticking clock below, so it rolls over on its own.
+    var heroProgrammes by remember { mutableStateOf<List<EpgProgramEntity>>(emptyList()) }
+    LaunchedEffect(previewingChannel, windowStart) {
         val channel = previewingChannel
         val epgId = channel?.epgChannelId?.takeIf { it.isNotBlank() }
-        if (channel == null || epgId == null) {
-            heroProgramme = null
+        heroProgrammes = if (channel == null || epgId == null) {
+            emptyList()
         } else {
-            val now = System.currentTimeMillis()
-            val programmes = viewModel.repository.programsForChannels(channel.playlistId, listOf(epgId), now, now + 6 * 3_600_000L)
-            heroProgramme = programmes.firstOrNull { now in it.startTime until it.endTime }
+            viewModel.repository.programsForChannels(channel.playlistId, listOf(epgId), windowStart, windowEnd)
         }
     }
+    // G.3 - "browsing" detection for the hero band's collapsed state: a burst of cursor moves
+    // closer than 700ms apart that has lasted 1.2s means the user is scanning, not reading - the
+    // band collapses to its 56dp bar and the grid gains rows; 800ms after the last move it comes
+    // back with the channel they landed on. Previewing always keeps it expanded (video's in it).
+    var isBrowsing by remember { mutableStateOf(false) }
+    var browseStartedAt by remember { mutableLongStateOf(0L) }
+    var lastCursorMoveAt by remember { mutableLongStateOf(0L) }
+    // TiviMate parity: the hero band's text follows the D-pad cursor - the channel and the
+    // specific slot under it - not just the OK'd channel. Kept separate from [focusedChannel],
+    // which carries restore/resume semantics (set on OK, zap, cold-launch) that a mere cursor
+    // pass-over must never overwrite. Cleared when focus leaves the grid so the band falls back
+    // to the category bar while browsing Categories.
+    var cursorChannel by remember { mutableStateOf<ChannelEntity?>(null) }
+    var cursorSlot by remember { mutableStateOf<EpgSlot?>(null) }
+    fun onCursorChanged(channel: ChannelEntity, slot: EpgSlot) {
+        cursorChannel = channel
+        cursorSlot = slot
+        val t = System.currentTimeMillis()
+        if (t - lastCursorMoveAt > 700L) browseStartedAt = t
+        lastCursorMoveAt = t
+        if (t - browseStartedAt >= 1_200L) isBrowsing = true
+    }
+    LaunchedEffect(lastCursorMoveAt) {
+        if (lastCursorMoveAt == 0L) return@LaunchedEffect
+        delay(800)
+        isBrowsing = false
+    }
+    val heroChannel = cursorChannel ?: focusedChannel
+    val heroExpanded = previewingChannel != null || (heroChannel != null && !isBrowsing)
+
+    // What the hero band's text shows (see [cursorChannel] below): the programme under the
+    // cursor when the cursor is on a real listing; else the cursor channel's on-now programme
+    // from the grid's own data; else, with focus off the grid, the previewing channel's on-now.
+    val heroProgramme = remember(previewingChannel, cursorChannel, cursorSlot, focusedChannel, heroProgrammes, gridPrograms, now) {
+        val slot = cursorSlot
+        when {
+            cursorChannel != null && slot is AiredSlot -> slot.programme
+            cursorChannel != null -> gridPrograms[cursorChannel?.epgChannelId].orEmpty()
+                .firstOrNull { now >= it.startTime && now < it.endTime }
+            previewingChannel != null -> heroProgrammes.firstOrNull { now >= it.startTime && now < it.endTime }
+            else -> gridPrograms[focusedChannel?.epgChannelId].orEmpty()
+                .firstOrNull { now >= it.startTime && now < it.endTime }
+        }
+    }
+
 
     val fullscreenFocus = remember { FocusRequester() }
     // The grid's own entry/return point - the sole "return to browse" focus target now that the
@@ -352,20 +421,25 @@ fun LiveTvScreen(
             // hidden in a left panel, so its hero band can sit at the very top of the screen;
             // RedSurf's nav-strip lives at the top instead, so the hero band sits directly below
             // it - same prominence, same position relative to everything else.
+            val selectedGroupInfo = remember(groups, selectedGroup) { groups.firstOrNull { it.key() == selectedGroup } }
             HeroPreviewBand(
-                focusedChannel = focusedChannel,
+                focusedChannel = heroChannel,
                 previewingChannel = previewingChannel,
                 programme = heroProgramme,
+                now = now,
+                expanded = heroExpanded,
+                groupLabel = selectedGroupInfo?.let { formatGroupName(it.groupName) },
+                groupCount = selectedGroupInfo?.count,
                 playlistUserAgent = remember(previewingChannel?.playlistId, playlists) {
                     playlists.firstOrNull { it.id == previewingChannel?.playlistId }?.userAgent
                 },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = RedSurfDensity.ColumnGap),
             )
 
-            // Column proportions from references/streamvault/LiveTV.png: categories ~1, grid the
-            // remaining space (2.25, matching the old list+preview column's combined weight so
-            // the overall balance is unchanged by the merge).
-            Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            // EPG_GRID_REDESIGN.md G.2 - a fixed categories column and a tighter gutter, so the
+            // grid's timeline viewport (and therefore its minute scale) is as wide as the canvas
+            // allows rather than a proportional share.
+            Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(RedSurfDensity.ColumnGap)) {
                 GroupsColumn(
                     groups = groups,
                     selectedGroup = selectedGroup,
@@ -375,16 +449,26 @@ fun LiveTvScreen(
                             onFocusedChannelChanged(null)
                         }
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.width(RedSurfDensity.CategoriesWidth),
                 )
 
                 EpgGridColumn(
                     channels = gridChannels,
                     programsByChannel = gridPrograms,
+                    groupName = selectedGroup?.groupName,
+                    now = now,
+                    windowStart = windowStart,
                     onTuneChannel = { channel -> openChannel(channel) },
                     firstCellFocusRequester = gridFocus,
-                    onFocusStateChanged = { channelsHasFocus = it },
-                    modifier = Modifier.weight(2.25f),
+                    onCursorChanged = { channel, slot -> onCursorChanged(channel, slot) },
+                    onFocusStateChanged = { hasFocus ->
+                        channelsHasFocus = hasFocus
+                        if (!hasFocus) {
+                            cursorChannel = null
+                            cursorSlot = null
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -444,49 +528,116 @@ private fun isSameChannel(a: ChannelEntity?, b: ChannelEntity?): Boolean =
     a != null && b != null && a.playlistId == b.playlistId && a.streamId == b.streamId
 
 private val heroTimeFormat = SimpleDateFormat("h:mm a", Locale.US)
+private val heroDateFormat = SimpleDateFormat("EEE, MMM d", Locale.US)
 
 /**
- * LIVE_TV_GUIDE_MERGE.md M.2/M.3 - the hero preview band, replacing the old right-column
- * `PreviewStub`. TiviMate parity per `RedThemedEPGLiveTVScreen.jpg`: live video, programme
- * title, time range with a progress indicator toward "N min remaining," a description line, a
- * category label, and a grey/disabled favorite-star glyph (Favorites has no real backing feature
- * yet - `TELEPORT_MENU.md`'s own backlog - so this follows the established grey-row convention:
- * real shape, nothing to press, no fake functionality).
+ * EPG_GRID_REDESIGN.md G.3 (consultation Part 6, "The Ledge") - the hero band, rebuilt from the
+ * 190dp version whose empty state was a grey rectangle and a grey play triangle occupying ~29% of
+ * the screen. Two heights, one `animateDpAsState`:
  *
- * Three states, same triggering logic as the old `PreviewStub` (PREVIEW.md's player-state logic
- * is unchanged by this pass, only its position/richness): a real embedded preview + real
- * programme info when [previewingChannel] is set (an explicit OK, never just focus); a lightweight
- * "press OK to preview" prompt when a channel is merely focused; a generic empty prompt when
- * nothing is focused at all.
+ * - **Expanded (136dp)** while a channel is previewing (video's in it, always) or merely focused
+ *   and the user isn't mid-scan: the channel's real logo fills the thumbnail slot until a
+ *   preview replaces it (zero new network cost - the grid row already loaded it), the channel
+ *   name with the live crescent beside it when it's the one playing, the on-now programme with
+ *   a ticking progress row, a two-line description, the OK hint. The grey favourite star sits
+ *   inline beside the name (no real Favorites feature yet - `TELEPORT_MENU.md` backlog; grey-row
+ *   convention as a glyph) rather than in its own full-height column.
+ * - **Collapsed (56dp)** when nothing's focused or the user is actively scanning the grid: the
+ *   mark, the selected category and its count, the OK hint at its right size, and a live clock -
+ *   real information earning its height, never an empty box. With the nav-strip's auto-hide the
+ *   category label here is the only thing on screen saying where you are.
  */
 @Composable
 private fun HeroPreviewBand(
     focusedChannel: ChannelEntity?,
     previewingChannel: ChannelEntity?,
     programme: EpgProgramEntity?,
+    now: Long,
+    expanded: Boolean,
+    groupLabel: String?,
+    groupCount: Int?,
     playlistUserAgent: String?,
     modifier: Modifier = Modifier,
 ) {
-    // Scoped at this composable's own top level so the hint text below can read it too -
-    // re-armed per distinct previewing channel, so switching the preview to a different channel
+    val height by animateDpAsState(
+        targetValue = if (expanded) RedSurfDensity.HeroExpanded else RedSurfDensity.HeroCollapsed,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "heroHeight",
+    )
+    Box(
+        modifier = modifier
+            .height(height)
+            .clip(RoundedCornerShape(RedSurfDensity.PanelRadius))
+            .background(Surface),
+    ) {
+        if (expanded) {
+            ExpandedHero(focusedChannel, previewingChannel, programme, now, playlistUserAgent)
+        } else {
+            CollapsedHero(groupLabel, groupCount, now)
+        }
+    }
+}
+
+@Composable
+private fun CollapsedHero(groupLabel: String?, groupCount: Int?, now: Long) {
+    Row(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(painter = painterResource(R.drawable.ic_mark), contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            groupLabel ?: "Live TV",
+            style = RedSurfType.gridChannel,
+            color = TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (groupCount != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("$groupCount channels", style = RedSurfType.gridMeta, color = TextSecondary, maxLines = 1)
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            "Press OK to preview  ·  OK again for fullscreen",
+            style = RedSurfType.gridMeta,
+            color = TextSecondary,
+            maxLines = 1,
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        Text(heroTimeFormat.format(Date(now)), style = RedSurfType.gridChannel, color = TextPrimary, maxLines = 1)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(heroDateFormat.format(Date(now)), style = RedSurfType.gridMeta, color = TextSecondary, maxLines = 1)
+    }
+}
+
+@Composable
+private fun ExpandedHero(
+    focusedChannel: ChannelEntity?,
+    previewingChannel: ChannelEntity?,
+    programme: EpgProgramEntity?,
+    now: Long,
+    playlistUserAgent: String?,
+) {
+    // Re-armed per distinct previewing channel, so switching the preview to a different channel
     // always gets a fresh attempt rather than staying stuck failed.
     var previewFailed by remember(previewingChannel?.streamId, previewingChannel?.playlistId) {
         mutableStateOf(false)
     }
     val showingRealPreview = previewingChannel != null && !previewFailed
+    // Text follows the cursor (or the OK'd channel), video follows what's previewing - TiviMate's
+    // own split: the thumbnail is clearly "playing," the text is clearly "what you're looking at."
+    val displayChannel = focusedChannel ?: previewingChannel
 
     Row(
-        modifier = modifier
-            .height(190.dp)
-            .background(Surface, RoundedCornerShape(16.dp))
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(RedSurfDensity.PanelRadius))
                 .background(SurfaceRaised),
             contentAlignment = Alignment.Center,
         ) {
@@ -497,114 +648,116 @@ private fun HeroPreviewBand(
                 PreviewPlayerHost(
                     controller = previewController,
                     streamUrl = previewingChannel!!.streamId,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(RedSurfDensity.PanelRadius)),
                 )
-            } else if (focusedChannel != null) {
-                Text(
-                    focusedChannel.name.take(1).uppercase(),
-                    style = MaterialTheme.typography.displayMedium,
-                    color = TextSecondary.copy(alpha = 0.5f),
-                )
-            } else {
-                Icon(
-                    Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    tint = TextSecondary.copy(alpha = 0.35f),
-                    modifier = Modifier.size(40.dp),
-                )
-            }
-            if (showingRealPreview) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(10.dp)
+                        .padding(8.dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(Accent)
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                 ) {
                     Text("LIVE", style = RedSurfType.badge, color = TextPrimary)
+                }
+            } else if (displayChannel != null) {
+                val icon = displayChannel.streamIcon
+                if (icon.isNullOrBlank()) {
+                    Text(
+                        displayChannel.name.take(1).uppercase(),
+                        style = RedSurfType.heroTitle.copy(fontSize = 32.sp),
+                        color = TextSecondary.copy(alpha = 0.5f),
+                    )
+                } else {
+                    SubcomposeAsyncImage(
+                        model = icon,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize().padding(12.dp),
+                        error = {
+                            Text(
+                                displayChannel.name.take(1).uppercase(),
+                                style = RedSurfType.heroTitle.copy(fontSize = 32.sp),
+                                color = TextSecondary.copy(alpha = 0.5f),
+                            )
+                        },
+                        loading = { },
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(14.dp))
 
         Column(modifier = Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
-            val displayChannel = previewingChannel ?: focusedChannel
-            if (displayChannel == null) {
+            if (displayChannel == null) return@Column
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Focus a channel and press OK to preview it here",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
+                    displayChannel.name,
+                    style = RedSurfType.heroTitle.copy(fontSize = 20.sp),
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
-            } else {
+                if (isSameChannel(previewingChannel, displayChannel)) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    LiveCrescentGlyph(size = 14.dp)
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                // Grey favourite star - no real Favorites feature exists yet (TELEPORT_MENU.md
+                // backlog): a plain decorative Icon, nothing to press, the grey-row convention.
+                Icon(
+                    Icons.Filled.Star,
+                    contentDescription = null,
+                    tint = TextSecondary.copy(alpha = 0.35f),
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    programme?.title?.ifBlank { null } ?: displayChannel.name,
-                    style = RedSurfType.heroTitle,
+                    formatGroupName(displayChannel.groupName),
+                    style = RedSurfType.gridMeta,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            if (programme != null) {
+                Text(
+                    programme.title.ifBlank { "Untitled" },
+                    style = RedSurfType.rowTitle,
                     color = TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (programme != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    ProgrammeProgressRow(programme)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        programme.description.ifBlank { "No description available." },
-                        style = RedSurfType.rowSecondary,
-                        color = TextSecondary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                } else {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        "No schedule information",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
-                    )
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                val hint = if (isSameChannel(previewingChannel, focusedChannel)) {
-                    "Press OK again to open fullscreen"
-                } else {
-                    "Press OK to preview this channel"
-                }
-                Text(hint, style = RedSurfType.rowSecondary, color = Accent)
-            }
-        }
-
-        // Grey favorite star (LIVE_TV_GUIDE_MERGE.md M.3) - no real Favorites feature exists yet
-        // (TELEPORT_MENU.md backlog), so this is a plain decorative Icon, not wrapped in a
-        // clickable/focusable Surface - nothing to press, matching this project's own established
-        // grey-row convention (SETTINGS.md) expressed here as a glyph rather than a row.
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
-            Icon(
-                Icons.Filled.Star,
-                contentDescription = null,
-                tint = TextSecondary.copy(alpha = 0.35f),
-                modifier = Modifier.size(24.dp),
-            )
-            val displayChannel = previewingChannel ?: focusedChannel
-            if (displayChannel != null) {
+                ProgrammeProgressRow(programme, now)
                 Text(
-                    formatGroupName(displayChannel.groupName),
+                    programme.description.ifBlank { "No description available." },
                     style = RedSurfType.rowSecondary,
                     color = TextSecondary,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+            } else {
+                Text("No schedule information", style = RedSurfType.rowSecondary, color = TextSecondary)
             }
+            Spacer(modifier = Modifier.height(2.dp))
+            val hint = if (isSameChannel(previewingChannel, focusedChannel)) {
+                "Press OK again to open fullscreen"
+            } else {
+                "Press OK to preview this channel"
+            }
+            Text(hint, style = RedSurfType.gridMeta, color = Accent, maxLines = 1)
         }
     }
 }
 
-/** The red progress track + "N min remaining" (TiviMate parity, `RedThemedEPGLiveTVScreen.jpg`) -
- * two stacked Boxes (a resting track, an Accent-filled fraction) rather than a Canvas draw; cheap,
- * and consistent with how every other static bar/indicator in this app is built. */
+/** The red progress track + "N min remaining" (TiviMate parity, `RedThemedEPGLiveTVScreen.jpg`),
+ * driven by the screen's ticking clock (G.7) rather than a timestamp captured once at
+ * composition, which is how the previous version quietly stopped counting down. */
 @Composable
-private fun ProgrammeProgressRow(programme: EpgProgramEntity) {
-    val now = System.currentTimeMillis()
+private fun ProgrammeProgressRow(programme: EpgProgramEntity, now: Long) {
     val total = (programme.endTime - programme.startTime).coerceAtLeast(1L)
     val elapsed = (now - programme.startTime).coerceIn(0L, total)
     val fraction = elapsed.toFloat() / total.toFloat()
@@ -614,6 +767,7 @@ private fun ProgrammeProgressRow(programme: EpgProgramEntity) {
             "${heroTimeFormat.format(Date(programme.startTime))} – ${heroTimeFormat.format(Date(programme.endTime))}",
             style = RedSurfType.rowSecondary,
             color = TextSecondary,
+            maxLines = 1,
         )
         Spacer(modifier = Modifier.width(10.dp))
         Box(
@@ -631,6 +785,6 @@ private fun ProgrammeProgressRow(programme: EpgProgramEntity) {
             )
         }
         Spacer(modifier = Modifier.width(10.dp))
-        Text("$minRemaining min remaining", style = RedSurfType.rowSecondary, color = TextSecondary)
+        Text("$minRemaining min remaining", style = RedSurfType.rowSecondary, color = TextSecondary, maxLines = 1)
     }
 }

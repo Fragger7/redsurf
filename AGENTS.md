@@ -142,6 +142,18 @@ merging.
   always lands on row 0, not the exact channel last watched (inherited from Phase 3 P0, now
   applies to all Live TV browsing since the grid is the only browse surface) - logged as a real
   follow-up, not attempted this pass.
+  **EPG grid redesign, "The Lattice" - built 2026-09-21, real release v0.37.0, mostly
+  screenshot-verified.** Brief and full as-built account: `docs/plans/EPG_GRID_REDESIGN.md`. The
+  user's "clumsy, bloated, eyesore" verdict on the P0 grid traced to one bug (cells never matched
+  the ruler's time scale) plus a measured budget problem (~2 rows visible); after this pass the
+  grid shows 6-8 rows, the cells are a truthful slot list over a :00/:30-snapped window, the
+  structure is a drawn lattice (cheaper than the old per-cell Surfaces), the now-line is real and
+  ticking, and the hero band collapses to a 56dp info bar with a live clock when nothing's under
+  the cursor. First sprint verified by real screenshots (`HARDWARE.md` correction). Three checks
+  still open because no category reached during the sweep had EPG matches and a person then
+  started using the TV: aired-cell rendering, LEFT/RIGHT shared scrolling, the 180ms focus wash.
+  Also fixed on the way: cold launch re-enqueues a fresh EPG sync for any playlist with zero rows
+  (a run of provider 502s had pushed WorkManager's retry out 4+ hours, guide empty meanwhile).
   **Process note, 2026-09-20:** this sweep briefly reverted to the old, already-once-fixed
   debug-build-then-release-swap protocol before being corrected mid-flight back to the current
   rule (`.claude/commands/sprint.md`) - build and verify directly against a real signed release,

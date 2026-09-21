@@ -77,4 +77,38 @@ object RedSurfFocus {
         focusedContainerColor = if (selected) Accent else SurfaceRaised,
         focusedContentColor = TextPrimary,
     )
+
+    /** All four Surface visuals for one grid cell, neutralized (see [gridCell]). */
+    class GridCellStyle(
+        val shape: ClickableSurfaceShape,
+        val colors: ClickableSurfaceColors,
+        val scale: ClickableSurfaceScale,
+        val border: ClickableSurfaceBorder,
+        val glow: ClickableSurfaceGlow,
+    )
+
+    /**
+     * EPG_GRID_REDESIGN.md G.6 - a sibling for the Guide grid's programme cells, not a change to
+     * the row model above (which every list/picker in the app keeps using as-is). The standard
+     * treatment is designed for standalone list rows and is wrong for a 40dp cell packed edge to
+     * edge with its neighbours: [scale]'s 1.04 grows a cell into the rows above and below and
+     * breaks the grid's lines, [glow]'s 16dp shadow bleeds across two neighbouring rows, and the
+     * 2dp [border] reads as blunt at that density. So this variant switches all of it off -
+     * scale 1.0, no glow, no border, transparent fill - and keeps only what `Surface(onClick)`
+     * is genuinely needed for: TV focus + D-pad OK → onClick plumbing that's proven across every
+     * picker in this app. The grid draws its own cursor (`EpgGridColumn.kt`) behind the cell.
+     */
+    @Composable
+    fun gridCell(radius: Dp): GridCellStyle = GridCellStyle(
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(radius)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = TextPrimary,
+            focusedContainerColor = Color.Transparent,
+            focusedContentColor = TextPrimary,
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        border = ClickableSurfaceDefaults.border(focusedBorder = Border.None),
+        glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow.None),
+    )
 }

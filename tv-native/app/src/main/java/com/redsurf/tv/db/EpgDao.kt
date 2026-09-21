@@ -16,6 +16,13 @@ interface EpgDao {
     @Query("DELETE FROM epg_programs WHERE playlistId = :playlistId")
     suspend fun clearForPlaylist(playlistId: String)
 
+    /** Cold-launch check (EPG_GRID_REDESIGN.md, found live 2026-09-21): whether this playlist has
+     * any EPG at all, so a one-time sync stuck in WorkManager's exponential backoff after a
+     * transient provider error (observed: a run of 502s pushed the retry out 4+ hours) gets
+     * replaced with a fresh attempt instead of leaving the guide empty until the backoff expires. */
+    @Query("SELECT COUNT(*) FROM epg_programs WHERE playlistId = :playlistId")
+    suspend fun countForPlaylist(playlistId: String): Int
+
     @Query(
         "SELECT * FROM epg_programs WHERE playlistId = :playlistId AND channelEpgId = :channelId " +
             "AND endTime >= :currentTime ORDER BY startTime ASC"

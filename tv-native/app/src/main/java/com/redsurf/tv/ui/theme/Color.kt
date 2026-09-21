@@ -12,3 +12,8 @@ val SurfaceRaised = Color(0xFF27272A)
 val Accent = Color(0xFFDC2626)
 val TextPrimary = Color(0xFFFFFFFF)
 val TextSecondary = Color(0xFFA1A1AA)
+
+/** EPG_GRID_REDESIGN.md G.6 - the Guide grid's focused-row band: one step above [Background] so
+ * the channel identity stays visible while the cursor is hours to the right, without competing
+ * with the [Accent] cell cursor the way [SurfaceRaised] would. */
+val SurfaceBand = Color(0xFF151518)

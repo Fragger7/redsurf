@@ -114,16 +114,56 @@ with it hidden (more once the hero also auto-collapses while actively browsing).
 
 | # | Task | State |
 |---|---|---|
-| G.1 | Slot-list model (`Aired`/`Gap`, tiles the window exactly) | ⬜ not started |
-| G.2 | `RedSurfDensity` tokens + responsive `pxPerMinute` + snapped window | ⬜ not started |
-| G.3 | Delete redundant title row; hero collapsed/expanded states | ⬜ not started |
-| G.4 | The Lattice (row structure + inset tick cells + current-slot fill) | ⬜ not started |
-| G.5 | Gap-slot visual treatment | ⬜ not started |
-| G.6 | `RedSurfFocus.gridCell()` + row-band cursor + leading bar + The Wash | ⬜ not started |
-| G.7 | Ticking now-line, drawn on top, with the trailing wake | ⬜ not started |
-| G.8 | Shared horizontal scroll (verify `bringIntoView` behavior live) | ⬜ not started |
-| G.9 | Channel row: prefix-strip, right-aligned number, marquee, color fix | ⬜ not started |
-| **A** | **Checkpoint - user compares the real screen against the reference image directly** | ⬜ |
+| G.1 | Slot-list model (`Aired`/`Gap`, tiles the window exactly) | ✅ built, 8 unit tests pass (empty → one Gap, holes → Gaps, window-edge clipping, overlap clamping, unsorted input, exact-sum invariant) |
+| G.2 | `RedSurfDensity` tokens + responsive `pxPerMinute` + snapped window | ✅ built & verified on device - ruler shows round :00/:30 labels, re-snapped itself from 3:30 to 4:00 PM during the session (`08-state.png`) |
+| G.3 | Delete redundant title row; hero collapsed/expanded states | ✅ built & verified on device - collapsed 56dp bar with category/count/hint/live clock (`03-categories-up.png`), expanded state on cold-launch restore (`02-loaded.png`) |
+| G.4 | The Lattice (row structure + inset tick cells + current-slot fill) | ✅ built; row fill/hairlines/spine/half-hour ticks verified on device (`05-cursor-row2-marquee.png`); **aired-cell tick and current-slot fill not eyes-verified** - no category reached during the sweep had matching EPG (see below) |
+| G.5 | Gap-slot visual treatment | ✅ built & verified on device - dashed spans with the lattice ticks running through, "No listings" only on the first slot, dash clears the caption (`08-state.png`) |
+| G.6 | `RedSurfFocus.gridCell()` + row-band cursor + leading bar + The Wash | ✅ built; row band, 1.5dp outline, fill and leading bar verified on device (`05-cursor-row2-marquee.png`); **The Wash not eyes-verified** - 180ms is under screencap latency |
+| G.7 | Ticking now-line, drawn on top, with the trailing wake | ✅ built & verified on device - line + playhead cap + wake, on top of rows, moved with wall-clock across two half-hour re-snaps (`03`, `07`, `08`) |
+| G.8 | Shared horizontal scroll (verify `bringIntoView` behavior live) | ⚠️ built (per-row `horizontalScroll(sharedScroll)`, see the deviation note); **LEFT/RIGHT across multiple slots not exercised live** - every category reached during the sweep was a single full-window gap, so there was nothing to scroll to; needs a category with listings |
+| G.9 | Channel row: prefix-strip, right-aligned number, marquee, color fix | ✅ built; right-aligned numbers, name in primary, marquee on the cursor row all verified on device (`05-cursor-row2-marquee.png`); prefix-strip covered by unit test, no matching category name seen live |
+| **A** | **Checkpoint - user compares the real screen against the reference image directly** | ⬜ ready for the user |
+
+## What actually happened (2026-09-21, Opus)
+
+Built G.1-G.9 as one pass, exactly to the consultation's numbers except where real data on the
+real device argued otherwise - each logged below. Real signed release **v0.37.0** (versionCode
+122, matching the next CI run number), installed in place three times over the session with no
+uninstall and no playlist loss. Compile clean first attempt; 23/23 unit tests (15 existing + 8 new).
+
+**Row count, the acceptance that matters most (#4):** 6 full rows with the nav-strip visible and
+the hero expanded (`02-loaded.png`), **8 rows** with the hero collapsed (`03-categories-up.png`,
+`08-state.png`) - up from 1.97 measured before this pass.
+
+**Deviations from the consultation, all deliberate:**
+- `deviated:` label column 180dp, not 150. On real provider names ("ABC 28 (KXXX)", "UFC 00 :
+  CRYPTO.COM ARENA…") the 74dp name slot ellipsized nearly every row on the first screenshot;
+  106dp holds ~18 characters, marquee covers the rest. Six 30-minute columns still fit.
+- `deviated:` shared scroll is per-row `horizontalScroll(sharedScroll)` on each timeline
+  portion, not one scroll on the whole column with counter-translated labels. Reason: under the
+  single-container form the pinned label sits over the leftmost 150dp of scrolled content, so
+  `bringIntoView` would "reveal" a cell straight underneath the opaque label. Same shared state,
+  same effect, no overlap, no `graphicsLayer` per row.
+- `deviated:` the gap's dashed line starts 74dp in when the "No listings" caption is shown - the
+  first screenshot had the dash running through the caption.
+- `deviated:` hero text follows the D-pad cursor (channel + the specific slot under it), via a
+  separate `cursorChannel`/`cursorSlot` rather than `focusedChannel` (which carries restore
+  semantics). The first on-device pass showed the hero collapsing while the cursor moved through
+  rows - the band only knew about OK'd channels. TiviMate's band follows the cursor; that's its
+  whole job.
+- `deviated:` one small fix outside G.1-G.9, found live: a run of provider `502`s had pushed
+  the one-time EPG sync's WorkManager backoff out 4+ hours, guide empty the whole time. Cold
+  launch now enqueues a fresh sync (REPLACE) for any playlist with zero EPG rows. In the end the
+  device *did* have 66,807 rows for this playlist - a retry had succeeded - so the check correctly
+  did nothing; the categories reached during the sweep simply had no channel-id matches.
+
+**Verification stopped early, honestly:** partway through the sweep the launcher, then the
+Nuvio app, took the foreground - launched from the launcher's own uid right after an HDMI-CEC
+"input active" event, i.e. a person in the household picked up the remote. Key injection stopped
+at that point. Everything marked "verified on device" above is from screenshots taken before
+that; the three items marked not-verified (aired-cell rendering, LEFT/RIGHT shared scroll, the
+Wash) each need a category with real listings and a free TV.
 
 ## Acceptance - machine-verifiable
 

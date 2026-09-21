@@ -3,6 +3,7 @@ package com.redsurf.tv
 import android.content.Context
 import android.net.wifi.WifiManager
 import android.text.format.Formatter
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.redsurf.tv.data.ChannelRepository
@@ -176,7 +177,21 @@ class MainViewModel : ViewModel() {
                 // never got the chance to run). enqueueUniquePeriodicWork(KEEP) is a safe no-op
                 // for a playlist that's already scheduled, so this costs nothing on every other
                 // launch - it's the only way a playlist added in an older build ever gets EPG.
-                ctx?.let { c -> playlists.filter { it.type == "xtream" }.forEach { EpgSyncScheduler.schedulePeriodic(c, it.id) } }
+                ctx?.let { c ->
+                    playlists.filter { it.type == "xtream" }.forEach { playlist ->
+                        EpgSyncScheduler.schedulePeriodic(c, playlist.id)
+                        // A playlist with no EPG rows at all on launch is either brand new or
+                        // its one-time sync is stuck in retry backoff after a transient provider
+                        // error (seen live: a burst of 502s pushed the retry out 4+ hours, guide
+                        // empty the whole time). syncNow's REPLACE policy discards that backed-off
+                        // request for a fresh attempt - one per launch, then backoff as normal.
+                        val epgRows = localDb?.epgDao()?.countForPlaylist(playlist.id)
+                        Log.d("RedSurf", "epgBackfill playlist=${playlist.id} rows=$epgRows")
+                        if (epgRows == 0) {
+                            EpgSyncScheduler.syncNow(c, playlist.id)
+                        }
+                    }
+                }
                 withContext(Dispatchers.Main) {
                     _state.value = AppState.Loaded(playlists, pId)
                 }
