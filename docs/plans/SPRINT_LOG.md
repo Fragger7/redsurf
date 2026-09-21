@@ -30,11 +30,29 @@ work requests, applied to existing schedules via `ExistingPeriodicWorkPolicy.UPD
 cold-launch backfill now keys off a real per-playlist "last completed" marker (`EpgSyncState`)
 instead of a row count that can't tell "complete" from "died a third of the way in."
 
-Builds clean, 23/23 unit tests. **Not yet verified on device** - the user was testing v0.37.0
-on the TV at the time, so nothing was installed over them. Verification is a single check once
-the TV is free: install, cold-launch, and confirm `epgSync -> done ... inserted=` in logcat lands
-near the feed's real count (~150K after the ended-programme skip), then a mainstream category
-(UK| NEWS, US| NEWS) shows real cells.
+**Device-verified, v0.37.1 → v0.37.2 (versionCode 124, screenshots in `scratchpad/epg-design/`):**
+- The cold-launch backfill fired on the real marker (`rows=66807 lastCompleted=0 stale=true`).
+- One playlist's sync ran to completion for the first time ever - `epgSync -> done
+  inserted=17949`, marker recorded; on the next launch it correctly did *not* re-sync
+  (`stale=false`).
+- Linear backoff retried at exactly +5:00.
+- **A second bug surfaced and fixed in v0.37.2:** the periodic job's daily run coincided with the
+  cold-launch backfill and fired two concurrent feed requests for one account. Collapsed to a
+  single periodic request per playlist (`CANCEL_AND_REENQUEUE` = run now; `UPDATE` = keep timer,
+  apply new criteria; legacy one-time requests cancelled). Verified: exactly one `start` per
+  playlist on the next cold launch.
+- **Settings → EPG's first live rows** ("Update EPG now" with an Updating… state, "Last updated"
+  from the real marker, "Last attempt · Failed · HTTP 502" only when the newest attempt failed)
+  - screenshot-verified. Grey rows corrected to "Provider only" / "Daily".
+- **The remaining 502 is a dead provider, not a bug.** The new host log line showed the failing
+  playlist is `line.bestlina14.cc` (one of the user's own test lists - "Random Strong"/"Random
+  Score" are what's on the device, not the seeded test list), and its `xmltv.php` returns a bare
+  nginx "502 Bad Gateway" page. User's call: don't chase it; more test connections can be added
+  later. Note for the record: the id-coverage numbers above (27%/99.9%) were measured against the
+  seeded test provider, which turned out not to be one of the two playlists on the device.
+
+**Still not seen:** a populated programme cell in the redesigned grid. The one playlist that did
+sync completely needs a category whose channels carry ids - that's the next hands-on check.
 
 ## 2026-09-21 — EPG grid redesign, "The Lattice" (G.1-G.9), v0.37.0
 
