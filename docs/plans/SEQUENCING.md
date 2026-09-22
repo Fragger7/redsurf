@@ -67,8 +67,9 @@ commits that were triggering real CI releases despite an intended `[skip ci]`.
 
 ## Sprint 2 — Cheap, mechanical bug fixes (batch together, one pass)
 
-Five independent, well-understood bugs, none needing a design decision - bundle per this
-project's own "batch related changes" convention rather than four separate releases:
+Nine focus/state findings (five original bugs plus four from a systematic pattern-level audit),
+none needing a design decision - bundle per this
+project's own "batch related changes" convention rather than nine separate releases:
 
 1. **Categories UP-scroll escapes to the nav-strip prematurely** (`GroupsColumn`'s UP-key
    handling, DOWN is fine) - real, reproducible, user-confirmed.
@@ -115,6 +116,64 @@ project's own "batch related changes" convention rather than four separate relea
      removed it.
    Fix both together, same file, same pass - fixing only the retry without the channel-aware match
    would still leave "the wrong row" as a visible miss.
+
+**Items 6-9 added 2026-09-22 - a systematic codebase-wide focus audit**, done in response to the
+user asking for pattern-level analysis rather than one-bug-at-a-time reports. Full rule set this
+audit was checked against: `docs/vision/FOCUS_MODEL.md` (new canonical reference, read it before
+touching any focus-handling code - these findings are the audit's output, that file is the rules
+it was measured against). All four are read-and-reasoned findings, not yet device-verified.
+
+6. **The original 2026-09-13 "Categories ↔ Channels via LEFT/RIGHT doesn't restore the exact row"
+   known instance is still open** (`AGENTS.md`) - it never got fixed, it just changed shape. Back
+   when it was written, "Channels" meant `ChannelsColumn`, which has since been fully fixed
+   (channel-aware `returnFocusRequester`, confirmed correctly built by this audit - it's just no
+   longer used in the browse view, relocated intact to the player's own LEFT-edge overlay,
+   `ChannelListOverlay.kt`). The Guide merge (2026-09-20) replaced it in the browse view with
+   `EpgGridColumn`, which was built with only the coarse row-0-only `gridFocus` (item 5's second
+   bug) - the channel-aware version was explicitly logged as "worth a real follow-up... not
+   attempted in this already-large pass" at the time and never came back. High confidence - this
+   is the same unresolved bug, not a new one, just easy to lose track of since it moved files.
+7. **Three independent, uncoordinated effects all target the single shared `gridFocus`
+   `FocusRequester`** (`LiveTvScreen.kt` - `LaunchedEffect(gridChannels)` at ~391, the
+   `LaunchedEffect(isFullscreen)` else-branch at ~409-412, and
+   `LaunchedEffect(claimInitialFocusTrigger)` at ~417-430), keyed on three unrelated triggers, with
+   no coordination between them (`FOCUS_MODEL.md` rule 6). Structural risk, not directly observed
+   in isolation this pass: whichever effect's retry timing happens to land first wins, which can
+   plausibly vary run to run. **Named as a real candidate explanation for why Teleport Menu's
+   `jumpToGroup`/`returnToChannelGroup` (both route through `claimInitialFocusTrigger`, which
+   targets this same contested `gridFocus`) tested as "verified" in the automated build sweep but
+   as broken on the user's real remote** (`TELEPORT_MENU.md`'s own already-logged discrepancy) -
+   plausible, not proven; worth checking directly (does disabling/delaying the other two effects
+   make Teleport's jumps reliable?) before assuming this is *the* explanation rather than *a*
+   contributing one. Medium confidence.
+8. **`GroupsColumn` (Categories) has no boundary guard on UP at all** - no `onPreviewKeyEvent`
+   anywhere in the file or in `LiveTvScreen.kt` around it, unlike `SettingsScreen.kt`'s rail/pane
+   router or `PlayerScreen.kt`'s own key router (both of which adopted explicit interception after
+   finding default behavior/`focusProperties.exit` unreliable - `FOCUS_MODEL.md` rule 7). Relies
+   entirely on Compose's default directional search stopping at the list's true top - which
+   item 1's already-reported "UP escapes to the nav-strip prematurely" bug demonstrates it doesn't
+   reliably do, plausibly worsened by the mixed header-row/item-row content type multi-playlist
+   accordion mode introduces. This *is* item 1, not a new item - listed here because the audit
+   found the actual mechanism (no guard exists at all, not a misbehaving one) which changes the
+   fix shape: item 1 needs a real `onPreviewKeyEvent` boundary guard added, not a bug fixed in an
+   existing one. High confidence (absence of any guard is a direct code fact, not inference).
+9. **`SettingsScreen` is still conditionally composed/torn down on every destination switch away
+   from Settings** - the exact same architectural pattern Sprint 1 just fixed for `LiveTvScreen`
+   (`FOCUS_MODEL.md` rule 4), confirmed by reading `AppShell.kt`'s routing `when` block directly
+   (`destination == NavDestination.Settings -> { ... SettingsScreen(...) }`, still a plain
+   conditional branch, no `visible` param). **Medium-confidence assessment that this is currently
+   low-severity, not zero-severity:** `selectedSettingsCategory` is hoisted to `AppShell` and the
+   rail's own re-entry redirect correctly re-derives its target from that persisted value on every
+   remount (confirmed by reading `SettingsScreen.kt:135-138`), and Settings has no expensive async
+   Paging/query state analogous to Live TV's grid to lose - so a full remount likely looks
+   behaviorally close to correct today, unlike Live TV's case. **But that same rail re-entry claim
+   is itself a single-shot `runCatching { railFocus.requestFocus() }` with a bare 50ms delay and no
+   retry loop** (`FOCUS_MODEL.md` rule 3) - structurally the same reliability gap as item 5's
+   fullscreen-exit bug, just not yet reported as a live failure, plausibly because Settings'
+   category rail is short and composes fast rather than because the code is actually safe. Worth
+   the same `visible`-param treatment preemptively, before a future Settings category with real
+   async state (e.g. a live-data-backed one) turns this into a repeat of Live TV's bug rather than
+   waiting for that report.
 
 ## Sprint 3 — Double-row EPG channels + the two confirmed icons (high priority, not deferred)
 

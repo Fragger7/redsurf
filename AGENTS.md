@@ -334,6 +334,12 @@ merging.
 
 ## State and focus discipline (user directive, 2026-09-12 - binding, not a suggestion)
 
+**`docs/vision/FOCUS_MODEL.md` is the canonical rule set, extracted 2026-09-22 from everything
+below plus a systematic codebase-wide audit - read that before writing any new focus-handling
+code.** This section stays as-is below it: the dated incident history and provenance for each
+rule, not duplicated there. If the two ever disagree, `FOCUS_MODEL.md` is more likely current
+(it's the actively-maintained rule set); flag the mismatch rather than trusting either blindly.
+
 The user was explicit that losing continuity while testing is actively frustrating and named this
 a standing rule, not a one-off fix: **every new screen, navigation path, and control must
 preserve where the user was and what had focus, by default - check this before calling any
