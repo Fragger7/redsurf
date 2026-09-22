@@ -139,8 +139,8 @@ one batch → the nice-to-haves last, behind a real `EXPLAIN QUERY PLAN`.
 
 ## Sprint 2 — Cheap, mechanical bug fixes (batch together, one pass)
 
-Three independent, well-understood bugs, none needing a design decision - bundle per this
-project's own "batch related changes" convention rather than three separate releases:
+Four independent, well-understood bugs, none needing a design decision - bundle per this
+project's own "batch related changes" convention rather than four separate releases:
 
 1. **Categories UP-scroll escapes to the nav-strip prematurely** (`GroupsColumn`'s UP-key
    handling, DOWN is fine) - real, reproducible, user-confirmed.
@@ -150,6 +150,22 @@ project's own "batch related changes" convention rather than three separate rele
    skipped a stall watchdog for simplicity; the user has since clarified preview should run
    perpetually until the user navigates away or the app closes. Needs at least a light reconnect
    path, not the full fullscreen-grade watchdog ladder.
+4. **Scrolling Categories repeatedly steals focus into the grid** (found 2026-09-22, root-caused
+   by reading the code, not yet fixed or device-verified). `LiveTvScreen.kt:391` -
+   `LaunchedEffect(gridChannels) { if (gridChannels.isNotEmpty()) { ...
+   gridFocus.requestFocus() ... } }` fires an **unconditional** focus-claim onto the grid's first
+   row every time `gridChannels` changes - which happens on every category-settle debounce while
+   just browsing Categories, not only on a genuine "enter the browse screen" moment. User's report,
+   verbatim: "if you stop your scrolling the focus annoyingly keeps going to the top channel in the
+   channel category it stopped at. Over and over... stopping on a channel group should load the
+   channel list, but the focus shouldn't automatically jump to the channel section." **This effect
+   looks redundant, not just wrong:** two other effects in the same file already handle the
+   legitimate "land on the grid" cases correctly - `LaunchedEffect(isFullscreen)`'s else-branch
+   (returning from fullscreen) and `LaunchedEffect(claimInitialFocusTrigger)` (cold launch). Fix
+   direction: gate this effect the same way `ChannelsColumn`'s old fresh-entry redirect worked
+   (`state.hasFocus && !hadFocus` - only claim when transitioning *into* focus, not on every data
+   refresh), or remove it outright if the other two effects already cover every real case once
+   checked carefully - don't guess which without checking, per this project's own rule.
 
 ## Sprint 3 — Double-row EPG channels + the two confirmed icons (high priority, not deferred)
 
