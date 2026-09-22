@@ -1,5 +1,17 @@
 # Execution sequencing — post-Lattice, 2026-09-22
 
+**⏸ RESUME HERE, next session.** User's own words, ending tonight: "let's execute tomorrow and
+pick up without missing a beat." Nothing is running, nothing is uncommitted, device is on the
+genuine v0.37.9 (verify via `gh release list` before trusting that number's still current - this
+session already hit one version-collision surprise). **The next action is Sprint 2**, directly
+below - 9 real, already-root-caused bugs (file:line and mechanism given for every one, several
+just deepened by a full-codebase audit against the new `docs/vision/FOCUS_MODEL.md` rule set,
+committed `ca5b7b1`), none needing a design decision, ready to fix and device-verify as one batch
+the moment the TV is free - no re-diagnosis needed, just launch it. After Sprint 2: Sprint 3
+(double-row EPG rows + the two confirmed icons, user's explicit high priority), Sprint 4 (public
+EPG supplement, two-phase), Sprint 5 (nav-strip auto-hide), Sprint 6 (the preview→fullscreen grow
+transition), plus the separate Teleport Menu debugging track - full detail in each section below.
+
 **What this is:** every open item from `docs/plans/TESTING_OUTSTANDING.md` plus the 2026-09-21/22
 feedback round, grouped into an actual build order with reasoning. Nothing here is built yet -
 this is the plan the user reviews/corrects before any sprint launches. Priorities per the user,
