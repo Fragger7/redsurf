@@ -1,10 +1,19 @@
 # Outstanding testing — resume here
 
-**Written 2026-09-21, end of session.** Everything the user hasn't yet put real eyes/remote on,
-grouped by build, newest first. The user drives the next session from this list, giving input on
-fixes per item. Device is on **v0.37.2** (versionCode 124). Playlists on the device: "Random
-Strong" and "Random Score" (both Xtream). Random Score's EPG synced completely; Random Strong's
-EPG endpoint (`line.bestlina14.cc`) is dead (nginx 502) - user's call, not chased.
+**Written 2026-09-21, end of session, updated 2026-09-22.** Everything the user hasn't yet put
+real eyes/remote on, grouped by build, newest first. The user drives the next session from this
+list, giving input on fixes per item. Device is on **v0.37.2** (versionCode 124). Playlists on the
+device as of 2026-09-21: "Random Strong" and "Random Score" (both Xtream). Random Score's EPG
+synced completely; Random Strong's EPG endpoint (`line.bestlina14.cc`) is dead (nginx 502) -
+user's call, not chased.
+
+**New test playlist, 2026-09-22 - "Faraz Strong"** (`comepitv.online`, credentials saved at
+`~/.redsurf/test-playlist-2.url`, same format/location as the original `test-playlist.url`,
+verified live against the real API before saving - `max_connections: 1`, same one-stream-at-a-time
+constraint as every other test source). **This is the one with real, populated EPG coverage** -
+the user found real programme data under it (US| FOX, US| CW, likely NBC/CBS) on the redesigned
+grid - it's the anchor playlist for the rest of this session's Teleport Menu re-testing (D-section
+below) and the first place to look for a category with listings on any future EPG check.
 
 ## A. The Lattice - EPG grid redesign (v0.37.x) - `EPG_GRID_REDESIGN.md`
 
