@@ -204,6 +204,21 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         liveTvAutoPlayTrigger = true
     }
 
+    // Performance/state audit, 2026-09-22 (SEQUENCING.md Sprint 1) - the generic counterpart to
+    // the three existing call sites below that each already set liveTvClaimInitialFocusTrigger
+    // for their own specific path (cold-launch restore, Teleport's jumpToGroup/
+    // returnToChannelGroup/returnToFullscreen). This covers the one path none of those do: simply
+    // selecting the Live TV pill from the nav-strip. Now that LiveTvScreen stays composed the
+    // whole time (see its own `visible` param doc), this reclaim is cheap - the data it's
+    // reclaiming focus onto was never actually unloaded, so the retry loop it drives typically
+    // succeeds on the first attempt instead of waiting on a fresh load. Keyed on `destination`
+    // itself, so it only fires on a genuine change, not every recomposition while already there.
+    LaunchedEffect(destination) {
+        if (destination == NavDestination.LiveTv && activePlaylistId != null) {
+            liveTvClaimInitialFocusTrigger = true
+        }
+    }
+
     val playlistRootTarget = resolvePlaylistRootTarget(groups, liveTvFocusedChannel)
     val rootCategoryTarget = resolveRootCategoryTarget(groups, liveTvSelectedGroup)
     val teleportCurrentChannel = liveTvFocusedChannel
@@ -315,29 +330,40 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
+            // Performance/state audit, 2026-09-22 (SEQUENCING.md Sprint 1) - LiveTvScreen now
+            // stays composed continuously once a playlist is active, regardless of `destination`
+            // (see its own `visible` param doc for the measured cost this replaces). It's
+            // declared first so it's always the bottom of this Box's z-order; when hidden it's
+            // zero-size anyway, so ordering only matters for the brief instant a transition is
+            // still animating, if one's ever added here.
+            if (activePlaylistId != null) {
+                LiveTvScreen(
+                    viewModel = viewModel,
+                    visible = destination == NavDestination.LiveTv,
+                    onFullscreenChanged = { liveTvFullscreen = it },
+                    onChannelsFocusChanged = { liveTvChannelsFocused = it },
+                    blackScreenBetweenZaps = blackScreenBetweenZaps,
+                    previewOnSelect = previewOnSelect,
+                    showRawResolution = showRawResolution,
+                    selectedGroup = liveTvSelectedGroup,
+                    onSelectedGroupChanged = { liveTvSelectedGroup = it },
+                    focusedChannel = liveTvFocusedChannel,
+                    onFocusedChannelChanged = { liveTvFocusedChannel = it },
+                    autoPlayTrigger = liveTvAutoPlayTrigger,
+                    onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
+                    claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,
+                    onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
+                )
+            }
+
             // One call site, always reached when destination == LiveTv, regardless of
             // liveTvFullscreen - see the class doc above for why that matters.
             when {
                 // LIVE_TV_GUIDE_MERGE.md M.1 - Live TV and Guide are the same real screen now,
                 // not two entry points into one composable (PHASE_3.md decision 3's `guideMode`
-                // toggle is gone) - there is exactly one NavDestination reaching it.
-                destination == NavDestination.LiveTv && activePlaylistId != null ->
-                    LiveTvScreen(
-                        viewModel = viewModel,
-                        onFullscreenChanged = { liveTvFullscreen = it },
-                        onChannelsFocusChanged = { liveTvChannelsFocused = it },
-                        blackScreenBetweenZaps = blackScreenBetweenZaps,
-                        previewOnSelect = previewOnSelect,
-                        showRawResolution = showRawResolution,
-                        selectedGroup = liveTvSelectedGroup,
-                        onSelectedGroupChanged = { liveTvSelectedGroup = it },
-                        focusedChannel = liveTvFocusedChannel,
-                        onFocusedChannelChanged = { liveTvFocusedChannel = it },
-                        autoPlayTrigger = liveTvAutoPlayTrigger,
-                        onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
-                        claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,
-                        onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
-                    )
+                // toggle is gone) - there is exactly one NavDestination reaching it. Rendered
+                // above now (see comment there); nothing left to do for this branch here.
+                destination == NavDestination.LiveTv && activePlaylistId != null -> {}
                 destination == NavDestination.LiveTv ->
                     PlaceholderScreen("Live TV", "No active playlist")
                 destination == NavDestination.Settings -> {

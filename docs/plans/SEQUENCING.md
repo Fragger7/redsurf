@@ -6,29 +6,64 @@ this is the plan the user reviews/corrects before any sprint launches. Prioritie
 2026-09-22: **(A) TiviMate parity, (B) sound architecture/state/caching, with performance treated
 as a high concern throughout** - both named explicitly, not inferred.
 
-## Sprint 1 — Performance & state audit (do this first, on its own)
+## Sprint 1 — Performance & state audit — PARTIALLY DONE, 2026-09-22
 
-**Why first, not bundled:** three independent testing sessions this week (item 4's "sluggish,"
-C16's "healthy bit of sluggishness," and the D1 side note about a Home→Live TV round-trip
-reloading Categories from scratch) all point at the same root cause candidate - something isn't
-surviving navigation the way `AGENTS.md`'s own binding state/focus rule requires, and it's now
-compounding with real scale (3 playlists, ~140K channels, up from the ~28-60K this was last
-profiled against). Every other item below gets *judged* through this screen, so a sluggish
-baseline makes every subsequent test noisier. Fix or at least diagnose first.
+**Shipped, real fix:** the exact conditional-composition trap suspected. `AppShell.kt` used to
+remove `LiveTvScreen` from composition entirely every time `destination` changed away from Live TV
+and back - not just the data (`selectedGroup`/`focusedChannel`, already hoisted since 2026-09-15)
+but every *derived* piece of state downstream of it: the categories Flow subscription,
+`GroupsColumn`'s scroll position and one-shot focus-claim latch, and the grid's own non-paged
+`channelsInGroup`/`programsForChannels` query results - all torn down and rebuilt from zero on
+every round trip. Fixed by keeping `LiveTvScreen` permanently composed once a playlist is active
+and adding a `visible: Boolean` param that gives it real size or `Modifier.size(0.dp)` (zero
+layout cost, can't receive focus/input) instead of removing it from the tree; a new
+`LaunchedEffect(destination)` in `AppShell` reclaims focus via the existing (already
+re-triggerable) `liveTvClaimInitialFocusTrigger` mechanism whenever `destination` becomes LiveTv
+again, now cheap since nothing has to wait on a fresh load first. Real device measurement: on
+return to Live TV from Settings, zero `gridQuery`/`initialFocus`/`epgBackfill` log lines fired
+(previously every one of those re-ran). **Builds clean, 23/23 tests pass, this specific result
+verified on device via logcat** - visual re-confirmation of the returned screen itself was cut
+short by external interference (see below) before a screenshot could be taken.
 
-**Scope:**
-1. Real profiling, not a guess - `dumpsys meminfo`, a recomposition trace across a Home→Live
-   TV→Home→Live TV cycle, confirm whether `LiveTvScreen`'s Categories/Channels state (and its
-   Paging sources) actually survive the round-trip or get torn down and rebuilt. This is exactly
-   the "Compose conditional-composition trap" class of bug `AppShell.kt`/`LiveTvScreen.kt` already
-   have doc comments about elsewhere - first check whether this is a new instance of a known
-   pattern before inventing a new diagnosis.
-2. Re-check flat-memory-across-scale still holds at ~140K channels (last verified at 28-60K,
-   `PHASE_1.md` 1.6) - confirm paging is still doing its job, not silently materializing more.
-3. **User has explicitly pre-authorized an Opus consult here** ("summon it as a senior engineer,
-   if you need to") - use it if the profiling data points at a genuine architecture question
-   rather than a single obvious bug.
-4. Fix whatever's found. This sprint's acceptance is the fix, not just the diagnosis.
+**Not fixed, real open question - escalating per the sprint's own instructions, not guessing:**
+cold-launch itself is separately, seriously slow at real scale, and this is NOT explained by the
+conditional-composition trap above (that only concerns *re-entry*, not first load). Measured live:
+`channelsInGroup()` alone took **6893ms** for a 134-channel result on a table with ~140K total
+channels across 3 playlists; one playlist's `epg_programs` table alone holds **125,175 rows**. The
+`channels` table already has a matching index (`playlistId, streamType, groupName`) and the query
+result set is small (134 rows), so a straightforward missing-index explanation doesn't fit cleanly
+- ruled out as the likely sole cause, not confirmed as ruled out entirely. Real candidate causes,
+none confirmed: (a) DB connection contention - three `EpgSyncWorker` backfill-check queries
+(`COUNT(*)` against tables up to 125K rows) fire on `Dispatchers.IO` at the same moment as this
+query, and Room's default journal mode wasn't verified on this specific device (checked
+`ro.config.low_ram`, unset, so WAL should apply by Room's own default heuristic - but this wasn't
+confirmed against the actual open database, `run-as` doesn't work on this release build); (b) the
+grid's own `programsForChannels()` call (not separately timed this pass - the log line only wraps
+`channelsInGroup()`) could be the larger of the two costs, not yet isolated; (c) something else
+entirely not yet identified. **This needs either a proper `EXPLAIN QUERY PLAN` against the real
+database or an Opus consult with this data in hand, per the sprint's own escalation instructions -
+not a guessed fix.** The user's own three sluggishness reports are likely a mix of both issues
+(this pass fixes the re-entry half, not the cold-load half) - test again once the cold-load
+question is resolved, not before.
+
+**Item 2 (flat-memory-at-scale re-check) and item 3 (channel-to-channel zap sluggishness):** not
+reached this pass - the cold-launch finding above was significant enough to warrant stopping to
+report rather than continuing to accumulate findings without resolving the first one. Real
+`dumpsys meminfo` at cold launch: 117801 KB PSS (~115MB) - not yet compared against a
+before/after-navigation delta or the historical ~112-145MB range from `PHASE_1.md` 1.6, since that
+comparison needs the cold-load question settled first to be a fair read.
+
+**Stopped, not finished - external interference:** `youtube.tv`'s `MainActivity` took real device
+foreground mid-verification (`dumpsys activity activities` confirmed `mFocusedApp` was YouTube,
+not RedSurf) - the same class of household-remote interference logged in the Lattice sprint. Key
+injection stopped there rather than fighting a live person for the remote, per this project's own
+established practice. Resuming needs a free TV.
+
+**Also found, unrelated to this sprint's own scope, noted for the record:** the last several
+"docs:"-only commits (`b97c643` onward) triggered real CI release cuts (v0.37.3/4/5) despite not
+touching app code - whatever `[skip ci]` convention was applied to earlier docs commits didn't
+apply to (or was dropped from) these. Not fixed here - out of scope for a performance audit, but
+worth a look before it produces more release noise.
 
 ## Sprint 2 — Cheap, mechanical bug fixes (batch together, one pass)
 

@@ -69,6 +69,19 @@ Hold next to `docs/vision/references/tivimate/RedThemedEPGLiveTVScreen.jpg`.
 20. The "audio plays, no picture" fix (`PlayerErrorMapper.videoFormatUnsupported()`, 2026-09-18)
     - needs a channel that actually triggers it.
 
+## G. Performance (2026-09-22 finding, Sprint 1 partial)
+
+21. **Fixed, verified on device via logcat:** leaving Live TV and returning no longer re-runs the
+    categories query, the grid's channel/EPG query, or the scroll/focus-claim retry - all were
+    being torn down and rebuilt on every round trip before this fix (`SEQUENCING.md` Sprint 1).
+    Worth a fresh real-world check: does Home→Live TV→Home→Live TV feel fast now?
+22. **Not fixed, real open question:** cold launch itself is separately slow at real scale -
+    `channelsInGroup()` measured at 6.9s for one 134-channel category, on a device holding ~140K
+    channels and one playlist's EPG table alone at 125K+ rows. Candidate causes identified, none
+    confirmed (DB contention with concurrent EPG backfill queries, unconfirmed WAL journal mode,
+    an unisolated EPG-query cost) - needs `EXPLAIN QUERY PLAN` or an Opus consult before a fix is
+    attempted, not a guess. Does the *first* Live TV load of a session still feel slow?
+
 ## F. Decisions pending (not tests)
 
 - **Nav-strip auto-hide on idle - scoped 2026-09-21, not built (no allowance left; user

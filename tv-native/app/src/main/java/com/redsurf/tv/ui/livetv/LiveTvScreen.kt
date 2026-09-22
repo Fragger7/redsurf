@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import android.util.Log
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -133,6 +134,22 @@ fun LiveTvScreen(
     // explicit one-shot trigger, same shape as [autoPlayTrigger] and for the same reason.
     claimInitialFocusTrigger: Boolean = false,
     onClaimInitialFocusTriggerConsumed: () -> Unit = {},
+    // Performance/state audit, 2026-09-22 (SEQUENCING.md Sprint 1) - AppShell used to remove this
+    // whole composable from composition every time `destination` switched away from Live TV and
+    // back (the exact conditional-composition trap this file's own class doc already names for
+    // the *internal* fullscreen/browse split, just one level up, at AppShell's own routing). Real
+    // cost, measured: `liveGroups()`'s cold Flow resubscribe alone was already documented at
+    // ~1.1s on a ~30K-channel DB (GroupsColumn.kt's own doc comment) - worse now at ~140K -
+    // stacked with GroupsColumn's up-to-5×100ms scroll/focus-claim retry, stacked with a full
+    // non-paged re-query of `gridChannels`/`gridPrograms` for the selected group, every single
+    // round trip, none of which had actually changed. Fix: AppShell now keeps this composable
+    // permanently in composition once a playlist is active, and only toggles [visible] - true
+    // gives it the real screen, false gives it zero size (so it draws nothing, costs nothing to
+    // lay out, and can't receive focus or input) while every Flow/query/scroll-position/remember
+    // above keeps living untouched. AppShell fires [claimInitialFocusTrigger] itself whenever
+    // `destination` becomes LiveTv again, reusing the exact mechanism cold-launch/Teleport jumps
+    // already use - now cheap, since nothing has to wait on a fresh load to finish first.
+    visible: Boolean = true,
 ) {
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     // PLAYER_ENGINEERING_BRIEF.md §6/§9 - resolved here, reactively, well before any fullscreen
@@ -281,7 +298,14 @@ fun LiveTvScreen(
             gridPrograms = emptyMap()
             return@LaunchedEffect
         }
+        // Perf audit, 2026-09-22 (SEQUENCING.md Sprint 1) - cheap, permanent diagnostic: the
+        // exact query this whole fix is trying to stop re-running on every Live TV re-entry.
+        // Kept (not stripped after verification) for the same reason the zap/epgSync log lines
+        // were - the next report of "feels slow again" should be checkable against this instead
+        // of a fresh investigation from zero.
+        val queryStart = System.currentTimeMillis()
         val channelsInGroup = viewModel.repository.channelsInGroup(group.playlistId, group.groupName)
+        Log.d("LiveTvScreen", "gridQuery group=$group channels=${channelsInGroup.size} tookMs=${System.currentTimeMillis() - queryStart}")
         gridChannels = channelsInGroup
         val epgIds = channelsInGroup.mapNotNull { it.epgChannelId?.takeIf { id -> id.isNotBlank() } }.distinct()
         gridPrograms = if (epgIds.isEmpty()) {
@@ -407,11 +431,16 @@ fun LiveTvScreen(
     // Back retraces this screen's own path instead of flat-hopping straight to Home
     // (BACKLOG_SWEEP.md #8, user-verified against real TiviMate 2026-09-14): the grid -> back to
     // Categories first, Home only on the next Back from there.
-    BackHandler(enabled = !isFullscreen && channelsHasFocus) {
+    // `visible &&` is defence in depth, not the only thing keeping this from firing while
+    // hidden - `channelsHasFocus` should already be false by then since real Compose focus can't
+    // sit inside a zero-size subtree - but `BackHandler` registers independently of focus
+    // (unlike a key router), so this is cheap insurance against exactly the failure mode this
+    // change is designed to avoid: Back in Settings accidentally peeling a hidden Live TV.
+    BackHandler(enabled = visible && !isFullscreen && channelsHasFocus) {
         focusManager.moveFocus(FocusDirection.Left)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = if (visible) Modifier.fillMaxSize() else Modifier.size(0.dp)) {
         // Always composed (see class doc above) - never torn down by the fullscreen overlay that
         // sits on top of it.
         Column(modifier = Modifier.fillMaxSize()) {

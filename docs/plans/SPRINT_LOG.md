@@ -2,6 +2,48 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-22 — Sprint 1 (performance/state audit): re-entry fixed, cold-load escalated
+
+Full account: `docs/plans/SEQUENCING.md`'s Sprint 1 section (rewritten with real findings) and
+`docs/plans/TESTING_OUTSTANDING.md`'s new section G. Summary:
+
+**Root-caused and fixed the re-entry churn** the user reported three separate ways this week
+(items 4, C16, the D1 side note): `AppShell.kt` was tearing `LiveTvScreen` out of composition
+entirely on every destination change away from Live TV and back - not just losing the hoisted
+`selectedGroup`/`focusedChannel` data (already fixed 2026-09-15) but every derived query result
+and scroll/focus state downstream of it. Fixed by keeping the composable permanently alive once a
+playlist is active (`visible: Boolean` param, real size vs. `Modifier.size(0.dp)` instead of
+removal - can't receive focus/input while hidden, zero layout cost) and reclaiming focus via the
+existing re-triggerable `liveTvClaimInitialFocusTrigger` mechanism on return. **Verified on
+device:** zero `gridQuery`/`initialFocus`/`epgBackfill` log lines on a Settings→Live TV return
+that previously fired all three every time.
+
+**Escalating, not guessing:** cold launch itself is separately and seriously slow at the user's
+real scale (140K channels/3 playlists, one playlist's EPG table alone at 125,175 rows) -
+`channelsInGroup()` measured at 6893ms for a 134-row result despite a matching index and a small
+result set, which doesn't fit a simple missing-index explanation. Real candidates (DB contention
+with concurrent `EpgSyncWorker` backfill queries, unconfirmed journal mode, an unisolated EPG-
+query cost within the same effect) are named but none confirmed. Per the sprint's own escalation
+instructions: stopped here rather than picking an architecture and building it blind - needs
+`EXPLAIN QUERY PLAN` against the real database or an Opus consult with this data before a fix.
+
+**Not reached:** the flat-memory-at-scale re-check and the channel-zap sluggishness check (sprint
+items 2-3) - stopped after the cold-load finding to report rather than keep accumulating findings.
+
+**Stopped by external interference**, same class as the Lattice sprint: `dumpsys activity
+activities` showed YouTube's TV app had taken real foreground mid-verification (a household member
+with the remote). Key injection stopped there rather than fight a live person for control.
+
+**Also found, out of scope, noted for the record:** three consecutive docs-only commits
+(`b97c643`-`10bd9f6`) each cut a real CI release despite touching no app code - some `[skip ci]`
+convention that applied earlier in the session didn't hold for these. Not investigated further.
+
+Build/test: `compileDebugKotlin` clean, 23/23 unit tests (result XML confirmed). Real signed
+release built locally and installed in place for verification (`v0.37.7`, versionCode 129,
+keystore fingerprint `1b13f1d9…d2510d8a` matching every prior release) - not yet pushed to `main`;
+that happens right after this entry, and CI will assign its own next version number to the same
+commit per this project's own established practice.
+
 ## 2026-09-21 (later) — EPG sync never completed on the device: root-caused and fixed
 
 Not a sprint - a follow-up to the Lattice build's one open question ("why was every reachable
