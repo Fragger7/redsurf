@@ -65,6 +65,78 @@ touching app code - whatever `[skip ci]` convention was applied to earlier docs 
 apply to (or was dropped from) these. Not fixed here - out of scope for a performance audit, but
 worth a look before it produces more release noise.
 
+**Opus consult, 2026-09-22 - the coordinator's own WAL/TRUNCATE hypothesis was wrong on
+mechanism, right on shape.** One live read-only check settled the journal-mode question with zero
+code: `adb shell getprop ro.config.low_ram` → unset, and Room 2.6.1's actual `AUTOMATIC.resolve()`
+source (read directly) only falls back to TRUNCATE when that property is set - so WAL is almost
+certainly already active, and the "reads blocked behind an exclusive write lock" theory is very
+likely dead. The real picture, ranked:
+
+1. **The 6893ms measurement itself is suspect.** `LiveTvScreen.kt`'s timer wraps `LaunchedEffect`
+   code running on `AndroidUiDispatcher.Main`, so the interval contains dispatch-to-IO-thread,
+   queue wait, the actual query, *and* resuming back onto a main thread that's mid-cold-launch
+   (first composition, `WaveSpinner`, ExoPlayer init) - not just SQL time. It also used
+   `System.currentTimeMillis()` (wall-clock, can jump on an NTP resync at boot) instead of
+   `SystemClock.elapsedRealtime()`.
+2. **Room's default executor is a shared, fixed 4-thread pool for every read and write in the
+   whole app**, never overridden (`setQueryExecutor`/`setTransactionExecutor` are never called).
+   Cold launch runs 3 `EpgSyncWorker`s concurrently (WorkManager's own default executor sizes to
+   3 threads on this 4-core SoC) doing ~125-200 batch-insert calls each against a 201K-row feed -
+   strict FIFO, no priority. The 134-row Live TV read is very plausibly just queued behind that,
+   not blocked by a lock.
+3. **Raw I/O saturation** - three concurrent 67MB downloads + ~600 write transactions (one commit/
+   fsync per 1000-row batch) on eMMC with 880MB free, independent of any locking model.
+4. **A second, previously-unnamed real bug, on the same cold path:** `getLiveGroupCounts()` (the
+   query that powers the Categories column) has **no `playlistId` constraint** and isn't covered
+   by the existing index at all - a full `SCAN channels` + temp B-tree `GROUP BY` over the whole
+   ~140K-row table, every cold launch, with `sqlite_stat1` never populated (nothing in this app
+   ever runs `ANALYZE`). This is a real, separately-fixable finding the original sprint never
+   measured.
+5. Room's `InvalidationTracker` posts its own write transaction after every commit
+   (`refreshVersionsAsync`), roughly doubling the ~600 commits to ~1200 - overhead, not a cascade
+   (nothing observes `epg_programs` via `Flow`/`PagingSource`, so no triggers are installed on it).
+6. `index_epg_programs_playlistId_channelEpgId` is a strict prefix of the table's own implicit
+   primary-key autoindex `(playlistId, channelEpgId, startTime)` - redundant, pure write
+   amplification on ~200K rows every sync, serves no query the autoindex can't already.
+7. `MainViewModel.checkLocalCache`'s `epgRows = ...countForPlaylist(...)` is fetched only to put in
+   a log string - three wasted `COUNT(*)` scans over 125K-row tables on the cold path, per launch.
+
+**Fix set given, ranked must-do/nice-to-have/unnecessary** (full detail and exact code in the
+consult transcript, this session): **must-do** - get EPG sync off the cold-launch critical path
+entirely (move the sync-scheduling loop to *after* `AppState.Loaded` is set, add a real initial
+delay, stagger the 3 playlists so they never download concurrently by construction); give Room
+separate query/transaction executors; batch ~10 of the 1000-row inserts into one
+`withTransaction` instead of committing every batch; explicitly pin `JournalMode.WRITE_AHEAD_LOGGING`
+(removes a device-dependent branch even though it's probably not *the* fix - "say that plainly in
+the commit message rather than letting it get credited"); drop the redundant index.
+**Nice-to-have** - a real covering index for `getLiveGroupCounts()`
+(`streamType, isHidden, playlistId, groupName`); one `ANALYZE` after each import, never on the
+launch path. **Explicitly unnecessary, don't spend the sprint here** - `busy_timeout` tuning (not
+the actual contention point under WAL), a second read-only database instance (duplicate
+`InvalidationTracker`/triggers, a known footgun), lowering `BATCH_SIZE` (commit count is the cost,
+not memory), raising `cache_size` (wrong trade at 449MB free).
+
+**Verification protocol for next pass, before shipping any fix blind** (this project's own
+"never claim something works because you wrote plausible code" rule, applied to a design decision
+this time, not just an implementation): `adb shell dumpsys dbinfo com.redsurf.tv` works on this
+release build with **zero code changes** (it's a system dump via `ActivityThread`, not `run-as`)
+and prints real connection-pool size (settles WAL-vs-not definitively) plus **per-connection real
+statement durations with full SQL text** - the single most direct way to see whether the channels
+query itself is slow or just queued. A four-marker instrumentation split
+(`toIo`/`query`/`resume`/`total`, using `SystemClock.elapsedRealtime()`) isolates dispatch
+overhead from real SQL time. A concrete technique for real `EXPLAIN QUERY PLAN` against the actual
+140K-row database despite the non-debuggable build: checkpoint the WAL, copy all three DB files
+(`-wal`/`-shm` included) to the app's external files dir (readable via plain `adb shell`, no
+`run-as` needed), `adb pull`, then real `sqlite3`/`.eqp on` on the Mac against the exact live data
+- gives an uncontended baseline to compare the device's contended numbers against.
+
+**Blocked from measuring further right now, same class as before:** a household member had
+YouTube in foreground (`dumpsys activity activities` confirmed) when this consult tried its own
+live check - deliberately did not steal foreground to push further. Suggested order for the next
+pass: `dumpsys dbinfo` + the `getprop` check first (five minutes, free, decides whether pinning
+WAL is the headline fix or a footnote) → the four-marker instrumentation → the must-do fix set as
+one batch → the nice-to-haves last, behind a real `EXPLAIN QUERY PLAN`.
+
 ## Sprint 2 — Cheap, mechanical bug fixes (batch together, one pass)
 
 Three independent, well-understood bugs, none needing a design decision - bundle per this
