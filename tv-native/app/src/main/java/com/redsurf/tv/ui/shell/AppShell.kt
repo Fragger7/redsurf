@@ -353,6 +353,55 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
                     claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,
                     onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
+                    onEscapeUp = { runCatching { navPillFocusRequesters[NavDestination.LiveTv]?.requestFocus() } },
+                )
+            }
+
+            // Sprint 2, 2026-09-23 (Finding 9) - permanently composed once reached, same `visible`
+            // treatment as LiveTvScreen above (FOCUS_MODEL.md rule 4), not a plain conditional
+            // branch inside the `when` below any more.
+            run {
+                val updateStatus by viewModel.updateStatus.collectAsState()
+                val epgSyncStatus by viewModel.epgSyncStatus.collectAsState()
+                val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
+                val context = LocalContext.current
+                // The EPG pane's "Last updated"/"Last attempt" rows read persisted markers -
+                // refresh them whenever that category is shown, not once per process.
+                LaunchedEffect(selectedSettingsCategory) {
+                    if (selectedSettingsCategory == SettingsCategory.Epg) viewModel.refreshEpgSyncStatus()
+                }
+                SettingsScreen(
+                    selectedCategory = selectedSettingsCategory,
+                    onCategorySelected = { selectedSettingsCategory = it },
+                    updateStatus = updateStatus,
+                    playlists = playlists,
+                    onCheckForUpdates = { viewModel.checkForUpdates(force = true) },
+                    epgSyncStatus = epgSyncStatus,
+                    onUpdateEpgNow = { viewModel.updateEpgNow() },
+                    onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
+                    onAddPlaylist = { viewModel.beginAddPlaylist(context) },
+                    onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
+                    blackScreenBetweenZaps = blackScreenBetweenZaps,
+                    onToggleBlackScreenBetweenZaps = {
+                        appPreferences.setBlackScreenBetweenZaps(!blackScreenBetweenZaps)
+                    },
+                    previewOnSelect = previewOnSelect,
+                    onTogglePreviewOnSelect = {
+                        appPreferences.setPreviewOnSelect(!previewOnSelect)
+                    },
+                    showRawResolution = showRawResolution,
+                    onToggleShowRawResolution = {
+                        appPreferences.setShowRawResolution(!showRawResolution)
+                    },
+                    autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
+                    onToggleAutoPlayLastChannelOnLaunch = {
+                        appPreferences.setAutoPlayLastChannelOnLaunch(!autoPlayLastChannelOnLaunch)
+                    },
+                    teleportMenuEnabled = teleportMenuEnabled,
+                    onToggleTeleportMenuEnabled = {
+                        appPreferences.setTeleportMenuEnabled(!teleportMenuEnabled)
+                    },
+                    visible = destination == NavDestination.Settings,
                 )
             }
 
@@ -366,49 +415,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 destination == NavDestination.LiveTv && activePlaylistId != null -> {}
                 destination == NavDestination.LiveTv ->
                     PlaceholderScreen("Live TV", "No active playlist")
-                destination == NavDestination.Settings -> {
-                    val updateStatus by viewModel.updateStatus.collectAsState()
-                    val epgSyncStatus by viewModel.epgSyncStatus.collectAsState()
-                    val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
-                    val context = LocalContext.current
-                    // The EPG pane's "Last updated"/"Last attempt" rows read persisted markers -
-                    // refresh them whenever that category is shown, not once per process.
-                    LaunchedEffect(selectedSettingsCategory) {
-                        if (selectedSettingsCategory == SettingsCategory.Epg) viewModel.refreshEpgSyncStatus()
-                    }
-                    SettingsScreen(
-                        selectedCategory = selectedSettingsCategory,
-                        onCategorySelected = { selectedSettingsCategory = it },
-                        updateStatus = updateStatus,
-                        playlists = playlists,
-                        onCheckForUpdates = { viewModel.checkForUpdates(force = true) },
-                        epgSyncStatus = epgSyncStatus,
-                        onUpdateEpgNow = { viewModel.updateEpgNow() },
-                        onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
-                        onAddPlaylist = { viewModel.beginAddPlaylist(context) },
-                        onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
-                        blackScreenBetweenZaps = blackScreenBetweenZaps,
-                        onToggleBlackScreenBetweenZaps = {
-                            appPreferences.setBlackScreenBetweenZaps(!blackScreenBetweenZaps)
-                        },
-                        previewOnSelect = previewOnSelect,
-                        onTogglePreviewOnSelect = {
-                            appPreferences.setPreviewOnSelect(!previewOnSelect)
-                        },
-                        showRawResolution = showRawResolution,
-                        onToggleShowRawResolution = {
-                            appPreferences.setShowRawResolution(!showRawResolution)
-                        },
-                        autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
-                        onToggleAutoPlayLastChannelOnLaunch = {
-                            appPreferences.setAutoPlayLastChannelOnLaunch(!autoPlayLastChannelOnLaunch)
-                        },
-                        teleportMenuEnabled = teleportMenuEnabled,
-                        onToggleTeleportMenuEnabled = {
-                            appPreferences.setTeleportMenuEnabled(!teleportMenuEnabled)
-                        },
-                    )
-                }
+                // Rendered unconditionally above now (see comment there); nothing left to do here.
+                destination == NavDestination.Settings -> {}
                 else ->
                     PlaceholderScreen(destination.label, "Coming in a later phase")
             }

@@ -121,6 +121,15 @@ fun SettingsScreen(
     // Remote control has ever had.
     teleportMenuEnabled: Boolean,
     onToggleTeleportMenuEnabled: () -> Unit,
+    // Sprint 2, 2026-09-23 (Finding 9, FOCUS_MODEL.md rule 4) - AppShell used to remove this whole
+    // composable from composition on every destination switch away from Settings, the same
+    // conditional-composition trap Sprint 1 already fixed for LiveTvScreen. `selectedSettingsCategory`
+    // survives that (already hoisted to AppShell), and Settings has no expensive async state to
+    // lose the way Live TV's grid did - but the rail's own re-entry claim below was still a
+    // single-shot `runCatching` with no retry, the identical reliability gap as LiveTvScreen's
+    // fullscreen-exit bug (Finding 5), just never reported live because a 9-row rail composes fast.
+    // Now permanently composed once reached; `visible` swaps real layout for zero size instead.
+    visible: Boolean = true,
 ) {
     val railFocus = remember { FocusRequester() }
     val paneFirstRowFocus = remember { FocusRequester() }
@@ -128,13 +137,19 @@ fun SettingsScreen(
     val focusManager = LocalFocusManager.current
 
     // Initial focus on entry/re-entry: the rail's currently-selected row, never wherever Compose
-    // would otherwise default to (state/focus discipline) - same 50ms-after-attach pattern as
-    // GroupsColumn/PlayerScreen's own initial-focus effects (the row needs a frame to attach).
-    // Unlike the LEFT/Back cases below, this one has no prior focus to move *from* (nothing is
-    // focused yet), so it isn't subject to the same `exit`-vs-`requestFocus()` conflict.
-    LaunchedEffect(Unit) {
-        delay(50)
-        runCatching { railFocus.requestFocus() }
+    // would otherwise default to (state/focus discipline) - same pattern as GroupsColumn/
+    // PlayerScreen's own initial-focus effects. Keyed on [visible] itself, not `Unit` - now that
+    // this composable stays permanently alive, `Unit` would only ever fire once, on first entry,
+    // and never again on a later re-entry. `LaunchedEffect` only re-runs its body when the key's
+    // *value* changes, so this fires exactly on the false->true edge (a genuine re-entry) and does
+    // nothing on true->false (leaving) - the same "key on the event" idiom `LiveTvScreen`'s own
+    // grid-entry claim uses (FOCUS_MODEL.md rule 5). Bounded retry, not a single attempt (rule 3).
+    LaunchedEffect(visible) {
+        if (!visible) return@LaunchedEffect
+        repeat(10) {
+            delay(100)
+            if (runCatching { railFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+        }
     }
 
     LaunchedEffect(selectedCategory) {
@@ -177,8 +192,7 @@ fun SettingsScreen(
         selectedCategory == SettingsCategory.RemoteControl
 
     Row(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = (if (visible) Modifier.fillMaxSize() else Modifier.size(0.dp))
             // Escape guard, explicit rather than `focusProperties { exit = ... }` - found live,
             // 2026-09-13: `exit` turned out to behave inconsistently by direction in this exact
             // layout (blocking LEFT even where it needed to work, while *not* reliably blocking

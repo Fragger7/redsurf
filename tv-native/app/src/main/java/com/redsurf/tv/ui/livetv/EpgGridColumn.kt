@@ -133,6 +133,13 @@ fun EpgGridColumn(
     windowStart: Long,
     onTuneChannel: (ChannelEntity) -> Unit,
     firstCellFocusRequester: FocusRequester,
+    // Sprint 2, 2026-09-23 (SEQUENCING.md Finding 5/6, FOCUS_MODEL.md rule 2) - when non-null and
+    // present in [channels], the entry focus target is *that* channel's row (its first/current
+    // slot), not always row 0 - restores the same "return to the exact channel" behaviour
+    // `ChannelsColumn.kt`'s `returnFocusRequester` already has, lost when the Guide merge replaced
+    // it with this grid's coarser row-0-only claim. Falls back to row 0 when null or not found
+    // (fresh browsing, nothing to return to).
+    targetChannelStreamId: String? = null,
     onCursorChanged: (ChannelEntity, EpgSlot) -> Unit = { _, _ -> },
     onFocusStateChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -145,6 +152,13 @@ fun EpgGridColumn(
     LaunchedEffect(Unit) { entrance.animateTo(1f, tween(220, easing = FastOutSlowInEasing)) }
 
     val sharedScroll = rememberScrollState()
+    // Sprint 2, 2026-09-23 (Finding 2) - this grid stays permanently composed (LiveTvScreen's own
+    // `visible` param, Sprint 1), so `sharedScroll` was never reset between categories: scrolling
+    // right in one category and switching to another left the axis exactly where it was, so the
+    // newly-focused row-0 cell (already correctly "now"-aligned) scrolled out of view - reading as
+    // "focus lands on the rightmost cell" even though the real target was always the leftmost one.
+    // A fresh category's timeline always starts back at "now."
+    LaunchedEffect(channels, groupName) { sharedScroll.scrollTo(0) }
     var cursorKey by remember { mutableStateOf<CursorKey?>(null) }
     val wash = remember { Animatable(1f) }
     LaunchedEffect(cursorKey) {
@@ -221,9 +235,15 @@ fun EpgGridColumn(
                     modifier = Modifier.padding(top = 12.dp, start = 4.dp),
                 )
             } else {
+                // Resolve once per (channels, target) change, not per row - a linear scan over a
+                // real category's channel list on every recomposition would be real, avoidable work.
+                val targetIndex = remember(channels, targetChannelStreamId) {
+                    targetChannelStreamId?.let { id -> channels.indexOfFirst { it.streamId == id } } ?: -1
+                }
                 TvLazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(count = channels.size, key = { channels[it].streamId }) { index ->
                         val channel = channels[index]
+                        val isFocusTarget = if (targetIndex >= 0) index == targetIndex else index == 0
                         val programmes = programsByChannel[channel.epgChannelId].orEmpty()
                         val slots = remember(programmes, windowStart) {
                             slotsFor(programmes, windowStart, windowStart + WINDOW_MINUTES * MINUTE_MS)
@@ -246,7 +266,7 @@ fun EpgGridColumn(
                             },
                             onTune = onTuneChannel,
                             onShowInfo = { infoCardProgramme = it },
-                            firstCellFocusRequester = if (index == 0) firstCellFocusRequester else null,
+                            firstCellFocusRequester = if (isFocusTarget) firstCellFocusRequester else null,
                         )
                     }
                 }

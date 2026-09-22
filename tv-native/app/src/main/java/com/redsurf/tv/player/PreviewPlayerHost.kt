@@ -25,9 +25,16 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.redsurf.tv.network.IptvNetworkModule
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * `docs/plans/PREVIEW.md` - the answer to `LiveTvScreen.kt`'s own long-standing scope note about
@@ -81,21 +88,57 @@ class PreviewPlayerController(
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
 
+    // Sprint 2, 2026-09-23 (SEQUENCING.md item 3) - PREVIEW.md originally shipped with no
+    // reconnect at all ("keep it simple... fall back to the static stub silently"); the user has
+    // since clarified preview should run perpetually until they navigate away or close the app,
+    // not give up on the first transient error. A light reconnect, deliberately not the
+    // fullscreen controller's full stall-watchdog ladder: on error, keep retrying the *same* URL
+    // on a fixed interval for as long as this controller is alive - `release()` cancels the scope,
+    // which is the natural "stop trying" signal (leaving Live TV, promoting to fullscreen, or
+    // switching the preview to a different channel all release/replace this controller already).
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var reconnectJob: Job? = null
+
     init {
         exoPlayer.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 _hasError.value = true
+                armReconnect()
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) _isReady.value = true
+                if (playbackState == Player.STATE_READY) {
+                    _isReady.value = true
+                    _hasError.value = false
+                    reconnectJob?.cancel()
+                    reconnectJob = null
+                }
             }
         })
+    }
+
+    private fun armReconnect() {
+        if (reconnectJob?.isActive == true) return
+        reconnectJob = scope.launch {
+            while (true) {
+                delay(RECONNECT_INTERVAL_MS)
+                val url = lastUrl ?: return@launch
+                exoPlayer.stop()
+                exoPlayer.setMediaItem(MediaItem.fromUri(url))
+                exoPlayer.prepare()
+                // Give this attempt real time to either reach STATE_READY (the listener above
+                // cancels this job) or error again (onPlayerError re-arms - already a no-op here
+                // since this job is still active) before trying again.
+                delay(RECONNECT_INTERVAL_MS)
+            }
+        }
     }
 
     private var lastUrl: String? = null
 
     fun play(url: String) {
         if (url == lastUrl) return
+        reconnectJob?.cancel()
+        reconnectJob = null
         lastUrl = url
         _hasError.value = false
         _isReady.value = false
@@ -105,7 +148,12 @@ class PreviewPlayerController(
     }
 
     fun release() {
+        scope.cancel()
         exoPlayer.release()
+    }
+
+    private companion object {
+        const val RECONNECT_INTERVAL_MS = 3_000L
     }
 }
 

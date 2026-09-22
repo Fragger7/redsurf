@@ -150,6 +150,10 @@ fun LiveTvScreen(
     // `destination` becomes LiveTv again, reusing the exact mechanism cold-launch/Teleport jumps
     // already use - now cheap, since nothing has to wait on a fresh load to finish first.
     visible: Boolean = true,
+    // Sprint 2 device verification, 2026-09-22 - threaded straight through to GroupsColumn; see its
+    // own onEscapeUp doc comment for why this exists (default moveFocus doesn't reliably escape a
+    // TvLazyColumn's real boundary, confirmed live).
+    onEscapeUp: () -> Unit = {},
 ) {
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     // PLAYER_ENGINEERING_BRIEF.md §6/§9 - resolved here, reactively, well before any fullscreen
@@ -388,13 +392,35 @@ fun LiveTvScreen(
     // than that. Worth a real follow-up (give the grid a focusedChannelId-aware row match, the
     // same pattern ChannelsColumn already has) - not attempted in this already-large pass.
     val gridFocus = remember { FocusRequester() }
-    LaunchedEffect(gridChannels) {
-        if (gridChannels.isNotEmpty()) {
-            repeat(10) {
-                delay(150)
-                if (runCatching { gridFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-            }
+    // Sprint 2, 2026-09-23 (SEQUENCING.md Findings 4/5/6/7, FOCUS_MODEL.md rules 2/3/5/6) - one
+    // shared claim function, called from every place that needs to land D-pad focus on the grid.
+    // Every path converges on the same row (`focusedChannel`'s, via EpgGridColumn's own
+    // `targetChannelStreamId` below - falls back to row 0/"now" when null) instead of each effect
+    // targeting something different, and every path gets the same bounded retry - the grid's row
+    // for a freshly-selected category may not be composed yet the instant any of these run.
+    suspend fun claimGridFocus() {
+        // Sprint 2 device verification, 2026-09-22 - a real cold cache DB read for one group
+        // measured 5.23s (`gridQuery ... tookMs=5230`, this session's own logcat), longer than the
+        // original 20x150ms=3s budget here; a warm/cached reload (363ms) worked fine, but the slow
+        // path silently exhausted the retry and fell back to whatever Compose's default search
+        // found (observed live: landed on Categories instead of the resumed channel's grid row).
+        // Matched to GroupsColumn's own established 300ms x 20 = 6s ceiling for this exact class of
+        // cold-launch race, not just widened arbitrarily.
+        repeat(20) {
+            delay(300)
+            if (runCatching { gridFocus.requestFocus() }.isSuccess) return
         }
+    }
+    // Real entry point for lateral RIGHT-from-Categories arrival, replacing the old
+    // `LaunchedEffect(gridChannels)` (Finding 4: keyed on data that changes on every ordinary
+    // category browse, not on a real entry event - it fired on every debounced re-query and stole
+    // focus back from Categories mid-browse, exactly the user's "over and over" report). This
+    // fires only on the false->true transition of real focus arriving in the grid subtree from
+    // *outside* it - the same `hadFocus` idiom `GroupsColumn`/`ChannelsColumn` already use,
+    // expressed as a LaunchedEffect keyed on the state itself rather than a shadow var, since
+    // `LaunchedEffect` only re-runs its body when the key's *value* actually changes.
+    LaunchedEffect(channelsHasFocus) {
+        if (channelsHasFocus) claimGridFocus()
     }
     LaunchedEffect(isFullscreen) {
         if (isFullscreen) {
@@ -407,8 +433,14 @@ fun LiveTvScreen(
                 if (runCatching { fullscreenFocus.requestFocus() }.isSuccess) return@LaunchedEffect
             }
         } else if (focusedChannel != null) {
-            delay(100)
-            runCatching { gridFocus.requestFocus() }
+            // Sprint 2, 2026-09-23 (Finding 5) - this used to be a single `runCatching` attempt
+            // with no retry, the one asymmetry against the entry branch just above; on a fast
+            // cold-launch-then-Back the grid's row for the resumed category plausibly hadn't
+            // composed yet, the lone attempt failed silently, and focus fell through to whatever
+            // Compose's default search found - reported as landing on Categories. Now retries the
+            // same bounded way as everything else, and (via targetChannelStreamId in EpgGridColumn
+            // below) targets the exact channel, not just row 0.
+            claimGridFocus()
         }
     }
 
@@ -416,14 +448,7 @@ fun LiveTvScreen(
     // why the two mechanisms above never do this on their own).
     LaunchedEffect(claimInitialFocusTrigger) {
         if (claimInitialFocusTrigger) {
-            if (focusedChannel != null) {
-                var claimed = false
-                repeat(20) {
-                    if (claimed) return@repeat
-                    delay(300)
-                    claimed = runCatching { gridFocus.requestFocus() }.isSuccess
-                }
-            }
+            if (focusedChannel != null) claimGridFocus()
             onClaimInitialFocusTriggerConsumed()
         }
     }
@@ -479,6 +504,7 @@ fun LiveTvScreen(
                         }
                     },
                     modifier = Modifier.width(RedSurfDensity.CategoriesWidth),
+                    onEscapeUp = onEscapeUp,
                 )
 
                 EpgGridColumn(
@@ -489,6 +515,7 @@ fun LiveTvScreen(
                     windowStart = windowStart,
                     onTuneChannel = { channel -> openChannel(channel) },
                     firstCellFocusRequester = gridFocus,
+                    targetChannelStreamId = focusedChannel?.streamId,
                     onCursorChanged = { channel, slot -> onCursorChanged(channel, slot) },
                     onFocusStateChanged = { hasFocus ->
                         channelsHasFocus = hasFocus
@@ -648,12 +675,6 @@ private fun ExpandedHero(
     now: Long,
     playlistUserAgent: String?,
 ) {
-    // Re-armed per distinct previewing channel, so switching the preview to a different channel
-    // always gets a fresh attempt rather than staying stuck failed.
-    var previewFailed by remember(previewingChannel?.streamId, previewingChannel?.playlistId) {
-        mutableStateOf(false)
-    }
-    val showingRealPreview = previewingChannel != null && !previewFailed
     // Text follows the cursor (or the OK'd channel), video follows what's previewing - TiviMate's
     // own split: the thumbnail is clearly "playing," the text is clearly "what you're looking at."
     val displayChannel = focusedChannel ?: previewingChannel
@@ -670,49 +691,37 @@ private fun ExpandedHero(
                 .background(SurfaceRaised),
             contentAlignment = Alignment.Center,
         ) {
-            if (showingRealPreview) {
+            // Sprint 2, 2026-09-23 (item 3) - the controller must stay composed *through* a
+            // transient error so its own reconnect loop (PreviewPlayerHost.kt) keeps running;
+            // tearing it down on error (the old `showingRealPreview = ... && !previewFailed` gate)
+            // disposed the exact object that was supposed to keep retrying. Now the controller
+            // lives for as long as something is previewing at all, and only the *visual* choice
+            // (video vs. the fallback thumbnail) reacts to `hasError` - recovering automatically
+            // the moment a reconnect reaches STATE_READY again, no separate local flag to resync.
+            if (previewingChannel != null) {
                 val previewController = rememberPreviewPlayerController(playlistUserAgent)
                 val hasError by previewController.hasError.collectAsState()
-                LaunchedEffect(hasError) { if (hasError) previewFailed = true }
-                PreviewPlayerHost(
-                    controller = previewController,
-                    streamUrl = previewingChannel!!.streamId,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(RedSurfDensity.PanelRadius)),
-                )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Accent)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text("LIVE", style = RedSurfType.badge, color = TextPrimary)
+                if (!hasError) {
+                    PreviewPlayerHost(
+                        controller = previewController,
+                        streamUrl = previewingChannel.streamId,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(RedSurfDensity.PanelRadius)),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Accent)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text("LIVE", style = RedSurfType.badge, color = TextPrimary)
+                    }
+                } else if (displayChannel != null) {
+                    ChannelFallbackThumbnail(displayChannel)
                 }
             } else if (displayChannel != null) {
-                val icon = displayChannel.streamIcon
-                if (icon.isNullOrBlank()) {
-                    Text(
-                        displayChannel.name.take(1).uppercase(),
-                        style = RedSurfType.heroTitle.copy(fontSize = 32.sp),
-                        color = TextSecondary.copy(alpha = 0.5f),
-                    )
-                } else {
-                    SubcomposeAsyncImage(
-                        model = icon,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize().padding(12.dp),
-                        error = {
-                            Text(
-                                displayChannel.name.take(1).uppercase(),
-                                style = RedSurfType.heroTitle.copy(fontSize = 32.sp),
-                                color = TextSecondary.copy(alpha = 0.5f),
-                            )
-                        },
-                        loading = { },
-                    )
-                }
+                ChannelFallbackThumbnail(displayChannel)
             }
         }
 
@@ -779,6 +788,36 @@ private fun ExpandedHero(
             }
             Text(hint, style = RedSurfType.gridMeta, color = Accent, maxLines = 1)
         }
+    }
+}
+
+/** The channel logo, or its initial letter if it has none/fails to load - shared by the hero
+ * band's "nothing previewing yet" and "preview errored, showing the fallback" states (Sprint 2,
+ * 2026-09-23), so both read the same way rather than two slightly-different implementations. */
+@Composable
+private fun ChannelFallbackThumbnail(channel: ChannelEntity) {
+    val icon = channel.streamIcon
+    if (icon.isNullOrBlank()) {
+        Text(
+            channel.name.take(1).uppercase(),
+            style = RedSurfType.heroTitle.copy(fontSize = 32.sp),
+            color = TextSecondary.copy(alpha = 0.5f),
+        )
+    } else {
+        SubcomposeAsyncImage(
+            model = icon,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            error = {
+                Text(
+                    channel.name.take(1).uppercase(),
+                    style = RedSurfType.heroTitle.copy(fontSize = 32.sp),
+                    color = TextSecondary.copy(alpha = 0.5f),
+                )
+            },
+            loading = { },
+        )
     }
 }
 

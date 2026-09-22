@@ -24,12 +24,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +55,7 @@ import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Provider group names are often a raw hierarchy path ("Animation;Kids", "Comedy;Movies;Series")
@@ -106,6 +115,17 @@ fun GroupsColumn(
     // succeeded and silently steals it back. True (default) preserves this column's original,
     // still-correct standalone behavior everywhere else (LiveTvScreen).
     claimInitialFocus: Boolean = true,
+    // Sprint 2 device verification, 2026-09-22 - real on-device testing of the UP-guard below found
+    // the row-0 case (deliberately left to fall through to Compose's own default `moveFocus`) does
+    // NOT escape to the NavStrip in practice - three consecutive UP presses at the true top row all
+    // stayed on the same row, confirmed via uiautomator focus bounds never changing. This is
+    // FOCUS_MODEL.md rule 7 itself ("don't trust Compose's default directional search to stop at a
+    // scrollable container's real boundary") applying to the *escape* direction too, not just the
+    // in-list case this file's UP-guard already handles explicitly. Fix: an explicit callback, not
+    // another default-search attempt - AppShell wires this to the same canonical
+    // `navPillFocusRequesters[destination]` lookup the long-press-Back nav-jump feature already
+    // established (AGENTS.md's "Global quick-jump to the NavStrip" entry).
+    onEscapeUp: () -> Unit = {},
 ) {
     val multiplePlaylists = remember(groups) { groups.map { it.playlistId }.distinct().size > 1 }
     var collapsedPlaylists by remember { mutableStateOf(setOf<String>()) }
@@ -182,6 +202,18 @@ fun GroupsColumn(
         focusedIndex?.let { runCatching { listState.scrollToItem(it) } }
     }
 
+    // Sprint 2, 2026-09-23 (FOCUS_MODEL.md rule 7) - real boundary guard for UP, where there was
+    // none at all before. User report: "UP-scroll escapes to the nav-strip prematurely" - the
+    // mechanism the audit found is that this column trusted Compose's default directional search
+    // to naturally stop at the list's true top, which a `TvLazyColumn` doesn't reliably do (a row
+    // just above the current one that hasn't been composed yet isn't a candidate the search can
+    // find, so it looks further afield and finds the NavStrip instead). Fix: intercept UP
+    // ourselves whenever the focused row isn't genuinely the first one - explicitly scroll the
+    // target row into view first (so it's guaranteed composed), then retry the *default* move
+    // (not a manual per-row FocusRequester map, which would mean maintaining one per row) now
+    // that the target actually exists. Only a real index-0 UP is left to escape naturally.
+    val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -192,6 +224,26 @@ fun GroupsColumn(
                     runCatching { initialFocus.requestFocus() }
                 }
                 hadFocus = state.hasFocus
+            }
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown || event.key != Key.DirectionUp) return@onPreviewKeyEvent false
+                val startIndex = focusedIndex ?: return@onPreviewKeyEvent false
+                if (startIndex <= 0) {
+                    onEscapeUp()
+                    return@onPreviewKeyEvent true
+                }
+                scope.launch {
+                    runCatching { listState.scrollToItem((startIndex - 1).coerceAtLeast(0)) }
+                    // Retry the *default* move, not a manual per-row target - stop the moment
+                    // focusedIndex actually changes (the move succeeded), bounded so a genuinely
+                    // stuck case doesn't loop forever.
+                    repeat(5) {
+                        if (focusedIndex != startIndex) return@launch
+                        delay(30)
+                        focusManager.moveFocus(FocusDirection.Up)
+                    }
+                }
+                true
             },
     ) {
         Text(
