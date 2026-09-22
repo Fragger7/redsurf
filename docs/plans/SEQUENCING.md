@@ -67,7 +67,7 @@ commits that were triggering real CI releases despite an intended `[skip ci]`.
 
 ## Sprint 2 — Cheap, mechanical bug fixes (batch together, one pass)
 
-Four independent, well-understood bugs, none needing a design decision - bundle per this
+Five independent, well-understood bugs, none needing a design decision - bundle per this
 project's own "batch related changes" convention rather than four separate releases:
 
 1. **Categories UP-scroll escapes to the nav-strip prematurely** (`GroupsColumn`'s UP-key
@@ -94,6 +94,27 @@ project's own "batch related changes" convention rather than four separate relea
    (`state.hasFocus && !hadFocus` - only claim when transitioning *into* focus, not on every data
    refresh), or remove it outright if the other two effects already cover every real case once
    checked carefully - don't guess which without checking, per this project's own rule.
+5. **Back from a cold-launch-autoplay fullscreen doesn't land on the resumed channel - sometimes
+   doesn't even land in the grid at all** (found 2026-09-22, root-caused, not yet fixed). User's
+   report: pressing Back after the app launches straight into fullscreen (auto-play last channel)
+   lands focus on Categories, not the channel that was playing. Two stacked bugs in the same spot,
+   `LiveTvScreen.kt:399-412`'s `LaunchedEffect(isFullscreen)`:
+   - **Reliability bug, likely the dominant one:** entering fullscreen retries focus-claim up to 20
+     times (3s) before giving up; *exiting* only tries **once**, 100ms after `isFullscreen` flips,
+     with no retry, and the failure is silently swallowed (`runCatching`). On a fast cold-launch
+     followed immediately by Back, the grid for the resumed category has very plausibly not
+     finished composing yet, the single attempt fails, nothing claims focus afterward, and Compose's
+     default spatial search picks whatever's nearest - plausibly Categories. Fix: give the exit
+     branch the same bounded-retry shape as the entry branch already has.
+   - **Already-known, deliberately-logged scope trim, compounding even when the above works:**
+     `gridFocus` is a single shared FocusRequester on the grid's row 0, not channel-aware (see the
+     doc comment directly above it in the same file, and `LIVE_TV_GUIDE_MERGE.md`'s own "known,
+     wider-reaching scope trim" note) - so even a successful claim lands one row off from the exact
+     channel, not on it. Real fix needs the grid to find and focus the row matching
+     `focusedChannel`'s `streamId`, the same pattern `ChannelsColumn` used to have before the merge
+     removed it.
+   Fix both together, same file, same pass - fixing only the retry without the channel-aware match
+   would still leave "the wrong row" as a visible miss.
 
 ## Sprint 3 — Double-row EPG channels + the two confirmed icons (high priority, not deferred)
 
