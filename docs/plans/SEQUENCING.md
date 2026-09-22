@@ -74,8 +74,12 @@ groupName`) - the previously-unindexed full-scan bug the Opus consult found; (N2
   device database with its real ~140K rows - no crash, no fallback to destructive migration, no
   data loss. Builds clean, 23/23 unit tests pass.
 
-**Not investigated, still open, noted for the record (same as the first pass):** the docs-only
-commits that were triggering real CI releases despite an intended `[skip ci]`.
+**Resolved, 2026-09-23 (no code change needed):** the "docs-only commits triggering real CI
+releases" mystery flagged twice as open - checked the actual commit messages (`5b9e1ae`,
+`ca5b7b1`, `acff831`, `8fc80de`) directly; none of them contained the literal string `[skip ci]`
+at all. Not a CI/tooling bug - just inconsistent habit across commits within the same session.
+v0.37.10/v0.37.11 both confirmed as real (harmless, no-op) releases from exactly this. Nothing to
+fix; just remember the marker consistently going forward.
 
 ## Sprint 2 — Cheap, mechanical bug fixes (batch together, one pass)
 
