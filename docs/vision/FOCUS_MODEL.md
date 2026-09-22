@@ -109,8 +109,21 @@ the escape (`SettingsScreen.kt`'s rail/pane router, `PlayerScreen.kt`'s own key 
 which this project found behaves **inconsistently by direction** in the pinned Compose/tv-
 foundation versions (blocked an explicit `requestFocus()` even to a destination still inside the
 trapped subtree, while not reliably blocking the default escape it was meant to catch — Settings
-sprint, 2026-09-13). `GroupsColumn.kt` (Categories) currently has **no boundary guard of any kind**
-on UP — see Finding 8.
+sprint, 2026-09-13). `GroupsColumn.kt` (Categories) used to have **no boundary guard of any kind**
+on UP — fixed Sprint 2, 2026-09-22 (`SEQUENCING.md`).
+
+**The rule cuts both ways — don't just guard the in-list case, guard the escape itself too.**
+Sprint 2's own first attempt at `GroupsColumn.kt`'s UP guard handled the in-list "scroll and move"
+case explicitly, but deliberately left the true-row-0 escape to fall through to default `moveFocus`
+— on the reasoning that *this* was the case the rule already covered elsewhere. Live device testing
+found that default escape does **not** reliably work either: three consecutive UP presses at a
+genuine top row all stayed on the same row, confirmed via `uiautomator` focus bounds never
+changing. The fix was an explicit callback (`onEscapeUp`) calling the same canonical
+`navPillFocusRequesters[destination].requestFocus()` this codebase already uses successfully
+elsewhere (the long-press-Back nav-jump), not another default-search attempt. Lesson: when adding a
+boundary guard, the *escape* direction needs the same explicit-interception treatment as the
+in-list direction — don't assume "default search will at least get you off the edge," since that's
+the exact failure mode this rule exists to name.
 
 ### 8. Every overlay/modal a screen owns internally needs the same reclaim-on-close discipline as the screen level — not just once, at the door
 
@@ -152,7 +165,16 @@ wait for a report. Concrete checklist for any new flow with meaningful state:
   should roughly match how long the target realistically takes to compose (a short in-memory list
   needs less margin than a fresh Paging load against a large real playlist — `GroupsColumn`'s
   category-row claim measured this directly: ~3.4s for a 123-channel group's *first* Paging load
-  on real hardware, far longer than any UI-only claim needs).
+  on real hardware, far longer than any UI-only claim needs). **A retry budget is a claim about a
+  measured worst case, not a guessed round number — verify it against one.** Sprint 2, 2026-09-22:
+  `LiveTvScreen.kt`'s `claimGridFocus()` shipped with a 20×150ms=3s budget that looked generous by
+  eye, then failed on the very first genuinely-cold-cache device test — a real group query measured
+  **5.23s**, and the claim silently exhausted its retries before the target ever composed, landing
+  focus on Categories instead of the intended channel row. A second test with a warm cache (363ms)
+  passed, which would have made the bug look fixed if that had been the only test run. Widened to
+  20×300ms=6s to match `GroupsColumn`'s own already-proven ceiling for this exact class of
+  cold-launch race. Test a retry budget against a genuinely cold cache (fresh install or
+  `force-stop`, not a warm relaunch), not just the fast path.
 - **Explicit `onPreviewKeyEvent` interception** (rule 7) over `focusProperties { exit = ... }` —
   the established router pattern, not a special case.
 - **A `visible: Boolean` param instead of conditional composition** (rule 4) — the fix shape for
@@ -164,5 +186,23 @@ wait for a report. Concrete checklist for any new flow with meaningful state:
 
 ## Open findings from the 2026-09-22 audit
 
-See `docs/plans/SEQUENCING.md`'s Sprint 2 section for the full, itemized list with exact
-file:line references, organized as fix-ready backlog items rather than duplicated here.
+**Sprint 2 closed the same day, real release v0.37.13** — all 9 items fixed and device-verified
+(two of them, items 1/8 and 5/6, needed a real second fix after their first attempt failed live
+verification; see the rule 3 and rule 7 notes above for what was learned). See
+`docs/plans/SEQUENCING.md`'s Sprint 2 section for the full per-item account. One item (1/8's
+true-boundary escape) is fixed in code but not re-confirmed at the actual list boundary — this
+device's real category list turned out to run into the hundreds of rows, and brute-force climbing
+back to the top a second time to re-check wasn't a good use of one session. Worth a quick targeted
+check next time Categories is touched.
+
+**New, found during Sprint 2 verification, not yet fixed — a real crash, not a focus bug.** A
+genuine `FATAL EXCEPTION` (`IllegalStateException: Expected BringIntoViewRequester to not be used
+before parents are placed`) reproduces live in `SettingsScreen`'s Playlists pane: cancel a
+remove-playlist confirmation, then press UP a few times, and the app force-quits. Confirmed not
+caused by Sprint 2's own changes (no scroll/`BringIntoView` call exists anywhere in
+`SettingsScreen.kt`) — this looks like a Compose Foundation internal timing race, plausibly
+triggered by the confirm panel's rows disappearing from the list right as a bring-into-view request
+fires before the shrunk list finishes re-laying-out. Out of scope for a focus-model rule (it's not
+a "focus landed in the wrong place" bug, it's a framework-level crash), logged here as a pointer —
+full account in `docs/plans/TESTING_OUTSTANDING.md` section H and `SPRINT_LOG.md`'s 2026-09-22
+entry.

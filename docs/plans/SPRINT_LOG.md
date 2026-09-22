@@ -2,6 +2,94 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-22 (later still) — Sprint 2 CLOSED: Live TV grid focus, preview reconnect, Settings persistence
+
+Full detail: `docs/plans/SEQUENCING.md`'s Sprint 2 section (rewritten with real per-item results),
+`docs/plans/TESTING_OUTSTANDING.md` section H, `docs/vision/FOCUS_MODEL.md` (rules 3 and 7 updated
+with this session's lessons). Real release **v0.37.13** (versionCode 135), commit `e1d81b1`.
+
+All 9 items from Sprint 2's plan fixed in one batch across 6 files (`GroupsColumn.kt`,
+`EpgGridColumn.kt`, `LiveTvScreen.kt`, `PreviewPlayerHost.kt`, `SettingsScreen.kt`, `AppShell.kt`).
+Compiled clean, 23/23 unit tests passing, device-verified on the real Chromecast against a real
+signed release (never a debug build), no `FATAL` crash from this batch's own code across the whole
+session, all 3 real playlists ("Random Strong", "Random Score", "Faraz Strong") confirmed intact
+via `epgBackfill` logcat lines at the start and end.
+
+**Two items needed a real second fix, found only by testing on the device, not by re-reading the
+code:**
+
+- **Items 1/8 (Categories UP boundary guard).** The in-list "scroll up one row" behavior worked
+  perfectly from the first attempt - hammered with dozens of presses across a real ~500+-row
+  combined multi-playlist category list, zero premature escapes. But the true-row-0 escape case,
+  deliberately left to fall through to Compose's default `moveFocus`, turned out **not** to work:
+  three consecutive UP presses at a genuine top row all stayed on the same row, confirmed via
+  `uiautomator` focus bounds never changing across the presses. Fixed with an explicit `onEscapeUp`
+  callback wired to `AppShell`'s existing `navPillFocusRequesters[destination]` lookup - the same
+  mechanism the long-press-Back nav-jump feature already uses successfully. **This fix itself was
+  not re-verified at the true list boundary** - the device's real category list ran into the
+  hundreds of rows (confirmed by climbing partway through it across several hundred UP presses,
+  crossing US-prefixed, UK-prefixed, and NL-prefixed sections without reaching the top), and
+  brute-forcing back to the top a second time wasn't a good use of the remaining session. High
+  confidence given the reused proven mechanism, not full confirmation - flagged honestly.
+- **Items 5/6 (Back-from-cold-launch-fullscreen focus restore).** The channel-aware grid target
+  (`targetChannelStreamId`) was straightforward, but the very first live test of the combined fix
+  failed: on this session's genuinely cold DB cache (fresh install, first launch), the group query
+  measured **5.23s** (`gridQuery ... tookMs=5230`), longer than the original 20×150ms=3s retry
+  budget on `claimGridFocus()`. The claim silently exhausted its retries and focus fell back to
+  Categories instead of the resumed channel - screenshot-confirmed. A second cold-launch test with
+  a warm cache (363ms) passed cleanly, which would have hidden the bug if that had been the only
+  test run. Fixed by widening the retry to 20×300ms=6s, matching `GroupsColumn`'s own
+  already-established 6s ceiling for the same class of race. Re-verified after the fix on two more
+  fresh `force-stop`+relaunch cycles, both landing correctly on the exact resumed channel's grid
+  row.
+
+**The other five items worked as designed on first verification:** item 2 (grid entry no longer
+lands on a stale scrolled-away position - confirmed on every category switch), item 3 (preview
+reconnect - fixed and compiles clean, structurally sound, but not exercised live; see below), item
+4 (scrolling Categories no longer steals grid focus - 8+ consecutive DOWN presses confirmed), item
+7 (no conflicting-focus races observed across the session), item 9 (Settings state/focus survives
+a destination round trip, including an in-progress confirm-dialog observed correctly persisting).
+
+**Item 3 (preview reconnect) - the one item not meaningfully exercised live.** Two blockers, both
+discovered live rather than anticipated: this test device's `adb` connection is itself over the
+same wifi a real network-interruption test would need to sever, making `adb shell svc wifi disable`
+too risky to attempt; and this device's "Preview channel on select" setting turned out to be
+**off** already (a pre-existing setting from earlier testing, not a bug caused by this sprint) -
+OK jumps straight to fullscreen, so the two-step preview flow itself, reconnect included, was never
+actually entered this session. Logged as a specific next-session task in `TESTING_OUTSTANDING.md`.
+
+**Deviated: found and deliberately did NOT fix a real, separate crash - out of this batch's
+scope.** Mid-verification, a genuine `FATAL EXCEPTION`
+(`IllegalStateException: Expected BringIntoViewRequester to not be used before parents are placed`,
+`ContentInViewNode.calculateRectForParent`) reproduced live in `SettingsScreen`'s Playlists pane:
+cancel a remove-playlist confirmation, then press UP a few times, and the app force-quits. Checked
+enough to confirm it's not caused by any of this batch's 6 changed files - `SettingsScreen.kt` has
+no explicit scroll/`BringIntoView` call anywhere, so this is Compose Foundation's own internal
+bring-into-view/layout-placement race, not app code. No playlist data was lost either time it fired
+(confirmed via `epgBackfill` logs immediately after and again at session end). This needs a real
+debugging session to find the minimal repro, not a guess-and-check patch under this sprint's time
+pressure - logged in `TESTING_OUTSTANDING.md` section H for next session.
+
+**Deviated: a test-tooling near-miss, not a product bug, worth naming so it doesn't repeat.** Early
+in verification, `scripts/tv-test.sh`'s generic `nav_to_settings` helper (built for Live TV's
+shallow layout, where one UP reliably reaches the NavStrip) was used from deep inside Settings'
+Playlists pane, where UP does not escape in one press (the same class of gap as items 1/8, just in
+a different screen, not part of this batch's scope). The helper's blind RIGHT-search-then-
+unconditional-OK fallback landed on a playlist's "Remove" confirmation and came within one keypress
+of pressing **Confirm remove** on a real playlist - caught before it fired by inspecting the tool
+call sequence and pressing `Back` deliberately instead of continuing the scripted helper. No data
+was lost; all 3 playlists confirmed intact both immediately after and at the very end of the
+session. Lesson for future sessions: don't use the generic nav helpers inside Settings' Playlists
+pane - navigate manually, one press at a time, with a `focused_info` check before any
+`KEYCODE_DPAD_CENTER` there specifically.
+
+**Release process note:** built and verified locally against a real signed release
+(`-PversionName=v0.37.13 -PversionCode=135`, signature-verified against the established keystore
+fingerprint) before pushing, per this project's current sprint protocol - no debug builds used.
+`gh release list` was checked both before starting (confirmed `v0.37.12` was the last real release,
+so `v0.37.13` was the correct next version to test against locally) and after pushing (confirmed CI
+assigned the same `v0.37.13`, no version collision this time).
+
 ## 2026-09-22 (later) — Sprint 1 CLOSED: cold-launch DB contention fixed, real numbers
 
 Second pass, same sprint - picks up from the Opus consult below. Full detail:

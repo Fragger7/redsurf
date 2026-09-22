@@ -1,11 +1,11 @@
 # Outstanding testing — resume here
 
-**Written 2026-09-21, end of session, updated 2026-09-22.** Everything the user hasn't yet put
-real eyes/remote on, grouped by build, newest first. The user drives the next session from this
-list, giving input on fixes per item. Device is on **v0.37.2** (versionCode 124). Playlists on the
-device as of 2026-09-21: "Random Strong" and "Random Score" (both Xtream). Random Score's EPG
-synced completely; Random Strong's EPG endpoint (`line.bestlina14.cc`) is dead (nginx 502) -
-user's call, not chased.
+**Written 2026-09-21, end of session, updated 2026-09-22 (Sprint 2 closed, see section H).**
+Everything the user hasn't yet put real eyes/remote on, grouped by build, newest first. The user
+drives the next session from this list, giving input on fixes per item. Device is on **v0.37.13**
+(versionCode 135) after Sprint 2's real release. Playlists on the device as of 2026-09-22: "Random
+Strong", "Random Score", and "Faraz Strong" (all Xtream, all three confirmed intact via
+`epgBackfill` logcat lines at the start and end of the Sprint 2 session).
 
 **New test playlist, 2026-09-22 - "Faraz Strong"** (`comepitv.online`, credentials saved at
 `~/.redsurf/test-playlist-2.url`, same format/location as the original `test-playlist.url`,
@@ -93,6 +93,59 @@ Hold next to `docs/vision/references/tivimate/RedThemedEPGLiveTVScreen.jpg`.
     `Controls`/picker overlay state rather than plain fullscreen before the zap attempt started.
     **Genuinely open: does channel-to-channel zapping work and feel fast, starting fresh
     (not right after a bunch of other testing)?**
+
+## H. Sprint 2 — CLOSED, 2026-09-22, real release v0.37.13 (see `SEQUENCING.md` for full detail)
+
+All 9 items fixed and device-verified this session except as noted. Full per-item account,
+including two bugs found and fixed *during* verification (not just at write-time), is in
+`SEQUENCING.md`'s Sprint 2 section - summary here for the user's own quick pass:
+
+24. **Categories UP boundary guard (items 1/8) - fixed, in-list behavior thoroughly verified, the
+    true-top escape-to-NavStrip specifically NOT re-verified after its own fix.** The in-list
+    "scroll up one row" behavior was hammered hard (dozens of presses across a real ~500+-row
+    combined category list) with zero premature escapes. The escape-to-NavStrip case was found
+    broken on the first attempt (stuck at row 0, confirmed via `uiautomator`), fixed with an
+    explicit callback reusing the same `navPillFocusRequesters` mechanism the long-press-Back
+    feature already proves works - but this device's category list turned out too large (several
+    hundred rows) to brute-force back to the true boundary a second time to re-check the fix.
+    **Worth a 2-minute check next session:** hold UP long enough to genuinely reach the top of
+    Categories, confirm it lands on the Live TV nav-strip pill.
+25. **Grid entry position (item 2) - fixed and verified.** Every category switch now shows "now"
+    at the left edge of the grid, never a stale scrolled-away position from a previous category.
+26. **Preview reconnect (item 3) - fixed and compile/structure-verified, the actual reconnect
+    behavior not exercised live.** Couldn't safely simulate a real network drop (this device's
+    `adb` connection is itself over the same wifi the fix would need to interrupt). Also: this
+    device's "Preview channel on select" setting is currently **off** (a pre-existing setting, not
+    a bug) - OK jumps straight to fullscreen instead of the two-step preview, so preview itself
+    wasn't exercised at all this pass. **Worth checking next session:** turn "Preview channel on
+    select" on under Settings → Playback, then either tune to a channel known to be flaky or pull
+    the network briefly (from a different control path than this device's own wifi-connected adb)
+    to watch the reconnect loop actually fire.
+27. **Categories-scroll-steals-grid-focus (item 4) - fixed and verified.** 8+ consecutive DOWN
+    presses through Categories never once pulled focus into the grid.
+28. **Cold-launch-then-Back focus restore (items 5/6) - fixed and verified, after a real bug found
+    mid-verification.** First live attempt failed on a genuinely cold DB cache (group query
+    measured 5.23s, longer than the original 3s retry budget) - focus fell back to Categories
+    instead of the resumed channel. Fixed by widening the retry to 6s (matching an existing,
+    already-proven ceiling elsewhere in this same file). Re-verified twice more on fresh
+    `force-stop`+relaunch cycles, both landing correctly on the exact resumed channel's grid row.
+29. **Three effects racing on one `gridFocus` (item 7) - fixed and verified.** No conflicting-focus
+    races observed across the whole session.
+30. **Settings persists across destination switches (item 9) - fixed and verified.** Category
+    selection survives a Home→Settings round trip; an in-progress "confirm remove playlist" dialog
+    was even observed correctly persisting (not just focus - real state discipline).
+
+**New, found this session, NOT fixed (out of Sprint 2's scope) - a real crash:**
+`SettingsScreen`'s Playlists pane force-quits the app (`FATAL EXCEPTION`,
+`IllegalStateException: Expected BringIntoViewRequester to not be used before parents are placed`)
+after cancelling a remove-playlist confirmation and then pressing UP a few times. Confirmed not
+caused by anything in Sprint 2's 6 changed files (no scroll/`BringIntoView` call anywhere in
+`SettingsScreen.kt`) - looks like a Compose Foundation internal timing race triggered by the
+confirm panel's rows disappearing from the list right as rapid UP presses request bring-into-view
+before the shrunk list finishes re-laying-out. No data lost either time it fired. **Needs a real
+debugging session, not a guess-and-check patch** - next person should try to find the minimal
+repro (does it need the exact "cancel then UP" sequence, or does any rapid input right after this
+pane's row count changes trigger it?).
 
 ## F. Decisions pending (not tests)
 
