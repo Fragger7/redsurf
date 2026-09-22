@@ -56,7 +56,28 @@ release `v0.37.8` (versionCode 130, keystore fingerprint `1b13f1d9…d2510d8a` m
 release) installed in place and confirmed running before push.
 
 **Not investigated, still open:** the docs-only commits that were triggering real CI releases
-despite an intended `[skip ci]` - flagged twice now, still not root-caused.
+despite an intended `[skip ci]` - flagged twice now, still not root-caused. **Caught live this
+time:** a docs-only commit (`8fc80de`, "pin the Categories-scroll-steals-focus bug for Sprint 2",
+pushed in parallel to this sprint's own work) triggered a real CI release tagged **v0.37.8** at
+06:27 - the *same* version string this sprint's own local test build used
+(`-PversionName=v0.37.8 -PversionCode=130`) for on-device verification, purely by coincidence of
+timing. **Real consequence, not just noise this time:** GitHub's actual `v0.37.8` release artifact
+is that docs-only commit's code - it does NOT contain this sprint's fix set, even though the
+device had a same-named local build with the real fixes installed on it during verification. This
+sprint's own commit (`c46051d`) was pushed after, and CI was still running for it
+(`in_progress`, run `35695535673`) when work stopped - it will presumably land as `v0.37.9` or
+whatever semantic-release assigns next, which is the version the device needs to end up on to be
+consistent with the real release history. **Action for next session: confirm CI finished, confirm
+the resulting release tag's version, and install *that* exact artifact on the device** - don't
+assume the currently-installed local "v0.37.8" is safe to leave as the device's permanent state,
+since it doesn't match what GitHub calls v0.37.8. This is now a real OTA-integrity concern, not
+just release-count noise - worth fixing the underlying skip-ci trigger before it causes a second
+collision.
+
+**Stopped here, mid-verification of the push, at the coordinator's explicit request** (laptop
+closing soon, network/power to the device about to become unreliable) - not because of any
+blocker in the work itself. Everything of substance for this pass is committed and pushed
+(`c46051d`); nothing was left half-edited. Sprint 2 was not started, per that same instruction.
 
 ## 2026-09-22 — Sprint 1 (performance/state audit): re-entry fixed, cold-load escalated
 
