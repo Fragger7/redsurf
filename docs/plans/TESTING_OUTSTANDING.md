@@ -93,3 +93,18 @@ Hold next to `docs/vision/references/tivimate/RedThemedEPGLiveTVScreen.jpg`.
 - Public-source EPG supplement (P1) + the provider-vs-supplemented cell iconography (`AGENTS.md`
   2026-09-15: cool-tone tint + non-colour cue + a legend) - both land in the same pass.
 - Playlist detail/edit page (`AGENTS.md` backlog, decided 2026-09-17).
+- **Catch-up/timeshift (new, 2026-09-21/22)** - real Xtream API concept (`tv_archive: 1` +
+  `tv_archive_duration` on `get_live_streams`, not yet stored). User-confirmed priority: TiviMate
+  parity is priority A for this whole EPG effort. Icon confirmed via two real screenshots the user
+  provided, saved at `docs/vision/references/tivimate/TiviMate_CatchupIconExample.jpg` and
+  `...Example2.jpg`: a small white circular-counterclockwise-arrow-with-a-clock-hand ("history")
+  glyph, **inline in the channel row right after the channel name** (not per-programme-cell, not
+  near the logo) - a per-channel badge (some channels in the reference have it, most don't), not
+  scoped to whether a specific past programme is still inside the archive window. Own brief when
+  scoped, not part of the current grid work.
+- **Currently-playing-channel indicator (was open, now answered by the same reference images)** -
+  TiviMate uses a small **blue play triangle (▶)**, inline in the channel row, immediately before
+  the catch-up icon if both apply (`name → ▶ → history-icon → grid`) - not a whole-row colour
+  change. Row order confirmed: channel name, then play triangle (if this is the tuned channel),
+  then catch-up glyph (if archive-enabled), then the timeline starts. Design both together with
+  the double-row feature (F above) since double-row is what gives these icons real room.
