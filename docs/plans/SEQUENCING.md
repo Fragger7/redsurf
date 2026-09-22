@@ -6,136 +6,64 @@ this is the plan the user reviews/corrects before any sprint launches. Prioritie
 2026-09-22: **(A) TiviMate parity, (B) sound architecture/state/caching, with performance treated
 as a high concern throughout** - both named explicitly, not inferred.
 
-## Sprint 1 — Performance & state audit — PARTIALLY DONE, 2026-09-22
+## Sprint 1 — CLOSED, 2026-09-22 (second pass, real fixes + real verification)
 
-**Shipped, real fix:** the exact conditional-composition trap suspected. `AppShell.kt` used to
-remove `LiveTvScreen` from composition entirely every time `destination` changed away from Live TV
-and back - not just the data (`selectedGroup`/`focusedChannel`, already hoisted since 2026-09-15)
-but every *derived* piece of state downstream of it: the categories Flow subscription,
-`GroupsColumn`'s scroll position and one-shot focus-claim latch, and the grid's own non-paged
-`channelsInGroup`/`programsForChannels` query results - all torn down and rebuilt from zero on
-every round trip. Fixed by keeping `LiveTvScreen` permanently composed once a playlist is active
-and adding a `visible: Boolean` param that gives it real size or `Modifier.size(0.dp)` (zero
-layout cost, can't receive focus/input) instead of removing it from the tree; a new
-`LaunchedEffect(destination)` in `AppShell` reclaims focus via the existing (already
-re-triggerable) `liveTvClaimInitialFocusTrigger` mechanism whenever `destination` becomes LiveTv
-again, now cheap since nothing has to wait on a fresh load first. Real device measurement: on
-return to Live TV from Settings, zero `gridQuery`/`initialFocus`/`epgBackfill` log lines fired
-(previously every one of those re-ran). **Builds clean, 23/23 tests pass, this specific result
-verified on device via logcat** - visual re-confirmation of the returned screen itself was cut
-short by external interference (see below) before a screenshot could be taken.
+**All must-do and nice-to-have items from the Opus consult shipped and verified on device,
+real release v0.37.8 (versionCode 130).** Built: (M1) EPG sync scheduling moved to *after*
+`AppState.Loaded` instead of before, plus a real `setInitialDelay` (45s) and a per-playlist
+stagger (`staggerIndex * 5min`) so multiple playlists' downloads can never start concurrently by
+construction - the manual "Update EPG now" button deliberately stays unstaggered (a user pressing
+it wants it now); (M2) Room's `RedSurfDatabase.getDatabase()` now sets a dedicated 4-thread
+`queryExecutor` and a single-thread `transactionExecutor`, instead of sharing Room's own default
+`ArchTaskExecutor` pool with every other read/write in the app; (M3) `XmlTvParser`/`EpgSyncWorker`
+now group 10 of the existing 1000-row batches into one `db.withTransaction` instead of committing
+every batch (~20 commits per sync instead of ~200); (M4) `.setJournalMode(WRITE_AHEAD_LOGGING)`
+pinned explicitly - confirmed via live `dumpsys dbinfo` to already be the effective mode, so this
+removes a device-dependent branch rather than fixing the measured slowness itself, stated plainly
+rather than credited; (M5) the redundant `epg_programs` index dropped (real `MIGRATION_9_10`, a
+strict prefix of the table's own implicit PK autoindex, zero read benefit, real write cost);
+(N1) a real covering index added for `getLiveGroupCounts()` (`streamType, isHidden, playlistId,
+groupName`) - the previously-unindexed full-scan bug the Opus consult found; (N2) one
+`ANALYZE` after each successful sync, never on the launch path.
 
-**Not fixed, real open question - escalating per the sprint's own instructions, not guessing:**
-cold-launch itself is separately, seriously slow at real scale, and this is NOT explained by the
-conditional-composition trap above (that only concerns *re-entry*, not first load). Measured live:
-`channelsInGroup()` alone took **6893ms** for a 134-channel result on a table with ~140K total
-channels across 3 playlists; one playlist's `epg_programs` table alone holds **125,175 rows**. The
-`channels` table already has a matching index (`playlistId, streamType, groupName`) and the query
-result set is small (134 rows), so a straightforward missing-index explanation doesn't fit cleanly
-- ruled out as the likely sole cause, not confirmed as ruled out entirely. Real candidate causes,
-none confirmed: (a) DB connection contention - three `EpgSyncWorker` backfill-check queries
-(`COUNT(*)` against tables up to 125K rows) fire on `Dispatchers.IO` at the same moment as this
-query, and Room's default journal mode wasn't verified on this specific device (checked
-`ro.config.low_ram`, unset, so WAL should apply by Room's own default heuristic - but this wasn't
-confirmed against the actual open database, `run-as` doesn't work on this release build); (b) the
-grid's own `programsForChannels()` call (not separately timed this pass - the log line only wraps
-`channelsInGroup()`) could be the larger of the two costs, not yet isolated; (c) something else
-entirely not yet identified. **This needs either a proper `EXPLAIN QUERY PLAN` against the real
-database or an Opus consult with this data in hand, per the sprint's own escalation instructions -
-not a guessed fix.** The user's own three sluggishness reports are likely a mix of both issues
-(this pass fixes the re-entry half, not the cold-load half) - test again once the cold-load
-question is resolved, not before.
+**Verified on device, real before/after numbers, not "should be faster":**
+- `dumpsys dbinfo` confirmed `journalMode=WAL`, `Max connections: 4` - settles the
+  journal-mode question for good; WAL was already active before this pass, as the Opus consult
+  predicted.
+- **The exact statement the Opus consult flagged as a live victim of contention** -
+  `getLiveGroupCounts()` - measured **3286ms** pre-fix (via `dumpsys dbinfo`'s real per-statement
+  duration) and **254ms** post-fix on a clean second cold launch (the first post-install launch
+  includes one-time migration/schema-validation overhead and isn't a fair comparison - excluded).
+  **13x faster**, and the only statement over 50ms anywhere in a 20-second post-launch window
+  (was: multiple 2-3s statements).
+- **The app-level `gridQuery` line** (the original 6893ms measurement from the first pass) now
+  reads **361ms** on the same clean second cold launch - **19x faster**.
+- `epgBackfill` correctly reports `stale=false` for all 3 real playlists (no unnecessary re-sync);
+  **zero `epgSync -> start` lines fired in the 20-second cold-launch window**, confirming EPG sync
+  is genuinely off the critical path now. Honest gap: all 3 playlists happened to be fresh this
+  pass, so the per-playlist *stagger* specifically (as opposed to the deferral) was never observed
+  preventing a real concurrent-download collision live - the code path is verified by reading and
+  by the deferral's own confirmed effect, not by watching staggered downloads actually happen.
+- **Flat-memory-at-scale re-check (item 2): holds.** `dumpsys meminfo` at the real current scale
+  (3 playlists, ~140K channels, roughly 2-5x `PHASE_1.md` 1.6's original 28-60K test) measured
+  **~131-136MB PSS** - still inside that same original 112.8-145.7MB range. Paging genuinely still
+  bounds memory at this larger scale, not just the smaller one it was last proven on.
+- **Channel-zap sluggishness (item 3): inconclusive, not verified.** Four `KEYCODE_DPAD_UP`
+  presses while RedSurf was confirmed foreground and genuinely playing (real audio focus,
+  `positionWatchdog` ticking normally) produced zero `zap dir=` log lines - the keys didn't
+  appear to reach `PlayerScreen`'s zap handler at all, for a reason not root-caused this pass
+  (a plausible but unconfirmed theory: repeated cold-launches earlier in this same session for
+  the dbinfo measurements may have triggered "auto-play last channel on launch," landing the app
+  directly in fullscreen with `PlayerOverlay.Controls` or a picker open rather than `None`, before
+  the zap attempt began, changing what UP actually does). Reported honestly as unverified rather
+  than guessed - worth a clean, isolated re-check next time, starting from a known browse-view
+  state rather than stacked on top of several prior cold launches.
+- Install-in-place (no uninstall) confirmed the v9→v10 migration ran cleanly against the real
+  device database with its real ~140K rows - no crash, no fallback to destructive migration, no
+  data loss. Builds clean, 23/23 unit tests pass.
 
-**Item 2 (flat-memory-at-scale re-check) and item 3 (channel-to-channel zap sluggishness):** not
-reached this pass - the cold-launch finding above was significant enough to warrant stopping to
-report rather than continuing to accumulate findings without resolving the first one. Real
-`dumpsys meminfo` at cold launch: 117801 KB PSS (~115MB) - not yet compared against a
-before/after-navigation delta or the historical ~112-145MB range from `PHASE_1.md` 1.6, since that
-comparison needs the cold-load question settled first to be a fair read.
-
-**Stopped, not finished - external interference:** `youtube.tv`'s `MainActivity` took real device
-foreground mid-verification (`dumpsys activity activities` confirmed `mFocusedApp` was YouTube,
-not RedSurf) - the same class of household-remote interference logged in the Lattice sprint. Key
-injection stopped there rather than fighting a live person for the remote, per this project's own
-established practice. Resuming needs a free TV.
-
-**Also found, unrelated to this sprint's own scope, noted for the record:** the last several
-"docs:"-only commits (`b97c643` onward) triggered real CI release cuts (v0.37.3/4/5) despite not
-touching app code - whatever `[skip ci]` convention was applied to earlier docs commits didn't
-apply to (or was dropped from) these. Not fixed here - out of scope for a performance audit, but
-worth a look before it produces more release noise.
-
-**Opus consult, 2026-09-22 - the coordinator's own WAL/TRUNCATE hypothesis was wrong on
-mechanism, right on shape.** One live read-only check settled the journal-mode question with zero
-code: `adb shell getprop ro.config.low_ram` → unset, and Room 2.6.1's actual `AUTOMATIC.resolve()`
-source (read directly) only falls back to TRUNCATE when that property is set - so WAL is almost
-certainly already active, and the "reads blocked behind an exclusive write lock" theory is very
-likely dead. The real picture, ranked:
-
-1. **The 6893ms measurement itself is suspect.** `LiveTvScreen.kt`'s timer wraps `LaunchedEffect`
-   code running on `AndroidUiDispatcher.Main`, so the interval contains dispatch-to-IO-thread,
-   queue wait, the actual query, *and* resuming back onto a main thread that's mid-cold-launch
-   (first composition, `WaveSpinner`, ExoPlayer init) - not just SQL time. It also used
-   `System.currentTimeMillis()` (wall-clock, can jump on an NTP resync at boot) instead of
-   `SystemClock.elapsedRealtime()`.
-2. **Room's default executor is a shared, fixed 4-thread pool for every read and write in the
-   whole app**, never overridden (`setQueryExecutor`/`setTransactionExecutor` are never called).
-   Cold launch runs 3 `EpgSyncWorker`s concurrently (WorkManager's own default executor sizes to
-   3 threads on this 4-core SoC) doing ~125-200 batch-insert calls each against a 201K-row feed -
-   strict FIFO, no priority. The 134-row Live TV read is very plausibly just queued behind that,
-   not blocked by a lock.
-3. **Raw I/O saturation** - three concurrent 67MB downloads + ~600 write transactions (one commit/
-   fsync per 1000-row batch) on eMMC with 880MB free, independent of any locking model.
-4. **A second, previously-unnamed real bug, on the same cold path:** `getLiveGroupCounts()` (the
-   query that powers the Categories column) has **no `playlistId` constraint** and isn't covered
-   by the existing index at all - a full `SCAN channels` + temp B-tree `GROUP BY` over the whole
-   ~140K-row table, every cold launch, with `sqlite_stat1` never populated (nothing in this app
-   ever runs `ANALYZE`). This is a real, separately-fixable finding the original sprint never
-   measured.
-5. Room's `InvalidationTracker` posts its own write transaction after every commit
-   (`refreshVersionsAsync`), roughly doubling the ~600 commits to ~1200 - overhead, not a cascade
-   (nothing observes `epg_programs` via `Flow`/`PagingSource`, so no triggers are installed on it).
-6. `index_epg_programs_playlistId_channelEpgId` is a strict prefix of the table's own implicit
-   primary-key autoindex `(playlistId, channelEpgId, startTime)` - redundant, pure write
-   amplification on ~200K rows every sync, serves no query the autoindex can't already.
-7. `MainViewModel.checkLocalCache`'s `epgRows = ...countForPlaylist(...)` is fetched only to put in
-   a log string - three wasted `COUNT(*)` scans over 125K-row tables on the cold path, per launch.
-
-**Fix set given, ranked must-do/nice-to-have/unnecessary** (full detail and exact code in the
-consult transcript, this session): **must-do** - get EPG sync off the cold-launch critical path
-entirely (move the sync-scheduling loop to *after* `AppState.Loaded` is set, add a real initial
-delay, stagger the 3 playlists so they never download concurrently by construction); give Room
-separate query/transaction executors; batch ~10 of the 1000-row inserts into one
-`withTransaction` instead of committing every batch; explicitly pin `JournalMode.WRITE_AHEAD_LOGGING`
-(removes a device-dependent branch even though it's probably not *the* fix - "say that plainly in
-the commit message rather than letting it get credited"); drop the redundant index.
-**Nice-to-have** - a real covering index for `getLiveGroupCounts()`
-(`streamType, isHidden, playlistId, groupName`); one `ANALYZE` after each import, never on the
-launch path. **Explicitly unnecessary, don't spend the sprint here** - `busy_timeout` tuning (not
-the actual contention point under WAL), a second read-only database instance (duplicate
-`InvalidationTracker`/triggers, a known footgun), lowering `BATCH_SIZE` (commit count is the cost,
-not memory), raising `cache_size` (wrong trade at 449MB free).
-
-**Verification protocol for next pass, before shipping any fix blind** (this project's own
-"never claim something works because you wrote plausible code" rule, applied to a design decision
-this time, not just an implementation): `adb shell dumpsys dbinfo com.redsurf.tv` works on this
-release build with **zero code changes** (it's a system dump via `ActivityThread`, not `run-as`)
-and prints real connection-pool size (settles WAL-vs-not definitively) plus **per-connection real
-statement durations with full SQL text** - the single most direct way to see whether the channels
-query itself is slow or just queued. A four-marker instrumentation split
-(`toIo`/`query`/`resume`/`total`, using `SystemClock.elapsedRealtime()`) isolates dispatch
-overhead from real SQL time. A concrete technique for real `EXPLAIN QUERY PLAN` against the actual
-140K-row database despite the non-debuggable build: checkpoint the WAL, copy all three DB files
-(`-wal`/`-shm` included) to the app's external files dir (readable via plain `adb shell`, no
-`run-as` needed), `adb pull`, then real `sqlite3`/`.eqp on` on the Mac against the exact live data
-- gives an uncontended baseline to compare the device's contended numbers against.
-
-**Blocked from measuring further right now, same class as before:** a household member had
-YouTube in foreground (`dumpsys activity activities` confirmed) when this consult tried its own
-live check - deliberately did not steal foreground to push further. Suggested order for the next
-pass: `dumpsys dbinfo` + the `getprop` check first (five minutes, free, decides whether pinning
-WAL is the headline fix or a footnote) → the four-marker instrumentation → the must-do fix set as
-one batch → the nice-to-haves last, behind a real `EXPLAIN QUERY PLAN`.
+**Not investigated, still open, noted for the record (same as the first pass):** the docs-only
+commits that were triggering real CI releases despite an intended `[skip ci]`.
 
 ## Sprint 2 — Cheap, mechanical bug fixes (batch together, one pass)
 

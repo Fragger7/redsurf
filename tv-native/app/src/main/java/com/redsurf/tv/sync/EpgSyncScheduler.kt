@@ -32,20 +32,36 @@ object EpgSyncScheduler {
      * the normal case for this app, so a stall should cost minutes, not the afternoon. */
     private const val BACKOFF_MINUTES = 5L
 
-    private fun request(playlistId: String) =
+    /** Sprint 1 performance pass, 2026-09-22 (Opus consult, "must-do" fix set): cold launch used
+     * to fire every playlist's sync at once, racing the Live TV screen's own first-paint queries
+     * for the same 4-connection Room pool and saturating I/O with N concurrent 67MB downloads.
+     * A flat delay gets sync work off the critical path entirely; the per-playlist stagger on top
+     * of it means multiple playlists' downloads never start at the same moment by construction,
+     * not by scheduling luck. The fully-correct long-term answer (one worker looping over every
+     * playlist sequentially, a single app-wide unique work item) is real, cheaper-to-build-right
+     * follow-up, logged in `SEQUENCING.md` - not built this pass, this is the must-do version. */
+    private const val INITIAL_DELAY_SECONDS = 45L
+    private const val STAGGER_SECONDS_PER_PLAYLIST = 5 * 60L
+
+    private fun request(playlistId: String, staggerIndex: Int) =
         PeriodicWorkRequestBuilder<EpgSyncWorker>(24, TimeUnit.HOURS)
             .setInputData(workDataOf(EPG_SYNC_INPUT_PLAYLIST_ID to playlistId))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.LINEAR, BACKOFF_MINUTES, TimeUnit.MINUTES)
+            .setInitialDelay(INITIAL_DELAY_SECONDS + staggerIndex * STAGGER_SECONDS_PER_PLAYLIST, TimeUnit.SECONDS)
             .build()
 
     /**
-     * [runNow] = true: sync immediately, then daily from now (a just-added playlist, or a
-     * cold launch that found no completed sync on record). false: keep an existing schedule's
-     * timer but apply the current criteria to it (`UPDATE`, WorkManager 2.8+) - `KEEP` would have
-     * left every already-installed device on the old exponential backoff forever.
+     * [runNow] = true: sync immediately (after its own delay/stagger below, not instantly), then
+     * daily from now (a just-added playlist, or a cold launch that found no completed sync on
+     * record). false: keep an existing schedule's timer but apply the current criteria to it
+     * (`UPDATE`, WorkManager 2.8+) - `KEEP` would have left every already-installed device on the
+     * old exponential backoff forever. [staggerIndex] - this playlist's position in whatever list
+     * the caller is iterating (0 for a single playlist, or a manual "update now" trigger where the
+     * user is deliberately asking for it right away) - spaces multiple playlists' cold-launch
+     * downloads apart so they never start concurrently by construction.
      */
-    fun schedule(context: Context, playlistId: String, runNow: Boolean) {
+    fun schedule(context: Context, playlistId: String, runNow: Boolean, staggerIndex: Int = 0) {
         val wm = WorkManager.getInstance(context)
         // Devices that ran the previous two-request shape may still hold a backed-off one-time
         // request under the old name; it would race the periodic one exactly as before.
@@ -53,7 +69,7 @@ object EpgSyncScheduler {
         wm.enqueueUniquePeriodicWork(
             workName(playlistId),
             if (runNow) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.UPDATE,
-            request(playlistId),
+            request(playlistId, staggerIndex),
         )
     }
 

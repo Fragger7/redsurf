@@ -2,6 +2,62 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-22 (later) — Sprint 1 CLOSED: cold-launch DB contention fixed, real numbers
+
+Second pass, same sprint - picks up from the Opus consult below. Full detail:
+`docs/plans/SEQUENCING.md`'s Sprint 1 section (rewritten), `docs/plans/TESTING_OUTSTANDING.md`
+section G. Real release **v0.37.8** (versionCode 130).
+
+**Measured first, per the consult's own protocol** (`adb shell dumpsys dbinfo com.redsurf.tv` -
+works on this non-debuggable release build, zero code needed): confirmed `journalMode=WAL`,
+`Max connections: 4` - the journal-mode question settled for good, WAL was already active. Caught
+two structurally-cheap queries as live victims of contention during the write storm: the
+`recent_channels` join (2.3-3.3s) and `getLiveGroupCounts()` (2.3-3.3s), the latter also
+genuinely unindexed as the consult predicted.
+
+**Shipped the full ranked fix set:** EPG sync scheduling moved to *after* `AppState.Loaded`
+instead of before, with a real 45s initial delay and a per-playlist 5-minute stagger
+(`EpgSyncScheduler`) so multiple playlists can't download concurrently by construction; Room's
+`RedSurfDatabase` now uses a dedicated 4-thread query executor and a single-thread transaction
+executor instead of sharing the app-wide default pool with EPG ingest; `XmlTvParser`/
+`EpgSyncWorker` group 10 of the existing 1000-row batches into one `withTransaction` (~20 commits
+per sync instead of ~200); `WRITE_AHEAD_LOGGING` pinned explicitly (real migration `MIGRATION_9_10`,
+v9→v10, additive, real data preserved) even though it wasn't the actual fix, stated plainly rather
+than credited; the redundant `epg_programs` index dropped (a strict prefix of its own implicit
+primary-key autoindex, pure write amplification); a real covering index added for
+`getLiveGroupCounts()`; one `ANALYZE` after each successful sync, never on the launch path.
+
+**Verified with real before/after numbers, on a clean second cold launch** (the first post-install
+launch includes one-time migration overhead and was excluded as an unfair comparison):
+- The app-level `gridQuery` line, originally measured at 6893ms in the first pass: **361ms**
+  (19x faster).
+- `getLiveGroupCounts()` specifically, via `dumpsys dbinfo`'s real per-statement duration:
+  3286ms → **254ms** (13x faster), the only statement over 50ms anywhere in a 20-second
+  post-launch window (was several 2-3s statements).
+- Zero `epgSync -> start` lines fired in that same 20-second window - EPG sync genuinely off the
+  critical path. Honest gap: all 3 real playlists happened to be fresh this pass
+  (`epgBackfill ... stale=false` for all three), so the *stagger* specifically was never observed
+  preventing a real concurrent-download collision live - verified by code and by the deferral's
+  own confirmed effect, not by watching staggered downloads actually happen.
+- Flat-memory-at-scale re-check (item 2 from the first pass, never reached then): holds. ~131-136MB
+  PSS at the real current scale (3 playlists, ~140K channels), still inside `PHASE_1.md` 1.6's
+  original 112.8-145.7MB range measured at 28-60K channels.
+- Channel-zap sluggishness (item 3, never reached in the first pass): **inconclusive.** Four
+  `KEYCODE_DPAD_UP` presses against a confirmed-playing fullscreen session produced zero
+  `zap dir=` log lines - not root-caused, reported honestly as unverified rather than guessed.
+  Plausible unconfirmed theory: several stacked cold-launches earlier in this same session for the
+  dbinfo measurements may have left the player in a `Controls`/picker overlay state instead of
+  plain fullscreen before the zap attempt began.
+- Install-in-place (no uninstall) confirmed `MIGRATION_9_10` ran cleanly against the real device
+  database and its real ~140K rows - no crash, no destructive-migration fallback, no data loss.
+
+Build/test: `compileDebugKotlin` clean, 23/23 unit tests (result XML confirmed). Real signed
+release `v0.37.8` (versionCode 130, keystore fingerprint `1b13f1d9…d2510d8a` matching every prior
+release) installed in place and confirmed running before push.
+
+**Not investigated, still open:** the docs-only commits that were triggering real CI releases
+despite an intended `[skip ci]` - flagged twice now, still not root-caused.
+
 ## 2026-09-22 — Sprint 1 (performance/state audit): re-entry fixed, cold-load escalated
 
 Full account: `docs/plans/SEQUENCING.md`'s Sprint 1 section (rewritten with real findings) and

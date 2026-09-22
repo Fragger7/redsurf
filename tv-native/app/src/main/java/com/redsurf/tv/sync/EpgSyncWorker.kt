@@ -91,11 +91,19 @@ class EpgSyncWorker(
             var inserted = 0
             response.body?.byteStream()?.use { stream ->
                 inserted = XmlTvParser.parseAndInsert(
-                    stream, db.epgDao(), playlistId,
+                    stream, db, playlistId,
                     skipEndedBefore = now - PRUNE_ENDED_BEFORE_MS,
                 )
             }
             db.epgDao().pruneEnded(playlistId, now - PRUNE_ENDED_BEFORE_MS)
+            // Sprint 1 performance pass, 2026-09-22 (Opus "nice-to-have" N2): once, after a real
+            // import completes - never on the launch path. `sqlite_stat1` is never populated
+            // otherwise (confirmed live this pass: nothing in this app calls ANALYZE), so the
+            // planner has no real statistics for a ~140K-row table to reason about. A single
+            // ANALYZE here, off the cold-launch critical path already per the scheduling change
+            // above, is the cheap way to give it real numbers without ever blocking first paint.
+            runCatching { db.openHelper.writableDatabase.execSQL("ANALYZE") }
+                .onFailure { Log.w(TAG, "epgSync -> ANALYZE failed for playlist $playlistId", it) }
             EpgSyncState.markCompleted(applicationContext, playlistId, now)
             EpgSyncState.markAttempt(applicationContext, playlistId, null, now)
             Log.d(TAG, "epgSync -> done playlist=$playlistId inserted=$inserted")

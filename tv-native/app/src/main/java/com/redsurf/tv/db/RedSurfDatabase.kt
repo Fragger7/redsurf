@@ -240,7 +240,7 @@ interface PlaylistDao {
     PlaylistEntity::class,
     ChannelGroupEntity::class,
     RecentChannelEntity::class,
-], version = 9, exportSchema = false)
+], version = 10, exportSchema = false)
 // v6: added the (playlistId, streamType, groupName) index (PHASE_1.md #2b).
 // v7: ChannelEntity's primary key is now composite (playlistId, streamId) - see EpgEntities.kt's
 // doc comment on ChannelEntity (BACKLOG_SWEEP.md #13). Destructive migration was acceptable then -
@@ -260,6 +260,11 @@ interface PlaylistDao {
 // destructive migration doesn't scope itself to one table). `epg_programs` itself genuinely never
 // held real data (EpgSyncWorker was never scheduled before this phase), so a plain drop+recreate
 // of just that table is safe and sufficient - no data-preserving copy needed, unlike MIGRATION_7_8.
+// v10: Sprint 1 performance pass (2026-09-22, Opus consult) - two additive index changes, real
+// data preserved, see MIGRATION_9_10. Drops the redundant epg_programs index (a strict prefix of
+// its own primary-key autoindex - pure write amplification on ~200K rows/sync, zero read
+// benefit); adds a real covering index for ChannelDao.getLiveGroupCounts, confirmed live via
+// `dumpsys dbinfo` to be running a full unindexed scan of ~140K rows on every cold launch.
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao
@@ -306,6 +311,34 @@ abstract class RedSurfDatabase : RoomDatabase() {
             }
         }
 
+        /** Additive only, real data preserved on both tables - see the v10 doc comment above. */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP INDEX IF EXISTS `index_epg_programs_playlistId_channelEpgId`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS " +
+                        "`index_channels_streamType_isHidden_playlistId_groupName` " +
+                        "ON `channels` (`streamType`, `isHidden`, `playlistId`, `groupName`)"
+                )
+            }
+        }
+
+        // Sprint 1 performance pass, 2026-09-22 (Opus consult, "must-do" M2/M3): a dedicated
+        // single-thread transaction executor means EPG ingest's write transactions can never
+        // occupy more than one slot of the shared pool the UI's own reads use - previously both
+        // reads and writes shared Room's own default `ArchTaskExecutor` (a fixed 4-thread pool),
+        // and 3 concurrent EpgSyncWorkers doing ~150 batch-insert calls each could starve it
+        // completely (confirmed live: two structurally-cheap reads each blocked 2-3s behind
+        // exactly this on a real cold launch). Real fix for the write side is
+        // `EpgSyncWorker`/`XmlTvParser` batching ~10 inserts into one `withTransaction` instead of
+        // committing every single 1000-row batch (see those files) - this executor split is what
+        // makes that batching safe rather than just moving the same contention onto fewer, longer
+        // transactions on a shared thread.
+        private val queryExecutor: java.util.concurrent.ExecutorService =
+            java.util.concurrent.Executors.newFixedThreadPool(4)
+        private val transactionExecutor: java.util.concurrent.ExecutorService =
+            java.util.concurrent.Executors.newSingleThreadExecutor()
+
         fun getDatabase(context: Context): RedSurfDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -313,12 +346,24 @@ abstract class RedSurfDatabase : RoomDatabase() {
                     RedSurfDatabase::class.java,
                     "redsurf_tv_database"
                 )
-                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     // Still the fallback for any *other* version jump this app doesn't carry an
                     // explicit migration for (e.g. a real install predating v6) - decision 14's
                     // protection is specifically for this release's own upgrade path (v7 -> v8),
                     // which now has a real migration above and will never hit this fallback.
                     .fallbackToDestructiveMigration()
+                    // Sprint 1 performance pass, 2026-09-22 (Opus consult, "must-do" M4): pinned
+                    // explicitly rather than left to Room's own AUTOMATIC default. Live-confirmed
+                    // this pass (`dumpsys dbinfo` shows `journalMode=WAL`) that AUTOMATIC was
+                    // already resolving to WAL on this device - so this line is not the fix for
+                    // the cold-launch slowness (that was connection-pool/I-O contention, not
+                    // reader-blocked-by-writer locking), it's removing a device-dependent branch
+                    // (`ActivityManager.isLowRamDevice()`) this app can't see or control from
+                    // outside, so a future low-RAM device this app targets can't silently regress
+                    // to the old behavior.
+                    .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
+                    .setQueryExecutor(queryExecutor)
+                    .setTransactionExecutor(transactionExecutor)
                     .build()
                 INSTANCE = instance
                 instance

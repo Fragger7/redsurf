@@ -69,18 +69,30 @@ Hold next to `docs/vision/references/tivimate/RedThemedEPGLiveTVScreen.jpg`.
 20. The "audio plays, no picture" fix (`PlayerErrorMapper.videoFormatUnsupported()`, 2026-09-18)
     - needs a channel that actually triggers it.
 
-## G. Performance (2026-09-22 finding, Sprint 1 partial)
+## G. Performance — Sprint 1 CLOSED, 2026-09-22 (see `SEQUENCING.md` for full detail)
 
 21. **Fixed, verified on device via logcat:** leaving Live TV and returning no longer re-runs the
     categories query, the grid's channel/EPG query, or the scroll/focus-claim retry - all were
     being torn down and rebuilt on every round trip before this fix (`SEQUENCING.md` Sprint 1).
     Worth a fresh real-world check: does Home→Live TV→Home→Live TV feel fast now?
-22. **Not fixed, real open question:** cold launch itself is separately slow at real scale -
-    `channelsInGroup()` measured at 6.9s for one 134-channel category, on a device holding ~140K
-    channels and one playlist's EPG table alone at 125K+ rows. Candidate causes identified, none
-    confirmed (DB contention with concurrent EPG backfill queries, unconfirmed WAL journal mode,
-    an unisolated EPG-query cost) - needs `EXPLAIN QUERY PLAN` or an Opus consult before a fix is
-    attempted, not a guess. Does the *first* Live TV load of a session still feel slow?
+22. **Fixed and verified with real before/after numbers, real release v0.37.8.** The exact
+    query originally measured at 6893ms is now **361ms** on a clean cold launch (19x); the
+    specific statement Opus's consult identified as a live contention victim,
+    `getLiveGroupCounts()`, went from 3286ms to **254ms** (13x) and is the only statement over
+    50ms anywhere in a 20-second post-launch window. Real cause was connection-pool/executor
+    contention from 3 concurrent EPG syncs plus one genuinely unindexed full-table-scan query
+    (not a query-plan problem on the originally-measured query itself, and not the journal-mode
+    lock theory first suspected - `dumpsys dbinfo` confirmed WAL was already active). Flat memory
+    at the real ~140K-channel scale re-confirmed (~131-136MB PSS, still inside the original
+    112.8-145.7MB range from `PHASE_1.md` 1.6). **Does cold launch itself feel meaningfully
+    faster now, not just the numbers?**
+23. **New, unverified - channel-zap sluggishness check was inconclusive, not resolved.** Four
+    UP presses in fullscreen (confirmed playing, real audio focus) produced no `zap dir=` log
+    line at all - not root-caused this pass, a plausible but unconfirmed theory is that repeated
+    cold-launches for the performance measurements above left the player in a
+    `Controls`/picker overlay state rather than plain fullscreen before the zap attempt started.
+    **Genuinely open: does channel-to-channel zapping work and feel fast, starting fresh
+    (not right after a bunch of other testing)?**
 
 ## F. Decisions pending (not tests)
 

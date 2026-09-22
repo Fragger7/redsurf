@@ -45,7 +45,16 @@ data class ChannelGroupEntity(
 @Entity(
     tableName = "channels",
     primaryKeys = ["playlistId", "streamId"],
-    indices = [Index(value = ["playlistId", "streamType", "groupName"])],
+    indices = [
+        Index(value = ["playlistId", "streamType", "groupName"]),
+        // v9->v10 (Sprint 1 performance pass, 2026-09-22, Opus "nice-to-have" N1): covers
+        // ChannelDao.getLiveGroupCounts' WHERE streamType='live' AND isHidden=0 (no playlistId
+        // constraint at all, so the older index's leading column was never usable) and its
+        // GROUP BY playlistId, groupName in the same column order - confirmed live via
+        // dumpsys dbinfo this pass, this query blocked a real cold-launch read for 3.3s doing a
+        // full scan of ~140K rows plus a temp B-tree GROUP BY, on every launch, unindexed.
+        Index(value = ["streamType", "isHidden", "playlistId", "groupName"]),
+    ],
 )
 data class ChannelEntity(
     val streamId: String,
@@ -65,10 +74,17 @@ data class ChannelEntity(
 // applied to ChannelEntity (BACKLOG_SWEEP.md #13) and RecentChannelEntity (PHASE_2.md decision
 // 14): a raw epgChannelId is only unique within one provider's own XMLTV feed, so two playlists
 // can legitimately collide on the same id. Destructive migration - no live users.
+//
+// No declared `indices` (v9->v10, Sprint 1 performance pass, 2026-09-22, Opus "must-do" M5): the
+// primary key above is `(playlistId, channelEpgId, startTime)` on a rowid table, so SQLite already
+// maintains an implicit unique autoindex on exactly those three columns in that order. The index
+// this table used to declare, `(playlistId, channelEpgId)`, is a strict prefix of that autoindex -
+// it can't serve any query the autoindex can't, including EpgDao.getProgramsForChannels'
+// `playlistId = ? AND channelEpgId IN (...)`. It was pure write amplification: a second B-tree
+// insert + page split on every one of ~200K rows, every sync, across all playlists.
 @Entity(
     tableName = "epg_programs",
     primaryKeys = ["playlistId", "channelEpgId", "startTime"],
-    indices = [Index(value = ["playlistId", "channelEpgId"])],
 )
 data class EpgProgramEntity(
     val playlistId: String,

@@ -232,30 +232,34 @@ class MainViewModel : ViewModel() {
                 // Any pending "add playlist" snapshot is stale now that a load actually
                 // succeeded - the fresh Loaded state below already includes the new playlist.
                 stateBeforeAddingPlaylist = null
+                withContext(Dispatchers.Main) {
+                    _state.value = AppState.Loaded(playlists, pId)
+                }
                 // PHASE_3.md decision 2 - cold-launch backfill for playlists added before this
                 // phase shipped (or any session where the one-time enqueue in loadXtreamCodes
-                // never got the chance to run). enqueueUniquePeriodicWork(KEEP) is a safe no-op
-                // for a playlist that's already scheduled, so this costs nothing on every other
-                // launch - it's the only way a playlist added in an older build ever gets EPG.
+                // never got the chance to run). Moved to *after* the state update above
+                // (Sprint 1 performance pass, 2026-09-22, Opus consult): this used to run before
+                // first paint, racing the Live TV screen's own cold-launch queries for the same
+                // 4-connection Room pool - real device measurement showed two structurally-cheap
+                // reads (the recent-channels join, the group-counts scan) each blocked 2-3s behind
+                // this exact work. `EpgSyncScheduler.schedule`'s own staggerIndex now also spaces
+                // multiple playlists' downloads apart instead of firing all of them at once.
                 ctx?.let { c ->
-                    playlists.filter { it.type == "xtream" }.forEach { playlist ->
+                    playlists.filter { it.type == "xtream" }.forEachIndexed { index, playlist ->
                         // Re-sync on launch when no sync has ever run to completion for this
                         // playlist, or the last complete one is older than the daily cadence.
                         // A row count can't tell "complete" from "died a third of the way in"
                         // (2026-09-21: 66,807 rows of a 201,463-row feed looked populated) - only
                         // the worker knows whether the parser reached </tv>, via EpgSyncState.
                         // One request per playlist either way (EpgSyncScheduler) - runNow
-                        // re-enqueues the single periodic job so it fires immediately.
-                        val epgRows = localDb?.epgDao()?.countForPlaylist(playlist.id)
+                        // re-enqueues the single periodic job so it fires immediately (after its
+                        // own staggered initial delay, not instantly).
                         val lastCompleted = EpgSyncState.lastCompleted(c, playlist.id)
                         val stale = lastCompleted == 0L ||
                             System.currentTimeMillis() - lastCompleted > EPG_STALE_AFTER_MS
-                        Log.d("RedSurf", "epgBackfill playlist=${playlist.id} rows=$epgRows lastCompleted=$lastCompleted stale=$stale")
-                        EpgSyncScheduler.schedule(c, playlist.id, runNow = stale)
+                        Log.d("RedSurf", "epgBackfill playlist=${playlist.id} lastCompleted=$lastCompleted stale=$stale")
+                        EpgSyncScheduler.schedule(c, playlist.id, runNow = stale, staggerIndex = index)
                     }
-                }
-                withContext(Dispatchers.Main) {
-                    _state.value = AppState.Loaded(playlists, pId)
                 }
             }
         }
