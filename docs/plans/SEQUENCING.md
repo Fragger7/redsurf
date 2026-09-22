@@ -64,14 +64,56 @@ layout twice.
    (a distinct playback URL pattern, scrubbing into past-but-archived cells) is real, separate
    scope - own brief, sequenced later, not bundled into "does the icon show up."
 
-## Sprint 4 — Nav-strip auto-hide (already scoped, ~1 hour)
+## Sprint 4 — Public EPG source supplement (added 2026-09-22, user request)
+
+**Origin:** the user's own real test data keeps confirming coverage is sparse - "guide entries
+are scant" (2026-09-21 test), and this session's provider-coverage check found only ~27% of one
+provider's channels carry an `epg_channel_id` at all. The user's actual question is empirical:
+**"I need to see if our app is able to provide so much missing programming data"** - i.e. prove
+the supplement helps before investing in the full configurable UI, not build the whole thing
+blind.
+
+**Naming correction, gently:** "EPGGenius" was already researched in an earlier session
+(`AGENTS.md`'s EPG data-source backlog entry, 2026-09-15) - it didn't turn up as a real, distinct
+hosted service under that name; likely a misremembering of EPG.lat (cited as integrating well
+with TiviMate) or one of the sources below. Worth using one of the actually-confirmed-real ones
+rather than chasing a name that may not correspond to anything live.
+
+**Real, vetted candidates from that same research** (`AGENTS.md`): **EPGSHARE01**
+(epgshare01.online - free, hosted, static XMLTV by country/source, no self-hosting, "for LEGAL use
+only," updated ~daily) is the closest to a drop-in URL and the obvious Phase A pick; **open-epg.com**
+(free public XMLTV by country, plus a channel-ID-mismatch editor tool) is the fallback candidate;
+**iptv-org/epg** is real but self-hosted (you run the scraper), more setup than this phase needs.
+
+**Two-phase split, mirroring this project's own P0/P1 discipline elsewhere (prove it cheaply
+before building the full configurable version):**
+
+- **Phase A - proof of concept, answers the user's actual question.** Wire exactly one public
+  source (EPGSHARE01) as a per-channel fallback: when a channel has no provider EPG listing,
+  attempt a match against the public source's `<channel id>` via the same `tvg-id`/`epg_channel_id`
+  matching already used for provider data. **A real technical angle worth trying:** the user's own
+  playlists already use country-prefixed category names ("US|", "UK|", etc. - the same prefixes
+  Root Category's parsing already reads) - that's a plausible signal for which of EPGSHARE01's
+  per-country files to even fetch, worth testing before assuming a fixed file list. No settings
+  UI beyond a single on/off - the deliverable is a real, measured answer to "how many more
+  channels get real programme data with this on," not a shipped feature yet.
+- **Phase B - the full locked design, only once Phase A shows it's worth it.** Already fully
+  specified, nothing new to decide: `AGENTS.md`'s "EPG Sources UI - DECIDED, 2026-09-17" entry -
+  per-playlist "Provider EPG"/"Fallback with public sources" toggles, a global "Supplement all
+  Playlists" bulk-setter, the "Manage Sources" catalog (built-in sources + custom XMLTV URL +
+  promoting a playlist's own provider endpoint into the shared pool), manual reorderable tie-break
+  priority when multiple sources both have data. Also unlocks the accessibility-aware
+  supplemented-data colour+border indicator on the grid (`AGENTS.md`, 2026-09-15) - moot until
+  there's a second data source to actually distinguish from provider data.
+
+## Sprint 5 — Nav-strip auto-hide (already scoped, ~1 hour)
 
 Unchanged from the 2026-09-21 scoping in `TESTING_OUTSTANDING.md` section F - default On, one
 Settings row cycling 3s/5s/10s/Off, applies everywhere, reveal-on-focus-reaching-for-it (not
 any-key-press). Natural pairing with Sprint 3 since both are about EPG-screen real estate, but
-independent enough to land in either order.
+independent enough to land in any order relative to Sprints 3-4.
 
-## Sprint 5 — Preview → fullscreen grow transition (biggest single risk item, own pass)
+## Sprint 6 — Preview → fullscreen grow transition (biggest single risk item, own pass)
 
 User's steer: prioritize real TiviMate parity, reached via sound architecture. Read as: the
 target is the true version (one persistent player + surface, the container animates bounds while
@@ -128,6 +170,6 @@ Strong" playlist per the user's own worked examples (2026-09-21/22):
 - Catch-up *playback* (own future brief, per Sprint 3's note).
 - The configurable-default Teleport nav-pill (backlog, explicitly low priority).
 - App-wide density-token rollout beyond the EPG grid, time-preserving UP/DOWN grid cursor,
-  `ProgrammeInfoCard` restyle, public-source EPG supplement + the accessibility-aware
-  supplemented-data indicator, playlist detail/edit page - all still real, all still logged in
-  `AGENTS.md`'s backlog, none raised as urgent this round.
+  `ProgrammeInfoCard` restyle, playlist detail/edit page - all still real, all still logged in
+  `AGENTS.md`'s backlog, none raised as urgent this round. (Public-source EPG supplement moved
+  into Sprint 4 above, 2026-09-22 - no longer in this unsequenced list.)
