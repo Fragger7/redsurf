@@ -54,6 +54,7 @@ import com.redsurf.tv.R
 import com.redsurf.tv.EpgSyncStatus
 import com.redsurf.tv.UpdateCheckStatus
 import com.redsurf.tv.db.PlaylistEntity
+import com.redsurf.tv.ui.theme.hiddenButComposed
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
@@ -194,7 +195,7 @@ fun SettingsScreen(
         selectedCategory == SettingsCategory.RemoteControl
 
     Row(
-        modifier = (if (visible) Modifier.fillMaxSize() else Modifier.size(0.dp))
+        modifier = Modifier.hiddenButComposed(visible).fillMaxSize()
             // Escape guard, explicit rather than `focusProperties { exit = ... }` - found live,
             // 2026-09-13: `exit` turned out to behave inconsistently by direction in this exact
             // layout (blocking LEFT even where it needed to work, while *not* reliably blocking
@@ -556,6 +557,13 @@ private fun PlaylistBlock(
     val removeChipFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
+    // CORRECTION, 2026-09-28: the crash described below was NOT caused by this confirm block.
+    // Its real root cause was hidden-but-placed screens staying in focus search - see
+    // `Modifier.hiddenButComposed` in `ui/theme/Focus.kt`. The old Cancel path did contribute:
+    // it dropped focus entirely, so the next key made Compose re-acquire focus from scratch and
+    // it could wander into those hidden screens. The synchronous handoff below fixes that part
+    // and stays; the round-by-round history is kept only as provenance.
+    //
     // Real crash, found and confirmed live 2026-09-23 through THREE separate repro/fix/stress-
     // test rounds, all with full identical stack traces (`docs/vision/FOCUS_MODEL.md`):
     // `ContentInViewNode.calculateRectForParent`, "Expected BringIntoViewRequester to not be used

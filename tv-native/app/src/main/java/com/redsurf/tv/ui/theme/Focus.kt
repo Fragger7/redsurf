@@ -3,6 +3,9 @@ package com.redsurf.tv.ui.theme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
@@ -112,3 +115,26 @@ object RedSurfFocus {
         glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow.None),
     )
 }
+
+/**
+ * Keeps a screen composed (its state, queries and scroll positions survive) while making it
+ * genuinely absent from layout, drawing, and focus search. `visible = false` measures the subtree
+ * at 0x0 but deliberately never places it - Compose then marks the whole subtree as not placed,
+ * and its 2D focus search skips every unplaced focus target.
+ *
+ * Why not `Modifier.size(0.dp)` (what `LiveTvScreen`/`SettingsScreen` used before, 2026-09-22):
+ * a 0dp subtree is still *placed*, so its lists and grid cells stayed focus candidates. Any D-pad
+ * press with no real target in that direction (UP or LEFT from the nav strip) widened the search,
+ * picked a node inside the hidden screen, and Compose's own bring-into-view on it crashed the app
+ * ("Expected BringIntoViewRequester to not be used before parents are placed") - found live
+ * 2026-09-28, reproduced with nothing more than UP from the Settings pill. `FOCUS_MODEL.md` rule 4.
+ */
+fun Modifier.hiddenButComposed(visible: Boolean): Modifier =
+    if (visible) {
+        this
+    } else {
+        this.layout { measurable, _ ->
+            measurable.measure(Constraints.fixed(0, 0))
+            layout(0, 0) { /* deliberately not placed */ }
+        }
+    }

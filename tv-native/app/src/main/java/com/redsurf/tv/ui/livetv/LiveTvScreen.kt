@@ -55,6 +55,7 @@ import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.player.PreviewPlayerHost
 import com.redsurf.tv.player.rememberPreviewPlayerController
 import com.redsurf.tv.ui.player.PlayerScreen
+import com.redsurf.tv.ui.theme.hiddenButComposed
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.RedSurfDensity
 import com.redsurf.tv.ui.theme.RedSurfType
@@ -465,7 +466,7 @@ fun LiveTvScreen(
         focusManager.moveFocus(FocusDirection.Left)
     }
 
-    Box(modifier = if (visible) Modifier.fillMaxSize() else Modifier.size(0.dp)) {
+    Box(modifier = Modifier.hiddenButComposed(visible).fillMaxSize()) {
         // Always composed (see class doc above) - never torn down by the fullscreen overlay that
         // sits on top of it.
         Column(modifier = Modifier.fillMaxSize()) {
