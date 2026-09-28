@@ -169,10 +169,14 @@ merging.
   had never completed on the device - 15s read timeout on a 67MB feed, clear-before-parse, and
   exponential backoff; plus a duplicate-request bug; Settings → EPG got its first live rows).
   Screenshots are real on this device now (`HARDWARE.md` correction) - every claim above that says
-  "verified" has a PNG behind it. **`docs/plans/TESTING_OUTSTANDING.md` is the consolidated list
-  of everything the user hasn't yet tested across v0.33-v0.37.2 - next session starts there, with
-  the user sequencing fixes from the results.** Nothing else is in flight; nav-strip auto-hide is
-  scoped there (~1 hour) and deliberately not started.
+  "verified" has a PNG behind it. **Superseded 2026-09-28 - current
+  state:** the user reported A/B/C results 2026-09-22 (recorded in `TESTING_OUTSTANDING.md`'s top
+  note - never re-ask them); Sprint 1 (perf, v0.37.8/9) and Sprint 2 (9 focus/state bugs,
+  v0.37.13) closed; the Settings Playlists-pane crash fixed for real in v0.37.14-16 (hidden screens
+  were 0dp-but-placed and stayed in focus search - `Modifier.hiddenButComposed`, `FOCUS_MODEL.md`
+  rule 4). Device is on the genuine CI v0.37.16 (versionCode 138). **Next session:
+  `docs/plans/SEQUENCING.md`'s RESUME HERE - Sprint 3 (double-row EPG rows + play/catch-up
+  icons), which is not blocked on user testing.**
   Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud
@@ -920,6 +924,12 @@ adb shell monkey -p com.redsurf.tv -c android.intent.category.LEANBACK_LAUNCHER 
 adb exec-out screencap -p > /tmp/screen.png     # look at what you built
 adb logcat -s RedSurf
 ```
+**Reconnecting (updated 2026-09-28):** after a re-pair the TV shows up automatically via mDNS
+as `adb-0C101HFDD16JPN-7XKm2D (2)._adb-tls-connect._tcp` (check `adb devices`; `scripts/tv-test.sh`
+picks it up on its own). If `adb connect` is *refused* and nothing appears, the TV no longer trusts
+this Mac: ask the user for a fresh code from Developer options → Wireless debugging → "Pair device
+with pairing code" and run `adb pair 192.172.7.160:<pair-port> <code>` (a code that fails with
+"protocol fault" is spent - ask for a new one, don't retry it).
 When the TV is off, iterate with local builds and cut a GitHub release for the user to install
 via OTA. CI is free — the repo is public.
 

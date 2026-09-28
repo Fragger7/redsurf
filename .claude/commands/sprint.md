@@ -15,7 +15,7 @@ the second.
 1. Toolchain: `export JAVA_HOME="$HOME/.local/opt/jdk17/Contents/Home"` and
    `export ANDROID_HOME="$HOME/Library/Android/sdk"` in the **same** shell call as every
    `gradlew`/`adb`/`apksigner` invocation (each Bash call is a fresh process). `adb` is at
-   `$ANDROID_HOME/platform-tools/adb`; the device is `192.172.7.160:35631` - always pass `-s`.
+   `$ANDROID_HOME/platform-tools/adb`; the device is whatever `scripts/tv-test.sh` resolves (mDNS serial `adb-0C101HFDD16JPN-…_adb-tls-connect._tcp` since 2026-09-28, else `192.172.7.160:35631`) - always pass `-s`, quoted (the serial has a space).
 2. Device: `adb connect`, confirm it answers. If it doesn't within two attempts, **stop** and log
    the blocker (see "Blocked" below) - don't keep retrying.
 3. **Build locally with the real release signing config, then push - user directive, corrected

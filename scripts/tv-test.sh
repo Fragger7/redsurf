@@ -19,7 +19,11 @@
 
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 export PATH="$ANDROID_HOME/platform-tools:$PATH"
-D="${REDSURF_DEVICE:-192.172.7.160:35631}"
+# Device serial: $REDSURF_DEVICE if set, else the mDNS wireless-debugging serial adb auto-connects
+# after `adb pair` (e.g. "adb-0C101HFDD16JPN-7XKm2D (2)._adb-tls-connect._tcp"), else the old
+# fixed ip:port. The TV lost trust in this Mac once (2026-09-28); re-pairing moved it to mDNS.
+_mdns="$(adb devices 2>/dev/null | awk -F'\t' '/adb-0C101HFDD16JPN.*_adb-tls-connect/ && $2=="device"{print $1; exit}')"
+D="${REDSURF_DEVICE:-${_mdns:-192.172.7.160:35631}}"
 ADB() { adb -s "$D" "$@"; }
 LOG_TAGS="${REDSURF_LOG_TAGS:-SettingsScreen|PlayerScreen|LiveTvScreen|MainViewModel|PlayerHost}"
 

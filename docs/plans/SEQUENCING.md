@@ -1,12 +1,16 @@
 # Execution sequencing — post-Lattice, 2026-09-22
 
-**⏸ RESUME HERE (updated 2026-09-28).** Sprint 2 closed (v0.37.13); the Settings Playlists-pane
-crash it found is fixed and device-verified (v0.37.14-16, root cause: hidden-but-placed screens -
-`FOCUS_MODEL.md` rule 4). Verify the current release via `gh release list` before trusting any
-number here. **Next: the user's outstanding test list (`TESTING_OUTSTANDING.md`), then Sprint 3**
-(double-row EPG rows + the two confirmed icons, user's explicit high priority), Sprint 4 (public
-EPG supplement, two-phase), Sprint 5 (nav-strip auto-hide), Sprint 6 (the preview→fullscreen grow
-transition), plus the separate Teleport Menu debugging track - full detail in each section below.
+**⏸ RESUME HERE (updated 2026-09-28, end of session).** Sprint 1 (v0.37.8/9) and Sprint 2
+(v0.37.13) closed; the Settings Playlists-pane crash is fixed and device-verified (v0.37.14-16,
+root cause: hidden-but-placed screens - `FOCUS_MODEL.md` rule 4). Device is on the genuine CI
+**v0.37.16 / versionCode 138** (verify with `gh release list` + `dumpsys package`). Nothing is
+uncommitted or in flight. **Next action: Sprint 3** below (double-row EPG rows + the play and
+catch-up icons, user's explicit high priority) - it is NOT blocked on user testing; the user's
+feedback that shapes it is already in hand (2026-09-22). The user owes only four quick rechecks
+(`TESTING_OUTSTANDING.md` top note: Categories UP to true top, focus lands on "now", overall
+sluggishness, the crash fix) - take their results whenever they arrive, don't wait for them. Then
+Sprint 4 (public EPG supplement), Sprint 5 (nav-strip auto-hide), Sprint 6 (preview↔fullscreen
+grow/shrink), plus the separate Teleport Menu debugging track (needs the user's remote in hand).
 
 **What this is:** every open item from `docs/plans/TESTING_OUTSTANDING.md` plus the 2026-09-21/22
 feedback round, grouped into an actual build order with reasoning. Nothing here is built yet -

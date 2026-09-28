@@ -47,5 +47,8 @@ Not `/schedule` - that runs in Anthropic's cloud and can't reach the Chromecast 
   than retrying all night.
 - TV unreachable: `! adb connect 192.172.7.160:35631`. It stays reachable asleep (verified), but
   a router reboot changes the port - Developer options → Wireless debugging shows the new one.
+  If it's *refused* outright, the TV forgot this Mac: "Pair device with pairing code" on the TV,
+  then `! adb pair 192.172.7.160:<port> <code>`; afterwards it reconnects via mDNS by itself
+  (2026-09-28).
 - OTA stopped updating after a sprint: a debug build is probably still installed.
   `! adb uninstall com.redsurf.tv`, then install the latest release from GitHub.
