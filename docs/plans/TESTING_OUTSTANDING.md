@@ -15,6 +15,21 @@ the user found real programme data under it (US| FOX, US| CW, likely NBC/CBS) on
 grid - it's the anchor playlist for the rest of this session's Teleport Menu re-testing (D-section
 below) and the first place to look for a category with listings on any future EPG check.
 
+**USER RESULTS RECEIVED 2026-09-22 for sections A, B and C - do not re-ask them.** (Recorded
+2026-09-28 after a later session re-asked A1-A7 from this stale list.) Summary: A1 yes (6 rows,
+~2h ruler). A2 yes, populated on Faraz Strong (US| FOX / US| CW), listings scant. A3 yes, scrolls
+~5h forward; asked for past/catch-up + catch-up icon (Sprint 3), focus landed on the rightmost
+cell (fixed Sprint 2 #25), wants a playing indicator (Sprint 3). A4 (The Wash) - question not
+understood, unverified, low value. A5 answered about ruler divisions, not the moving now-line -
+now-line movement still unconfirmed. A6 yes, thin bar. A7 yes, hero follows. A8 follow TiviMate,
+Faraz Strong as north star. A9 fixed. B10 yes, "Updating..." shows. B11 done (Faraz Strong). C12-C15
+all yes (preview should never time out). C16 works but sluggish (Sprint 1 perf work followed).
+Also requested: double-row selected channel (Sprint 3), preview↔fullscreen grow/shrink (Sprint 6),
+Categories UP escaping to the nav strip early (fixed Sprint 2 #24). Section D feedback is in
+`TELEPORT_MENU.md`/`SEQUENCING.md`. **Still owed by the user, rechecks only:** Sprint 2 #24 (UP to
+true top), #25 (focus lands on "now"), overall sluggishness after Sprint 1, and the 2026-09-28
+Settings crash fix.
+
 ## A. The Lattice - EPG grid redesign (v0.37.x) - `EPG_GRID_REDESIGN.md`
 
 Hold next to `docs/vision/references/tivimate/RedThemedEPGLiveTVScreen.jpg`.
