@@ -135,17 +135,21 @@ including two bugs found and fixed *during* verification (not just at write-time
     selection survives a Home→Settings round trip; an in-progress "confirm remove playlist" dialog
     was even observed correctly persisting (not just focus - real state discipline).
 
-**New, found this session, NOT fixed (out of Sprint 2's scope) - a real crash:**
-`SettingsScreen`'s Playlists pane force-quits the app (`FATAL EXCEPTION`,
-`IllegalStateException: Expected BringIntoViewRequester to not be used before parents are placed`)
-after cancelling a remove-playlist confirmation and then pressing UP a few times. Confirmed not
-caused by anything in Sprint 2's 6 changed files (no scroll/`BringIntoView` call anywhere in
-`SettingsScreen.kt`) - looks like a Compose Foundation internal timing race triggered by the
-confirm panel's rows disappearing from the list right as rapid UP presses request bring-into-view
-before the shrunk list finishes re-laying-out. No data lost either time it fired. **Needs a real
-debugging session, not a guess-and-check patch** - next person should try to find the minimal
-repro (does it need the exact "cancel then UP" sequence, or does any rapid input right after this
-pane's row count changes trigger it?).
+**Settings Playlists-pane crash - FIXED 2026-09-28 (v0.37.14+), verified on device.** Was:
+`FATAL EXCEPTION`, `IllegalStateException: Expected BringIntoViewRequester to not be used before
+parents are placed`. The first fix (`60447af`, confirm/cancel focus handoffs) was real hygiene but
+did **not** stop it - reproduced again live. Minimal repro turned out to need no confirm/cancel at
+all: UP from the pane's top row to the Settings pill, then UP again (or LEFT past the Home pill)
+crashed. Real root cause: hidden destinations were `Modifier.size(0.dp)` - zero-size but still
+*placed* - so Compose's 2D focus search kept the hidden Live TV grid's and Settings pane's items as
+candidates, resolved into an unplaced lazy item, and bring-into-view threw. Fix (`cadb794`):
+`Modifier.hiddenButComposed(visible)` (`ui/theme/Focus.kt`) measures the hidden subtree at 0x0 and
+never places it - out of focus search, state still composed. Device battery, all passed with the
+app alive and focus landing correctly: UP x2 / LEFT x5-6 on the strip from Home and Settings;
+Remove → Confirm → Cancel returns to Remove, then rapid UP x10 and LEFT x6; Reset → Cancel returns
+to the Reset row, then rapid UP x12; Settings → Live TV focus restore; cold-launch restore; all 3
+playlists intact. **Not yet exercised: a real Confirm remove** (focus should land on "Add another
+playlist") - deliberately not run on the real device to avoid deleting a playlist.
 
 ## F. Decisions pending (not tests)
 

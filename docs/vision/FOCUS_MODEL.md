@@ -67,8 +67,13 @@ exactly the bug Sprint 1 found and fixed for `LiveTvScreen` (2026-09-22): it was
 composition on every destination switch, silently rebuilding the categories query, the grid query,
 the scroll position, and the focus-claim latches from zero every single time. The fix: keep the
 subtree **permanently composed** once it's genuinely needed, and give it a `visible: Boolean` param
-that swaps real layout for `Modifier.size(0.dp)` (zero layout cost, can't receive focus/input)
-instead of removing it. `SettingsScreen` still uses the older, riskier pattern as of this writing —
+that hides it with `Modifier.hiddenButComposed(visible)` (`ui/theme/Focus.kt`) instead of
+removing it. **Not `Modifier.size(0.dp)`** - corrected 2026-09-28: a 0dp subtree is still *placed*,
+so its descendants stay 2D-focus-search candidates; UP/LEFT from the nav strip resolved into the
+hidden Live TV grid / Settings pane and crashed in bring-into-view ("parents are placed").
+`hiddenButComposed` measures at 0x0 and never places, which is what actually removes it from focus
+search. The same applies to smaller hide-in-place parts (e.g. `PlaylistBlock`'s inactive chip):
+if it's sized to 0 but still placed, gate it with `focusProperties { canFocus = ... }`. `SettingsScreen` still uses the older, riskier pattern as of this writing —
 see Finding 9.
 
 ### 5. Key a focus-claim effect on the *event* that should trigger it — never on data that changes for unrelated reasons
