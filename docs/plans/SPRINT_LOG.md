@@ -2,6 +2,41 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-28 — Settings Playlists-pane crash: real root cause found and fixed
+
+**Fix 1 (`60447af`) was wrong about the cause.** It rebuilt `PlaylistBlock`/`ResetRow` so the
+confirm/cancel parts stay composed, gated by `focusProperties { canFocus }`, with synchronous focus
+handoffs (Remove → Confirm, Cancel → Remove, Confirm → "Add another playlist"). Good hygiene and
+kept, but the identical `BringIntoViewRequester ... before parents are placed` crash reproduced
+live afterwards. **Minimal repro:** from the pane's top row, UP to the Settings pill, UP again →
+crash; LEFT past the Home pill → crash. No confirm/cancel needed.
+
+**Root cause:** hidden destinations used `Modifier.size(0.dp)`. They were zero-size but still
+placed, so 2D focus search (`isEligibleForFocusSearch` = placed && attached) kept the hidden Live
+TV grid's and Settings pane's lazy items as candidates. A directional move off the strip resolved
+into one, and bring-into-view threw on its unplaced parent. **Fix 2 (`cadb794`):**
+`Modifier.hiddenButComposed(visible)` in `ui/theme/Focus.kt` measures at 0x0 and never places, so
+the subtree is out of focus search while its state stays composed. Used in `LiveTvScreen` and
+`SettingsScreen`. `FOCUS_MODEL.md` rule 4 corrected.
+
+**Verified on device** (local signed release v0.37.16/138, real keystore, uiautomator focus plus a
+`pidof` alive-check after every step, `logcat -b crash` clean after the fix): strip UP x2 / LEFT
+x5-6 from Home and Settings; Remove → Confirm → Cancel → back on Remove, rapid UP x10, LEFT x6;
+Reset → Cancel → back on the Reset row, rapid UP x12; Settings → Live TV grid focus restored and
+navigable; cold-launch restore intact; all 3 playlists intact. **Not exercised:** a real Confirm
+remove (would delete a real playlist).
+
+**deviated: version trap.** An interrupted earlier agent had installed local builds
+v0.37.14/v0.37.15 (versionCode 137) that were never real releases, while CI was at run #135.
+Android blocks downgrades on a release build, so the next CI APK (versionCode 136) could not
+have been installed over it. Resolved by verifying locally as v0.37.16/138, then pushing the fix
+and two docs commits separately (runs #136-#138) so that CI's own v0.37.16/138 matches the
+device, and installing that CI APK over it with `install -r`.
+
+**Also: wireless adb had lost trust in this Mac.** Re-paired with `adb pair` (the first code
+failed four times with "protocol fault"; a fresh code worked); adb then reconnects via mDNS
+(`adb-0C101HFDD16JPN-7XKm2D._adb-tls-connect._tcp`), not the old fixed port.
+
 ## 2026-09-22 (later still) — Sprint 2 CLOSED: Live TV grid focus, preview reconnect, Settings persistence
 
 Full detail: `docs/plans/SEQUENCING.md`'s Sprint 2 section (rewritten with real per-item results),

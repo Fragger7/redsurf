@@ -1,13 +1,9 @@
 # Execution sequencing — post-Lattice, 2026-09-22
 
-**⏸ RESUME HERE, next session.** User's own words, ending tonight: "let's execute tomorrow and
-pick up without missing a beat." Nothing is running, nothing is uncommitted, device is on the
-genuine v0.37.9 (verify via `gh release list` before trusting that number's still current - this
-session already hit one version-collision surprise). **The next action is Sprint 2**, directly
-below - 9 real, already-root-caused bugs (file:line and mechanism given for every one, several
-just deepened by a full-codebase audit against the new `docs/vision/FOCUS_MODEL.md` rule set,
-committed `ca5b7b1`), none needing a design decision, ready to fix and device-verify as one batch
-the moment the TV is free - no re-diagnosis needed, just launch it. After Sprint 2: Sprint 3
+**⏸ RESUME HERE (updated 2026-09-28).** Sprint 2 closed (v0.37.13); the Settings Playlists-pane
+crash it found is fixed and device-verified (v0.37.14-16, root cause: hidden-but-placed screens -
+`FOCUS_MODEL.md` rule 4). Verify the current release via `gh release list` before trusting any
+number here. **Next: the user's outstanding test list (`TESTING_OUTSTANDING.md`), then Sprint 3**
 (double-row EPG rows + the two confirmed icons, user's explicit high priority), Sprint 4 (public
 EPG supplement, two-phase), Sprint 5 (nav-strip auto-hide), Sprint 6 (the preview→fullscreen grow
 transition), plus the separate Teleport Menu debugging track - full detail in each section below.
@@ -151,7 +147,7 @@ CI release cut (`v0.37.13`, commit `e1d81b1`). Full per-item results:
   correctly across a Home→Settings round trip (state discipline working as designed, not just
   focus).
 
-**Deviated: found and did NOT fix a real, separate crash.** Mid-verification, a genuine
+**Deviated: found and did NOT fix a real, separate crash** *(fixed 2026-09-28, `cadb794` - root cause was hidden-but-placed screens, see `TESTING_OUTSTANDING.md`)*. Mid-verification, a genuine
 `FATAL EXCEPTION` (`IllegalStateException: Expected BringIntoViewRequester to not be used before
 parents are placed`, `ContentInViewNode.calculateRectForParent`) was reproduced live in
 `SettingsScreen`'s Playlists pane - cancel a remove-playlist confirmation, then press UP a few
