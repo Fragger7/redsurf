@@ -26,8 +26,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -416,6 +418,9 @@ private fun SettingsPane(
     modifier: Modifier = Modifier,
 ) {
     var hadFocus by remember { mutableStateOf(false) }
+    // Where focus goes *before* a real playlist delete removes the focused block from the list -
+    // see PlaylistBlock's "Confirm remove" handler.
+    val addPlaylistFocus = remember { FocusRequester() }
 
     Column(
         modifier = modifier
@@ -448,6 +453,7 @@ private fun SettingsPane(
                     onResetPlaylist = onResetPlaylist,
                     onDeletePlaylist = onDeletePlaylist,
                     firstRowFocus = firstRowFocus,
+                    addPlaylistFocus = addPlaylistFocus,
                 )
                 SettingsCategory.About -> aboutContent(
                     updateStatus = updateStatus,
@@ -493,6 +499,7 @@ private fun TvLazyListScope.playlistsContent(
     onResetPlaylist: () -> Unit,
     onDeletePlaylist: (String) -> Unit,
     firstRowFocus: FocusRequester,
+    addPlaylistFocus: FocusRequester,
 ) {
     if (playlists.isEmpty()) {
         item {
@@ -510,10 +517,16 @@ private fun TvLazyListScope.playlistsContent(
                 isLast = playlists.size == 1,
                 onDelete = { onDeletePlaylist(playlist.id) },
                 removeFocus = if (index == 0) firstRowFocus else null,
+                afterDeleteFocus = addPlaylistFocus,
             )
         }
         item {
-            LiveRow(label = "Add another playlist", value = "›", onClick = onAddPlaylist)
+            LiveRow(
+                label = "Add another playlist",
+                value = "›",
+                onClick = onAddPlaylist,
+                modifier = Modifier.focusRequester(addPlaylistFocus),
+            )
         }
     }
 
@@ -536,22 +549,40 @@ private fun PlaylistBlock(
     isLast: Boolean,
     onDelete: () -> Unit,
     removeFocus: FocusRequester?,
+    afterDeleteFocus: FocusRequester,
 ) {
     var confirming by remember { mutableStateOf(false) }
     val confirmFocus = remember { FocusRequester() }
+    val removeChipFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
 
-    // Reclaim focus onto "Confirm remove" the moment the confirm block appears - found live,
-    // 2026-09-13: pressing OK on "Remove" tears down the row that held it with nothing claiming
-    // the replacement, leaving no focused node in the whole app (confirmed via uiautomator) - the
-    // exact "state/focus discipline" bug class already on record for PlayerScreen's Controls
-    // floor, just reached via a confirm dialog instead of an overlay swap.
-    LaunchedEffect(confirming) {
-        if (confirming) {
-            delay(50)
-            runCatching { confirmFocus.requestFocus() }
-        }
-    }
-
+    // Real crash, found and confirmed live 2026-09-23 through THREE separate repro/fix/stress-
+    // test rounds, all with full identical stack traces (`docs/vision/FOCUS_MODEL.md`):
+    // `ContentInViewNode.calculateRectForParent`, "Expected BringIntoViewRequester to not be used
+    // before parents are placed" - Compose Foundation's own default focus-search + BringIntoView
+    // chain, not app code, racing this list's re-layout whenever the confirm block's rows are
+    // structurally inserted/removed while something in this item holds focus.
+    //   Round 1 - `focusManager.clearFocus(force=true)` then a delayed reclaim: NOT sufficient,
+    //     still crashed - the very next key press after focus is cleared can itself trigger
+    //     Compose's own default focus-*acquisition* before the reclaim lands.
+    //   Round 2 - block directional input via `onPreviewKeyEvent` while "settling": ALSO not
+    //     sufficient, still crashed - `onPreviewKeyEvent` only participates in dispatch that
+    //     starts from an already-focused leaf; with focus genuinely absent, Compose's default
+    //     focus-acquisition happens at a lower level that a composable's own interceptor never
+    //     gets a chance to see at all.
+    //   Round 3 (this one) - the actual fix: never let focus become absent in the first place, by
+    //     keeping BOTH the "Remove" chip and the confirm block permanently composed (never
+    //     structurally inserted/removed - only resized to `Modifier.size(0.dp)` when inactive,
+    //     the same `visible`-param idiom Sprint 1 already proved for `LiveTvScreen`), and moving
+    //     focus onto the other, already-existing target *synchronously, in the same onClick* that
+    //     flips `confirming` - so the resize Compose sees is an ordinary remeasure of an already-
+    //     focused node (the routine, well-tested path), never a structural removal of the focused
+    //     node (the path that crashes). No `LaunchedEffect`, no delay, no window of vulnerability.
+    // `Modifier.size(0.dp)` alone does NOT make a node unfocusable - without the `canFocus`
+    // gates below, D-pad DOWN from "Remove" could land on an invisible 0dp "Confirm remove", one
+    // OK away from deleting a real playlist. The gates read `confirming` lazily (focusProperties
+    // re-evaluates its block whenever focus is resolved), so the synchronous handoffs still see
+    // the value just written in the same onClick.
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -562,36 +593,73 @@ private fun PlaylistBlock(
                 Text(playlist.name, style = RedSurfType.rowTitle, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(playlist.type.uppercase(), style = RedSurfType.rowSecondary, color = TextSecondary)
             }
-            if (!confirming) {
-                ActionChip(
-                    label = "Remove",
-                    onClick = { confirming = true },
-                    modifier = if (removeFocus != null) Modifier.focusRequester(removeFocus) else Modifier,
-                )
-            }
+            ActionChip(
+                label = "Remove",
+                onClick = {
+                    confirming = true
+                    // Synchronous - confirmFocus already exists (0dp below, about to grow), so
+                    // this is a same-frame focus move onto a real node, not an acquisition search.
+                    runCatching { confirmFocus.requestFocus() }
+                },
+                // Two FocusRequesters on one node is a supported Compose pattern - removeFocus
+                // (index-0-only) is the pane's own entry-redirect target; removeChipFocus is this
+                // row's own stable reclaim target after a cancel, regardless of index.
+                modifier = Modifier
+                    .focusProperties { canFocus = !confirming }
+                    .then(if (removeFocus != null) Modifier.focusRequester(removeFocus) else Modifier)
+                    .focusRequester(removeChipFocus)
+                    .then(if (confirming) Modifier.size(0.dp).clipToBounds() else Modifier),
+            )
         }
-        if (confirming) {
-            Column(
-                modifier = Modifier.fillMaxWidth().background(SurfaceRaised, RoundedCornerShape(8.dp)).padding(12.dp),
-            ) {
-                Text(
-                    if (isLast) {
-                        "Last playlist - removing it returns to setup. Press OK again to confirm."
-                    } else {
-                        "Removes this playlist and its channels. Press OK again to confirm."
+        Column(
+            modifier = Modifier.then(
+                if (confirming) {
+                    Modifier.fillMaxWidth().background(SurfaceRaised, RoundedCornerShape(8.dp)).padding(12.dp)
+                } else {
+                    Modifier.size(0.dp).clipToBounds()
+                },
+            ),
+        ) {
+            Text(
+                if (isLast) {
+                    "Last playlist - removing it returns to setup. Press OK again to confirm."
+                } else {
+                    "Removes this playlist and its channels. Press OK again to confirm."
+                },
+                style = RedSurfType.rowSecondary,
+                color = TextSecondary,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionChip(
+                    label = "Confirm remove",
+                    // A real delete removes this whole block from the outer list, so handing focus
+                    // back to our own Remove chip would still leave it on a structurally-removed
+                    // node. Move it synchronously to "Add another playlist" instead - a row that
+                    // survives the delete. If that lazy row isn't composed (scrolled far off), fall
+                    // back to clearFocus - the path Round 1 showed can still race, so this is
+                    // best-effort; not stress-tested live (would mean deleting a real playlist).
+                    onClick = {
+                        if (runCatching { afterDeleteFocus.requestFocus() }.isFailure) {
+                            focusManager.clearFocus(force = true)
+                        }
+                        confirming = false
+                        onDelete()
                     },
-                    style = RedSurfType.rowSecondary,
-                    color = TextSecondary,
+                    modifier = Modifier
+                        .focusProperties { canFocus = confirming }
+                        .focusRequester(confirmFocus),
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionChip(
-                        label = "Confirm remove",
-                        onClick = { confirming = false; onDelete() },
-                        modifier = Modifier.focusRequester(confirmFocus),
-                    )
-                    ActionChip(label = "Cancel", onClick = { confirming = false })
-                }
+                ActionChip(
+                    label = "Cancel",
+                    modifier = Modifier.focusProperties { canFocus = confirming },
+                    onClick = {
+                        confirming = false
+                        // Synchronous - removeChipFocus already exists (about to grow from 0dp),
+                        // same safe same-frame-remeasure move as the Remove chip's own handler.
+                        runCatching { removeChipFocus.requestFocus() }
+                    },
+                )
             }
         }
         // Per-playlist grey rows (SETTINGS.md) - real names, unfocusable, previewing
@@ -604,20 +672,32 @@ private fun PlaylistBlock(
 private fun ResetRow(onReset: () -> Unit) {
     var confirming by remember { mutableStateOf(false) }
     val confirmFocus = remember { FocusRequester() }
+    val resetRowFocus = remember { FocusRequester() }
 
-    // Same reclaim as PlaylistBlock's - see its comment.
-    LaunchedEffect(confirming) {
-        if (confirming) {
-            delay(50)
-            runCatching { confirmFocus.requestFocus() }
-        }
-    }
-
-    if (!confirming) {
-        LiveRow(label = "Reset everything & add a different playlist", value = "›", onClick = { confirming = true })
-    } else {
+    // Same crash and same fix as PlaylistBlock - see its comment. Both the row and the confirm
+    // block stay composed (inactive one sized to 0dp, clipped, and unfocusable), and every
+    // transition moves focus synchronously onto a node that already exists.
+    Column(modifier = Modifier.fillMaxWidth()) {
+        LiveRow(
+            label = "Reset everything & add a different playlist",
+            value = "›",
+            onClick = {
+                confirming = true
+                runCatching { confirmFocus.requestFocus() }
+            },
+            modifier = Modifier
+                .focusProperties { canFocus = !confirming }
+                .focusRequester(resetRowFocus)
+                .then(if (confirming) Modifier.size(0.dp).clipToBounds() else Modifier),
+        )
         Column(
-            modifier = Modifier.fillMaxWidth().background(SurfaceRaised, RoundedCornerShape(8.dp)).padding(12.dp),
+            modifier = Modifier.then(
+                if (confirming) {
+                    Modifier.fillMaxWidth().background(SurfaceRaised, RoundedCornerShape(8.dp)).padding(12.dp)
+                } else {
+                    Modifier.size(0.dp).clipToBounds()
+                },
+            ),
         ) {
             Text(
                 "This deletes every loaded playlist and its channels. Press OK again to confirm.",
@@ -628,10 +708,25 @@ private fun ResetRow(onReset: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionChip(
                     label = "Confirm reset",
-                    onClick = { confirming = false; onReset() },
-                    modifier = Modifier.focusRequester(confirmFocus),
+                    // Reset replaces this whole screen with Onboarding - hand focus back to the
+                    // (still-composed) reset row first so no focused node is ever orphaned.
+                    onClick = {
+                        confirming = false
+                        runCatching { resetRowFocus.requestFocus() }
+                        onReset()
+                    },
+                    modifier = Modifier
+                        .focusProperties { canFocus = confirming }
+                        .focusRequester(confirmFocus),
                 )
-                ActionChip(label = "Cancel", onClick = { confirming = false })
+                ActionChip(
+                    label = "Cancel",
+                    modifier = Modifier.focusProperties { canFocus = confirming },
+                    onClick = {
+                        confirming = false
+                        runCatching { resetRowFocus.requestFocus() }
+                    },
+                )
             }
         }
     }
