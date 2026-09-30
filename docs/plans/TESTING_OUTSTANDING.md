@@ -30,6 +30,23 @@ Categories UP escaping to the nav strip early (fixed Sprint 2 #24). Section D fe
 true top), #25 (focus lands on "now"), overall sluggishness after Sprint 1, and the 2026-09-28
 Settings crash fix.
 
+## I. Teleport finish + Favorites (v0.38.0, 2026-09-30) - `TELEPORT_MENU.md`
+
+Machine-verified on the TV already (see the brief); these are the real-remote checks only:
+1. Hold Back anywhere (Live TV, Settings, **fullscreen**) → the menu. Does it feel right - speed of
+   open/close, the moving highlight on the rim?
+2. Each row lands where you expect: Nav-Strip, Playlist Root (playlist header), Playlist
+   Favorites, Root Category (e.g. Faraz Strong "US| CBS" → "US|24/7 ACTION/ADVENTURE Raw 60fps"),
+   Now Playing, Return to fullscreen, Exit.
+3. Favorites: hold OK on a channel in the guide → Add/Remove. Does "★ Favorites" appear first
+   under that playlist, and does UP/DOWN in fullscreen stay inside Favorites?
+4. Does anything feel less sluggish, especially right after launch while EPG is updating?
+(NFL GAME 04 on Random Score was left as a favorite so there's a Favorites category to look at.)
+
+**Known regression, found 2026-09-30, not fixed yet:** Settings - LEFT from a pane lands on
+"General" instead of the category you were in; DOWN from the Settings pill lands on whichever rail
+row is nearest.
+
 ## A. The Lattice - EPG grid redesign (v0.37.x) - `EPG_GRID_REDESIGN.md`
 
 Hold next to `docs/vision/references/tivimate/RedThemedEPGLiveTVScreen.jpg`.

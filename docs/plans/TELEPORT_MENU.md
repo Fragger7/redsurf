@@ -176,10 +176,11 @@ scenario and still not connect it to the other.)**
 |---|---|---|
 | T.1 | Settings toggle + grey-row plumbing for the two unbuilt destinations | ✅ done & device-verified |
 | T.2 | Menu overlay: layout, focus, key handling, portal open/close animation | ✅ done & device-verified |
-| T.3 | Five real destinations (Nav-Strip, Playlist Root, Root Channel Group, Return to fullscreen, Exit) | ⚠️ built; build-time sweep claimed device-verified, but the user's real-remote testing found only Exit RedSurf actually working (see "User feedback after real device testing" below) - needs real debugging next session, not just re-confirmation |
-| T.4 | Root Category prefix-parsing - built for real this sprint, not left grey (pulled forward per the Non-goals section's own "only if cheap once this sprint is already touching the relevant code" carve-out - it was) | ⚠️ built & build-time-verified; independent re-confirmation blocked - the test playlist was deleted before the user could retest, see note below |
+| T.3 | Destinations (Nav-Strip, Playlist Root, Playlist Favorites, Root Category, Now Playing, Return to fullscreen, Exit; Multi-View grey) | ✅ rebuilt 2026-09-29/30 (v0.38.0) and verified on device by screenshot + focused-node bounds, not log lines alone - see "Teleport finish - what happened" below. Awaiting the user's real-remote check. |
+| T.4 | Root Category prefix-parsing | ✅ re-verified 2026-09-30 on Random Score: from "24/7 \| IND MALAY…" it landed on "24/7 \| AMAZONE", and UP from there leaves the family - it is the first. Unit-tested incl. the user's Faraz Strong example. |
 | T.5 | Discoverability tips (both named triggers, plus whatever else the brainstorm adds) | ⬜ not started - deferred, see note below |
-| **A** | **Checkpoint - user tests the menu on the real list** | ❌ failed - most rows non-functional for the user; portal animation itself passed with two refinement requests |
+| **A** | **Checkpoint - user tests the menu on the real list** | ❌ failed 2026-09-19 → rebuilt; **re-test pending (v0.38.0)** |
+| F | Favorites (per-playlist, hold-OK add/remove, Teleport row) | ✅ built & device-verified 2026-09-30 |
 
 **T.5 deferred, not forgotten.** Built T.1-T.4 (the mechanism itself) this pass; the two named
 discoverability triggers plus further brainstorming are real remaining work, explicitly called out
@@ -331,6 +332,48 @@ drives it by index while open (UP/DOWN/OK/Back), so whatever had focus underneat
 Back-to-close is a true no-op, and each action runs from a stable focus state after close.
 Category-row targets go through a new explicit GroupsColumn focus request (scroll to the row,
 then focus it, verifying the row really holds focus before stopping the retry).
+
+## Teleport finish - what happened (2026-09-29/30, Opus, v0.38.0)
+
+**Root cause confirmed.** The diagnosis above held: with the focus trap gone and the menu driven by
+key index from `AppShell`, every row works. Verified on the Chromecast against the real playlists,
+each by screenshot and/or the focused node's bounds (not just a log line):
+- **Nav-Strip** → Live TV pill (from browse, and from fullscreen - leaves fullscreen first).
+- **Playlist Root** → the "Random Score" accordion header, 895 rows down the list, first attempt.
+- **Root Category** → first category of the family ("24/7 \| AMAZONE" from "24/7 \| IND MALAY…");
+  greys out correctly on names with no separator (e.g. "✯USA✯ NFL EVENTS").
+- **Playlist Favorites** → "★ Favorites" row, including from Settings (switches destination).
+- **Now Playing** → last played channel's own guide row, its category selected (browse and fullscreen).
+- **Return to fullscreen** → plays the last *played* channel (not the cursor's), real audio focus;
+  hidden when opened from fullscreen.
+- **Exit RedSurf** → app closes, launcher resumes. **Multi-View** grey, skipped by UP/DOWN.
+- **Back closes with no side effect** - focus bounds identical before and after.
+- **Setting off** → long-press Back unchanged (Settings → pill; Live TV → fullscreen).
+- Slower open/close (340/230ms) and the rim runner are in; the runner is visible in screenshots.
+
+**Favorites, verified:** hold OK on a guide cell → menu → add/remove; star in the hero turns red;
+Favorites appears first under the playlist; zapping inside Favorites skips non-favorites (04 → 06
+→ wraps to 04); removing a favorite while inside Favorites refreshes the list and keeps focus;
+removing the *last* one lands on the playlist's next category row. Migration 10→11 kept all 3
+playlists.
+
+**Two bugs found and fixed during verification:** (1) the Favorites guide list wasn't reactive -
+after a removal the removed row stayed and the next hold-OK re-added it; (2) removing the last
+favorite dropped focus to nothing.
+
+**A real performance finding, fixed:** a favorite toggled during an EPG sync took **~3 minutes** to
+save (landed 70ms after `epgSync -> done`, twice). SQLite's writer was free; the write was queued
+on Room's single-thread transaction executor behind the sync's `withTransaction` batches. Fixes:
+EPG ingest now uses blocking `runInTransaction` on the worker's own thread; transactions are 2,000
+rows not 10,000; one write per toggle (the old `channels.isFavorite` column is no longer used);
+post-sync `ANALYZE` bounded by `PRAGMA analysis_limit`. Measured after: **83ms** mid-sync (with one
+sync running; with three concurrent syncs expect up to a couple of seconds). The same queue served
+recent-channel writes, so this very likely contributed to the "sluggish" reports too. Serializing
+the three syncs was tried and reverted before shipping: WorkManager's 10-minute cap would kill a
+queued third sync and push it into exponential backoff.
+
+**Not done / deferred:** T.5 tips (needs the user's threshold); Favorites sub-groups/reorder
+(TiviMate "Manage favorites"); a Settings row for Favorites (nothing to configure yet).
 
 ## Acceptance - machine-verifiable
 

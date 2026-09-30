@@ -2,6 +2,23 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-29/30 — Teleport finish + Favorites, v0.38.0
+
+Full account: `TELEPORT_MENU.md` → "Teleport finish - what happened". Short version: the menu's
+focus trap cancelled every jump's `requestFocus()` and the retry loops counted that as success;
+rebuilt as a key-driven overlay (never takes focus) with verified landings. All rows verified on
+device by screenshot/focus bounds. Favorites built (per-playlist, hold-OK, zap stays inside).
+
+**deviated:** found and fixed a performance bug outside the brief - user writes queued behind EPG
+sync on Room's single transaction thread (favorite took ~3 min → 83ms). Tried serializing syncs,
+reverted before shipping (WorkManager 10-min cap). Four local release builds at v0.38.0/139, same
+versionCode each time (`install -r`), no stray versions.
+
+**Found, not fixed (not Teleport code):** Settings - LEFT from a pane lands on the rail's top row
+(General), and DOWN from the Settings pill lands on the spatially-nearest rail row, instead of the
+selected category (the 2026-09-15 fix, BACKLOG_SWEEP.md #5, no longer holds). Unknown whether
+Sprint 2 or the 2026-09-28 crash fix regressed it. Logged in `TESTING_OUTSTANDING.md`.
+
 ## 2026-09-28 — Settings Playlists-pane crash: real root cause found and fixed
 
 **Fix 1 (`60447af`) was wrong about the cause.** It rebuilt `PlaylistBlock`/`ResetRow` so the

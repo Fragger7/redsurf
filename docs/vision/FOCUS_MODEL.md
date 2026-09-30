@@ -57,6 +57,12 @@ the fullscreen-*exit* branch of the exact same effect (Finding 5 below) and in
 .requestFocus() }` in the codebase against whether its target can plausibly not exist yet; if so,
 it needs the retry loop, full stop.
 
+**Addendum, 2026-09-30:** "retry until success" must check that focus actually *arrived*
+(the target reports `isFocused`/`hasFocus`), never that `requestFocus()` didn't throw - a request
+cancelled by a focus trap or `focusProperties` doesn't throw. That exact gap is why Teleport's jumps
+"succeeded" while landing nowhere. `LiveTvScreen.claimGridFocus`, `GroupsColumn`'s focus request
+and `AppShell.teleportToNavStrip` all verify now.
+
 ### 4. Don't remove a composable from the tree to hide it — keep it composed, toggle visibility/size instead
 
 Conditional composition (`if (condition) { Screen() }`, or a `when` branch that only renders a

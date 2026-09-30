@@ -1,16 +1,12 @@
 # Execution sequencing — post-Lattice, 2026-09-22
 
-**⏸ RESUME HERE (updated 2026-09-28, end of session).** Sprint 1 (v0.37.8/9) and Sprint 2
-(v0.37.13) closed; the Settings Playlists-pane crash is fixed and device-verified (v0.37.14-16,
-root cause: hidden-but-placed screens - `FOCUS_MODEL.md` rule 4). Device is on the genuine CI
-**v0.37.16 / versionCode 138** (verify with `gh release list` + `dumpsys package`). Nothing is
-uncommitted or in flight. **Next action: Sprint 3** below (double-row EPG rows + the play and
-catch-up icons, user's explicit high priority) - it is NOT blocked on user testing; the user's
-feedback that shapes it is already in hand (2026-09-22). The user owes only four quick rechecks
-(`TESTING_OUTSTANDING.md` top note: Categories UP to true top, focus lands on "now", overall
-sluggishness, the crash fix) - take their results whenever they arrive, don't wait for them. Then
+**⏸ RESUME HERE (updated 2026-09-30).** Teleport Menu track **done** (v0.38.0) plus per-playlist
+Favorites, and an EPG-sync write-starvation fix - see `TELEPORT_MENU.md`. Device is on v0.38.0
+(versionCode 139, verify with `gh release list` + `dumpsys package`). **Next: the user's real-remote
+checks (`TESTING_OUTSTANDING.md` section I, plus the four rechecks in its top note), then fix the
+Settings rail regression logged there, then Sprint 3** (double-row EPG rows + play/catch-up icons),
 Sprint 4 (public EPG supplement), Sprint 5 (nav-strip auto-hide), Sprint 6 (preview↔fullscreen
-grow/shrink), plus the separate Teleport Menu debugging track (needs the user's remote in hand).
+grow/shrink). T.5 Teleport tips still wait on the user's threshold.
 
 **What this is:** every open item from `docs/plans/TESTING_OUTSTANDING.md` plus the 2026-09-21/22
 feedback round, grouped into an actual build order with reasoning. Nothing here is built yet -

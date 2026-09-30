@@ -91,8 +91,9 @@ merging.
   sprint (Phase 2 #2.3 Actions row, #2.4, #2.5) → EPG + Guide (Phase 3) → **Cloud Sync** →
   VOD/Series. **Phase 2 is fully closed, 2026-09-19** (`PHASE_2.md`'s "2.6 - closed" entry - #2.6's
   zap-latency and memory items both explicitly waived by user decision, everything else confirmed).
-  **"Teleport Menu" - built, but NOT device-verified: real user testing on 2026-09-19 found most
-  rows non-functional** (only Exit RedSurf worked; the portal animation itself landed well with
+  **"Teleport Menu" - superseded 2026-09-30: rebuilt and device-verified (v0.38.0), see
+  `TELEPORT_MENU.md` "Teleport finish"; user's real-remote re-test pending. History:** built, but
+  NOT device-verified: real user testing on 2026-09-19 found most rows non-functional (only Exit RedSurf worked; the portal animation itself landed well with
   two refinement requests) - contradicts the build sweep's own `uiautomator`/logcat-based claims,
   see `docs/plans/TELEPORT_MENU.md`'s "User feedback after real device testing" section for the
   full account and next-session plan. T.1-T.4 built, T.3 needs real debugging (not just
@@ -174,9 +175,9 @@ merging.
   note - never re-ask them); Sprint 1 (perf, v0.37.8/9) and Sprint 2 (9 focus/state bugs,
   v0.37.13) closed; the Settings Playlists-pane crash fixed for real in v0.37.14-16 (hidden screens
   were 0dp-but-placed and stayed in focus search - `Modifier.hiddenButComposed`, `FOCUS_MODEL.md`
-  rule 4). Device is on the genuine CI v0.37.16 (versionCode 138). **Next session:
-  `docs/plans/SEQUENCING.md`'s RESUME HERE - Sprint 3 (double-row EPG rows + play/catch-up
-  icons), which is not blocked on user testing.**
+  rule 4). Device is on the genuine CI v0.37.16 (versionCode 138). **Update 2026-09-30:
+  Teleport Menu finished + per-playlist Favorites built, v0.38.0 (`TELEPORT_MENU.md`); device on
+  v0.38.0/139. Next session: `docs/plans/SEQUENCING.md`'s RESUME HERE.**
   Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud
