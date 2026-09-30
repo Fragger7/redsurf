@@ -102,7 +102,15 @@ class EpgSyncWorker(
             // planner has no real statistics for a ~140K-row table to reason about. A single
             // ANALYZE here, off the cold-launch critical path already per the scheduling change
             // above, is the cheap way to give it real numbers without ever blocking first paint.
-            runCatching { db.openHelper.writableDatabase.execSQL("ANALYZE") }
+            // 2026-09-30: bounded - a full ANALYZE reads every row of a 300K+-row database while
+            // holding SQLite's single writer, and every user write waits behind it.
+            // analysis_limit (SQLite 3.32+) makes it sample instead; older SQLite ignores the
+            // pragma and just runs the full ANALYZE as before.
+            runCatching {
+                val sqlite = db.openHelper.writableDatabase
+                sqlite.query("PRAGMA analysis_limit=1000").close()
+                sqlite.execSQL("ANALYZE")
+            }
                 .onFailure { Log.w(TAG, "epgSync -> ANALYZE failed for playlist $playlistId", it) }
             EpgSyncState.markCompleted(applicationContext, playlistId, now)
             EpgSyncState.markAttempt(applicationContext, playlistId, null, now)

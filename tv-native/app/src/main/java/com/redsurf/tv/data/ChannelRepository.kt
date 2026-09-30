@@ -146,12 +146,15 @@ class ChannelRepository(
      * until now). Hiding takes effect immediately end-to-end: every live query already filters
      * `isHidden = 0`. */
     suspend fun setFavorite(playlistId: String, streamId: String, isFavorite: Boolean) {
-        // The favorites table is the source of truth (survives re-import - see
-        // FavoriteChannelEntity); the old column is kept in step only so nothing reading it
-        // disagrees within a session.
+        // The favorites table is the only source of truth (survives re-import - see
+        // FavoriteChannelEntity). The old `channels.isFavorite` column is no longer written or
+        // read anywhere - one write per toggle, not two (each waits its turn for SQLite's single
+        // writer during an EPG sync).
+        val t0 = System.currentTimeMillis()
         if (isFavorite) favoriteDao.insert(FavoriteChannelEntity(streamId, playlistId, System.currentTimeMillis()))
         else favoriteDao.delete(playlistId, streamId)
-        channelDao.updateFavorite(playlistId, streamId, isFavorite)
+        // Cheap, permanent: the write that sat 2-3 minutes behind an EPG sync on 2026-09-30.
+        android.util.Log.d("RedSurfDb", "setFavorite ms=${System.currentTimeMillis() - t0}")
     }
 
     suspend fun setHidden(playlistId: String, streamId: String, isHidden: Boolean) =

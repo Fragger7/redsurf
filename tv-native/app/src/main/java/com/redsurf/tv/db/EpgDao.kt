@@ -10,6 +10,13 @@ interface EpgDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPrograms(programs: List<EpgProgramEntity>)
 
+    /** Blocking twin of [insertPrograms] for EPG ingest only (2026-09-30) - runs on the calling
+     * (worker IO) thread inside `runInTransaction`, never on Room's shared single-thread
+     * transaction executor, so a multi-minute sync can't queue the user's own small writes
+     * (favorites, recent channels) behind it. See XmlTvParser's flush for the measurement. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertProgramsBlocking(programs: List<EpgProgramEntity>)
+
     // PHASE_3.md decision 1: scoped to one playlist, not the whole table - EpgSyncWorker runs
     // per playlist now (decision 2), and a global clearAll() here would wipe every OTHER
     // playlist's EPG data every time just one playlist re-syncs.

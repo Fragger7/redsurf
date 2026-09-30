@@ -2,7 +2,6 @@ package com.redsurf.tv.parser
 
 import android.util.Log
 import android.util.Xml
-import androidx.room.withTransaction
 import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.db.RedSurfDatabase
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +34,11 @@ object XmlTvParser {
      * across only a couple hundred statements). Trade-off, stated plainly: up to
      * `TRANSACTION_BATCH_COUNT` × `BATCH_SIZE` (10,000) rows can be held in memory between commits
      * instead of 1,000 - a few MB, not the whole feed, still nowhere near `HARDWARE.md`'s ceiling. */
-    private const val TRANSACTION_BATCH_COUNT = 10
+    // 2026-09-30: 10 -> 2. A 10,000-row transaction held SQLite's single writer for 3-16s on this
+    // device, and every user write (favorites, recent channels) waits for the whole of whichever
+    // one is in flight. 2,000 rows keeps that wait around a second, at the cost of ~5x the
+    // commits - still ~100 per feed, not the ~200 single-batch commits the original change fixed.
+    private const val TRANSACTION_BATCH_COUNT = 2
 
     /** [playlistId] stamps every row (PHASE_3.md decision 1) so two playlists whose providers
      * happen to reuse the same `channel` id in their own XMLTV feeds never collide. Returns the
@@ -58,9 +61,18 @@ object XmlTvParser {
 
         suspend fun flushPendingTransactionBatches() {
             if (pendingTransactionBatches.isEmpty()) return
-            db.withTransaction {
-                pendingTransactionBatches.forEach { epgDao.insertPrograms(it) }
+            // 2026-09-30, measured live twice on v0.38.0: a favorite toggled mid-sync waited the
+            // *entire* sync (2-3 minutes) and landed within 70ms of `epgSync -> done`, while
+            // SQLite's primary connection showed as available - i.e. queued on Room's shared
+            // single-thread transaction executor, not on SQLite's write lock. `runInTransaction`
+            // runs on this (IO) thread instead, so user writes only ever wait on SQLite itself,
+            // for at most one of these batches.
+            val t0 = System.currentTimeMillis()
+            val rows = pendingTransactionBatches.sumOf { it.size }
+            db.runInTransaction {
+                pendingTransactionBatches.forEach { epgDao.insertProgramsBlocking(it) }
             }
+            Log.d("XmlTvParser", "flush rows=$rows tookMs=${System.currentTimeMillis() - t0}")
             pendingTransactionBatches.clear()
         }
 

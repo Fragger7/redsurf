@@ -321,7 +321,12 @@ fun LiveTvScreen(
     // a moment before those rows are replaced (focus then falls out of the removed row).
     var gridLoadedFor by remember { mutableStateOf<GroupKey?>(null) }
     var gridPrograms by remember { mutableStateOf<Map<String, List<EpgProgramEntity>>>(emptyMap()) }
-    LaunchedEffect(queriedGroup, windowStart) {
+    // The Favorites category's contents change without the selected category changing (found
+    // live 2026-09-30: after removing a favorite the removed row stayed on screen, and the next
+    // hold-OK on it re-added it) - so while Favorites is showing, the favorites set itself is
+    // part of this query's key.
+    val favoritesStamp = if (isFavoritesGroup(queriedGroup?.groupName)) favoriteKeys else null
+    LaunchedEffect(queriedGroup, windowStart, favoritesStamp) {
         val group = queriedGroup
         if (group == null) {
             gridChannels = emptyList()
@@ -510,16 +515,42 @@ fun LiveTvScreen(
     LaunchedEffect(contextMenuChannel) {
         Log.d("LiveTvScreen", "contextMenu -> ${contextMenuChannel?.name ?: "closed"}")
     }
+    // Local Categories-row landing (same mechanism Teleport uses via AppShell) - for the one
+    // in-screen case that needs it: the last favorite removed while inside Favorites.
+    var localGroupsFocusRequest by remember { mutableStateOf<GroupsFocusRequest?>(null) }
     fun toggleFavorite(channel: ChannelEntity) {
         val nowFavorite = !isFavorite(channel)
+        val inFavorites = isFavoritesGroup(selectedGroup?.groupName) && selectedGroup?.playlistId == channel.playlistId
+        val favoritesRowCount = groups.firstOrNull { it.key() == selectedGroup }?.count ?: 0
+        // Found live 2026-09-30: removing the *last* favorite while inside Favorites removes the
+        // whole Favorites category (it only exists while non-empty), and focus fell out to
+        // nothing. Land on the playlist's next category row instead - decided up front, from the
+        // list as it is now, before the row disappears.
+        val nextCategory = if (inFavorites && !nowFavorite && favoritesRowCount <= 1) {
+            val index = groups.indexOfFirst { it.key() == selectedGroup }
+            groups.getOrNull(index + 1)?.takeIf { it.playlistId == channel.playlistId }?.key()
+        } else {
+            null
+        }
         scope.launch {
             viewModel.repository.setFavorite(channel.playlistId, channel.streamId, nowFavorite)
             Log.d("LiveTvScreen", "favorite -> ${channel.name} = $nowFavorite")
-            // Removing a favorite while browsing Favorites removes the very row that held focus -
-            // reclaim onto what's left rather than let focus fall out of the grid.
-            if (!nowFavorite && isFavoritesGroup(selectedGroup?.groupName)) {
+            if (!nowFavorite && inFavorites) {
                 onFocusedChannelChanged(null)
-                claimGridFocus()
+                // Refresh the list here, before reclaiming focus - waiting on the reactive
+                // re-query above would race it, and the claim could land on the removed row.
+                selectedGroup?.let { group ->
+                    gridChannels = viewModel.repository.channelsInGroup(group.playlistId, group.groupName)
+                    gridLoadedFor = group
+                }
+                if (nextCategory != null) {
+                    onSelectedGroupChanged(nextCategory)
+                    localGroupsFocusRequest = GroupsFocusRequest.Group(nextCategory, System.nanoTime())
+                } else {
+                    // Removing a favorite while browsing Favorites removes the very row that held
+                    // focus - reclaim onto what's left rather than let focus fall out of the grid.
+                    claimGridFocus()
+                }
             }
         }
     }
@@ -606,8 +637,10 @@ fun LiveTvScreen(
                     },
                     modifier = Modifier.width(RedSurfDensity.CategoriesWidth),
                     onEscapeUp = onEscapeUp,
-                    focusRequest = groupsFocusRequest,
-                    onFocusRequestConsumed = onGroupsFocusRequestConsumed,
+                    focusRequest = groupsFocusRequest ?: localGroupsFocusRequest,
+                    onFocusRequestConsumed = {
+                        if (groupsFocusRequest != null) onGroupsFocusRequestConsumed() else localGroupsFocusRequest = null
+                    },
                 )
 
                 EpgGridColumn(

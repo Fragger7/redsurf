@@ -250,7 +250,7 @@ fun PlayerScreen(
             Log.d(
                 TAG,
                 "zap dir=${if (goingUp) "up" else "down"} from=(${channel.num} ${channel.name}) " +
-                    "-> to=${next?.let { "(${it.num} ${it.name})" } ?: "null"} group=${channel.groupName}",
+                    "-> to=${next?.let { "(${it.num} ${it.name})" } ?: "null"} group=$zapGroup",
             )
             next?.let(onChannelChanged)
         }
