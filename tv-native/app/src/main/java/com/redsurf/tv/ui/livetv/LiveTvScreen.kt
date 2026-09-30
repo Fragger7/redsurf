@@ -39,6 +39,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -50,6 +55,8 @@ import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.R
+import com.redsurf.tv.data.favoriteKey
+import com.redsurf.tv.data.isFavoritesGroup
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.player.PreviewPlayerHost
@@ -155,6 +162,15 @@ fun LiveTvScreen(
     // own onEscapeUp doc comment for why this exists (default moveFocus doesn't reliably escape a
     // TvLazyColumn's real boundary, confirmed live).
     onEscapeUp: () -> Unit = {},
+    // Teleport Menu (TELEPORT_MENU.md, sprint "Teleport finish", 2026-09-29) - an explicit
+    // Categories-row landing (Playlist Root / Playlist Favorites / Root Category), passed straight
+    // to GroupsColumn.
+    groupsFocusRequest: GroupsFocusRequest? = null,
+    onGroupsFocusRequestConsumed: () -> Unit = {},
+    // Teleport opened from fullscreen: leave fullscreen *without* the usual return-to-grid focus
+    // claim, because the Teleport action that asked for this places focus itself. A nonce - any
+    // new value is a new request; 0 means none.
+    exitFullscreenRequest: Long = 0L,
 ) {
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     // PLAYER_ENGINEERING_BRIEF.md §6/§9 - resolved here, reactively, well before any fullscreen
@@ -165,6 +181,11 @@ fun LiveTvScreen(
     // (unlike the stand-in) survives a real relaunch, not just switching destinations within one
     // session.
     val recentChannels by viewModel.repository.recentChannels().collectAsState(initial = emptyList())
+    // Favorites (TELEPORT_MENU.md, 2026-09-29) - one small reactive set for the hero star, the
+    // context-menu label, and "is this zap still inside Favorites?".
+    val favoriteKeys by viewModel.repository.favoriteKeys().collectAsState(initial = emptySet())
+    fun isFavorite(channel: ChannelEntity?): Boolean =
+        channel != null && favoriteKey(channel.playlistId, channel.streamId) in favoriteKeys
     var isFullscreen by remember { mutableStateOf(false) }
     var channelsHasFocus by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -295,12 +316,17 @@ fun LiveTvScreen(
     // reason - a fast D-pad flight through Categories shouldn't fire one grid query per row flown
     // over. Re-queried when the window re-snaps (every 30 minutes), so the far edge stays filled.
     var gridChannels by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
+    // Which group [gridChannels] actually holds right now - a focus claim for a freshly-selected
+    // category must wait for *that* category's rows, or it lands on the previous category's row 0
+    // a moment before those rows are replaced (focus then falls out of the removed row).
+    var gridLoadedFor by remember { mutableStateOf<GroupKey?>(null) }
     var gridPrograms by remember { mutableStateOf<Map<String, List<EpgProgramEntity>>>(emptyMap()) }
     LaunchedEffect(queriedGroup, windowStart) {
         val group = queriedGroup
         if (group == null) {
             gridChannels = emptyList()
             gridPrograms = emptyMap()
+            gridLoadedFor = null
             return@LaunchedEffect
         }
         // Perf audit, 2026-09-22 (SEQUENCING.md Sprint 1) - cheap, permanent diagnostic: the
@@ -312,6 +338,7 @@ fun LiveTvScreen(
         val channelsInGroup = viewModel.repository.channelsInGroup(group.playlistId, group.groupName)
         Log.d("LiveTvScreen", "gridQuery group=$group channels=${channelsInGroup.size} tookMs=${System.currentTimeMillis() - queryStart}")
         gridChannels = channelsInGroup
+        gridLoadedFor = group
         val epgIds = channelsInGroup.mapNotNull { it.epgChannelId?.takeIf { id -> id.isNotBlank() } }.distinct()
         gridPrograms = if (epgIds.isEmpty()) {
             emptyMap()
@@ -393,6 +420,11 @@ fun LiveTvScreen(
     // than that. Worth a real follow-up (give the grid a focusedChannelId-aware row match, the
     // same pattern ChannelsColumn already has) - not attempted in this already-large pass.
     val gridFocus = remember { FocusRequester() }
+    // Bumped by claimGridFocus - tells the grid to scroll its target row into view (a lazy row
+    // that isn't composed can't take focus).
+    var gridScrollNonce by remember { mutableStateOf(0) }
+    // See [exitFullscreenRequest].
+    var skipNextExitClaim by remember { mutableStateOf(false) }
     // Sprint 2, 2026-09-23 (SEQUENCING.md Findings 4/5/6/7, FOCUS_MODEL.md rules 2/3/5/6) - one
     // shared claim function, called from every place that needs to land D-pad focus on the grid.
     // Every path converges on the same row (`focusedChannel`'s, via EpgGridColumn's own
@@ -407,10 +439,22 @@ fun LiveTvScreen(
         // found (observed live: landed on Categories instead of the resumed channel's grid row).
         // Matched to GroupsColumn's own established 300ms x 20 = 6s ceiling for this exact class of
         // cold-launch race, not just widened arbitrarily.
+        //
+        // Teleport finish sprint, 2026-09-29 - success used to mean "requestFocus() didn't throw,"
+        // but a *cancelled* request doesn't throw either (e.g. an open overlay's focus trap), so
+        // one attempt "succeeded" while focus landed nowhere. Now: wait until the grid holds the
+        // selected category's own rows, ask the grid to bring the target row into view, then only
+        // stop once focus is really inside the grid.
         repeat(20) {
             delay(300)
-            if (runCatching { gridFocus.requestFocus() }.isSuccess) return
+            if (selectedGroup != null && gridLoadedFor != selectedGroup) return@repeat
+            gridScrollNonce++
+            delay(50)
+            runCatching { gridFocus.requestFocus() }
+            delay(50)
+            if (channelsHasFocus) return
         }
+        Log.w("LiveTvScreen", "claimGridFocus gave up selectedGroup=$selectedGroup loadedFor=$gridLoadedFor")
     }
     // Real entry point for lateral RIGHT-from-Categories arrival, replacing the old
     // `LaunchedEffect(gridChannels)` (Finding 4: keyed on data that changes on every ordinary
@@ -433,6 +477,8 @@ fun LiveTvScreen(
                 delay(150)
                 if (runCatching { fullscreenFocus.requestFocus() }.isSuccess) return@LaunchedEffect
             }
+        } else if (skipNextExitClaim) {
+            skipNextExitClaim = false
         } else if (focusedChannel != null) {
             // Sprint 2, 2026-09-23 (Finding 5) - this used to be a single `runCatching` attempt
             // with no retry, the one asymmetry against the entry branch just above; on a fast
@@ -442,6 +488,39 @@ fun LiveTvScreen(
             // same bounded way as everything else, and (via targetChannelStreamId in EpgGridColumn
             // below) targets the exact channel, not just row 0.
             claimGridFocus()
+        }
+    }
+
+    LaunchedEffect(exitFullscreenRequest) {
+        if (exitFullscreenRequest != 0L && isFullscreen) {
+            skipNextExitClaim = true
+            isFullscreen = false
+            onFullscreenChanged(false)
+        }
+    }
+
+    // Browse-view hold-OK context menu (TiviMate's add-to-favorites path, TELEPORT_MENU.md
+    // 2026-09-29). Key-driven, never takes Compose focus: the guide cell under it keeps real
+    // focus the whole time, so closing it - by action or Back - returns to exactly that cell with
+    // nothing to restore (FOCUS_MODEL.md rule 8, satisfied by construction).
+    var contextMenuChannel by remember { mutableStateOf<ChannelEntity?>(null) }
+    // The long-press that opened the menu is still physically down; its own release must not
+    // count as "OK on the menu's row". Armed by the next fresh OK press.
+    var contextMenuArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(contextMenuChannel) {
+        Log.d("LiveTvScreen", "contextMenu -> ${contextMenuChannel?.name ?: "closed"}")
+    }
+    fun toggleFavorite(channel: ChannelEntity) {
+        val nowFavorite = !isFavorite(channel)
+        scope.launch {
+            viewModel.repository.setFavorite(channel.playlistId, channel.streamId, nowFavorite)
+            Log.d("LiveTvScreen", "favorite -> ${channel.name} = $nowFavorite")
+            // Removing a favorite while browsing Favorites removes the very row that held focus -
+            // reclaim onto what's left rather than let focus fall out of the grid.
+            if (!nowFavorite && isFavoritesGroup(selectedGroup?.groupName)) {
+                onFocusedChannelChanged(null)
+                claimGridFocus()
+            }
         }
     }
 
@@ -466,7 +545,27 @@ fun LiveTvScreen(
         focusManager.moveFocus(FocusDirection.Left)
     }
 
-    Box(modifier = Modifier.hiddenButComposed(visible).fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .hiddenButComposed(visible)
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                val channel = contextMenuChannel ?: return@onPreviewKeyEvent false
+                val isDown = event.type == KeyEventType.KeyDown
+                when (event.key) {
+                    Key.DirectionCenter, Key.Enter -> {
+                        if (isDown && event.nativeKeyEvent.repeatCount == 0) contextMenuArmed = true
+                        if (!isDown && contextMenuArmed) {
+                            toggleFavorite(channel)
+                            contextMenuChannel = null
+                        }
+                    }
+                    Key.Back -> if (!isDown) contextMenuChannel = null
+                    else -> {}
+                }
+                true
+            },
+    ) {
         // Always composed (see class doc above) - never torn down by the fullscreen overlay that
         // sits on top of it.
         Column(modifier = Modifier.fillMaxSize()) {
@@ -488,6 +587,7 @@ fun LiveTvScreen(
                 playlistUserAgent = remember(previewingChannel?.playlistId, playlists) {
                     playlists.firstOrNull { it.id == previewingChannel?.playlistId }?.userAgent
                 },
+                isFavorite = isFavorite(heroChannel ?: previewingChannel),
                 modifier = Modifier.fillMaxWidth().padding(bottom = RedSurfDensity.ColumnGap),
             )
 
@@ -506,6 +606,8 @@ fun LiveTvScreen(
                     },
                     modifier = Modifier.width(RedSurfDensity.CategoriesWidth),
                     onEscapeUp = onEscapeUp,
+                    focusRequest = groupsFocusRequest,
+                    onFocusRequestConsumed = onGroupsFocusRequestConsumed,
                 )
 
                 EpgGridColumn(
@@ -515,6 +617,11 @@ fun LiveTvScreen(
                     now = now,
                     windowStart = windowStart,
                     onTuneChannel = { channel -> openChannel(channel) },
+                    onLongPressChannel = { channel ->
+                        contextMenuArmed = false
+                        contextMenuChannel = channel
+                    },
+                    scrollToTargetNonce = gridScrollNonce,
                     firstCellFocusRequester = gridFocus,
                     targetChannelStreamId = focusedChannel?.streamId,
                     onCursorChanged = { channel, slot -> onCursorChanged(channel, slot) },
@@ -528,6 +635,14 @@ fun LiveTvScreen(
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
+
+        contextMenuChannel?.let { channel ->
+            BrowseContextMenu(
+                channelName = channel.name,
+                isFavorite = isFavorite(channel),
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
 
         if (isFullscreen) {
@@ -565,10 +680,17 @@ fun LiveTvScreen(
                     // must also move selectedGroup, not just focusedChannel - otherwise Categories
                     // keeps whatever group was selected before fullscreen, and Back after a
                     // cross-category tile pick lands on the wrong category.
+                    // Favorites exception (2026-09-29): zapping inside Favorites stays in Favorites,
+                    // same as TiviMate - only a channel from outside it moves the category.
+                    val stayInFavorites = isFavoritesGroup(selectedGroup?.groupName) &&
+                        selectedGroup?.playlistId == channel.playlistId && isFavorite(channel)
                     val newGroup = GroupKey(channel.playlistId, channel.groupName)
-                    if (newGroup != selectedGroup) onSelectedGroupChanged(newGroup)
+                    if (!stayInFavorites && newGroup != selectedGroup) onSelectedGroupChanged(newGroup)
                 },
                 breadcrumb = breadcrumb,
+                zapGroupName = selectedGroup
+                    ?.takeIf { isFavoritesGroup(it.groupName) && it.playlistId == focusedChannel?.playlistId }
+                    ?.groupName,
                 recentChannels = recentChannels.filter { it.streamId != focusedChannel?.streamId },
                 blackScreenBetweenZaps = blackScreenBetweenZaps,
                 showRawResolution = showRawResolution,
@@ -614,6 +736,7 @@ private fun HeroPreviewBand(
     groupLabel: String?,
     groupCount: Int?,
     playlistUserAgent: String?,
+    isFavorite: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val height by animateDpAsState(
@@ -628,7 +751,7 @@ private fun HeroPreviewBand(
             .background(Surface),
     ) {
         if (expanded) {
-            ExpandedHero(focusedChannel, previewingChannel, programme, now, playlistUserAgent)
+            ExpandedHero(focusedChannel, previewingChannel, programme, now, playlistUserAgent, isFavorite)
         } else {
             CollapsedHero(groupLabel, groupCount, now)
         }
@@ -675,6 +798,7 @@ private fun ExpandedHero(
     programme: EpgProgramEntity?,
     now: Long,
     playlistUserAgent: String?,
+    isFavorite: Boolean,
 ) {
     // Text follows the cursor (or the OK'd channel), video follows what's previewing - TiviMate's
     // own split: the thumbnail is clearly "playing," the text is clearly "what you're looking at."
@@ -744,12 +868,12 @@ private fun ExpandedHero(
                     LiveCrescentGlyph(size = 14.dp)
                 }
                 Spacer(modifier = Modifier.width(10.dp))
-                // Grey favourite star - no real Favorites feature exists yet (TELEPORT_MENU.md
-                // backlog): a plain decorative Icon, nothing to press, the grey-row convention.
+                // Favorite star (TELEPORT_MENU.md, 2026-09-29): red when this channel is a
+                // favorite, faint otherwise. Not itself pressable - hold OK on the channel.
                 Icon(
                     Icons.Filled.Star,
-                    contentDescription = null,
-                    tint = TextSecondary.copy(alpha = 0.35f),
+                    contentDescription = if (isFavorite) "Favorite" else null,
+                    tint = if (isFavorite) Accent else TextSecondary.copy(alpha = 0.35f),
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -855,5 +979,51 @@ private fun ProgrammeProgressRow(programme: EpgProgramEntity, now: Long) {
         }
         Spacer(modifier = Modifier.width(10.dp))
         Text("$minRemaining min remaining", style = RedSurfType.rowSecondary, color = TextSecondary, maxLines = 1)
+    }
+}
+
+/**
+ * The guide's hold-OK menu (TELEPORT_MENU.md, 2026-09-29). Drawn only - LiveTvScreen's own key
+ * router drives it (OK toggles the favorite, Back closes), so it never takes focus away from the
+ * guide cell underneath. One row today; TiviMate's longer menu (hide, EPG source, ...) can grow
+ * here the same way.
+ */
+@Composable
+private fun BrowseContextMenu(channelName: String, isFavorite: Boolean, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .width(300.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Surface.copy(alpha = 0.94f))
+            .padding(12.dp),
+    ) {
+        Text(
+            channelName,
+            style = RedSurfType.sectionTitle,
+            color = TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(Accent.copy(alpha = 0.22f))
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.width(3.dp).height(18.dp).background(Accent, RoundedCornerShape(2.dp)))
+            Spacer(modifier = Modifier.width(10.dp))
+            Icon(Icons.Filled.Star, contentDescription = null, tint = if (isFavorite) Accent else TextSecondary, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(if (isFavorite) "Remove from Favorites" else "Add to Favorites", style = RedSurfType.rowTitle, color = TextPrimary)
+        }
+        Text(
+            "OK to confirm  ·  BACK to close",
+            style = RedSurfType.gridMeta,
+            color = TextSecondary,
+            modifier = Modifier.padding(start = 8.dp, top = 8.dp),
+        )
     }
 }

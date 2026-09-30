@@ -1,6 +1,7 @@
 package com.redsurf.tv.ui.livetv
 
 import android.util.Log
+import com.redsurf.tv.data.isFavoritesGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
@@ -62,7 +63,8 @@ import kotlinx.coroutines.launch
  * with no space around the separator - unreadable as-is. Displayed with a visual arrow instead;
  * the underlying groupName (used for queries) is untouched.
  */
-internal fun formatGroupName(raw: String): String = raw.replace(";", " › ")
+internal fun formatGroupName(raw: String): String =
+    if (isFavoritesGroup(raw)) "★ Favorites" else raw.replace(";", " › ")
 
 /**
  * A group's real identity now that channels/groups are aggregated across every loaded playlist
@@ -74,6 +76,24 @@ data class GroupKey(val playlistId: String, val groupName: String)
 internal fun GroupCount.key() = GroupKey(playlistId, groupName)
 
 private const val TAG = "GroupsColumn"
+
+private fun rowKey(row: GroupsRow): String = when (row) {
+    is GroupsRow.Header -> "hdr:${row.playlistId}"
+    is GroupsRow.Item -> "grp:${row.group.playlistId}:${row.group.groupName}"
+}
+
+/**
+ * An explicit "put D-pad focus on this exact Categories row" request (TELEPORT_MENU.md, sprint
+ * "Teleport finish", 2026-09-29) - the category-row landing Teleport's Playlist Root / Playlist
+ * Favorites / Root Category jumps need. [nonce] makes a repeat of the same target a new request.
+ * [PlaylistHeader] falls back to that playlist's first category when there's only one playlist
+ * (no headers are rendered then).
+ */
+sealed class GroupsFocusRequest {
+    abstract val nonce: Long
+    data class PlaylistHeader(val playlistId: String, override val nonce: Long) : GroupsFocusRequest()
+    data class Group(val key: GroupKey, override val nonce: Long) : GroupsFocusRequest()
+}
 
 /** One row in the rendered list: either a collapsible playlist header or a group beneath one. */
 private sealed class GroupsRow {
@@ -126,6 +146,8 @@ fun GroupsColumn(
     // `navPillFocusRequesters[destination]` lookup the long-press-Back nav-jump feature already
     // established (AGENTS.md's "Global quick-jump to the NavStrip" entry).
     onEscapeUp: () -> Unit = {},
+    focusRequest: GroupsFocusRequest? = null,
+    onFocusRequestConsumed: () -> Unit = {},
 ) {
     val multiplePlaylists = remember(groups) { groups.map { it.playlistId }.distinct().size > 1 }
     var collapsedPlaylists by remember { mutableStateOf(setOf<String>()) }
@@ -189,6 +211,58 @@ fun GroupsColumn(
     // the only time this redirects - it never fights normal in-column navigation afterward.
     var hadFocus by remember { mutableStateOf(false) }
 
+    // Explicit focus request (see [GroupsFocusRequest]). The target row gets its own
+    // FocusRequester, and success is judged by the row actually *reporting* focus afterwards
+    // (focusedIndex), not by `requestFocus()` merely not throwing - a cancelled request doesn't
+    // throw, which is exactly how Teleport's jumps used to "succeed" while landing nowhere.
+    // Declared here (not beside its scroll-follow effect below) because the explicit focus
+    // request reads it too.
+    var focusedIndex by remember { mutableStateOf<Int?>(null) }
+    val targetFocus = remember { FocusRequester() }
+    var targetRowKey by remember { mutableStateOf<String?>(null) }
+    // While a request is landing, the entry-redirect below must not bounce focus onto the
+    // *selected* row instead (a header isn't the selected row).
+    var landingRequest by remember { mutableStateOf(false) }
+    LaunchedEffect(focusRequest) {
+        val request = focusRequest ?: return@LaunchedEffect
+        // A header is always rendered, collapsed or not; a category inside a collapsed playlist
+        // isn't, so expand that playlist first.
+        if (request is GroupsFocusRequest.Group && request.key.playlistId in collapsedPlaylists) {
+            collapsedPlaylists = collapsedPlaylists - request.key.playlistId
+        }
+        landingRequest = true
+        try {
+            repeat(20) { attempt ->
+                val index = when (request) {
+                    is GroupsFocusRequest.PlaylistHeader ->
+                        rows.indexOfFirst { it is GroupsRow.Header && it.playlistId == request.playlistId }
+                            .takeIf { it >= 0 }
+                            ?: rows.indexOfFirst { it is GroupsRow.Item && it.group.playlistId == request.playlistId }
+                    is GroupsFocusRequest.Group ->
+                        rows.indexOfFirst { it is GroupsRow.Item && it.group.key() == request.key }
+                }
+                if (index >= 0) {
+                    targetRowKey = rowKey(rows[index])
+                    runCatching { listState.scrollToItem(index) }
+                    delay(if (attempt == 0) 60 else 150)
+                    runCatching { targetFocus.requestFocus() }
+                    delay(40)
+                    if (focusedIndex == index) {
+                        Log.d(TAG, "focusRequest landed $request index=$index attempt=$attempt")
+                        return@LaunchedEffect
+                    }
+                } else {
+                    delay(150)
+                }
+            }
+            Log.w(TAG, "focusRequest gave up $request")
+        } finally {
+            landingRequest = false
+            targetRowKey = null
+            onFocusRequestConsumed()
+        }
+    }
+
     // Real fix for the fast-scroll bug (user correction, 2026-09-17: not the focus ring lagging -
     // "the list does not follow the focus... instead it waits for the focus to stop, then jumps
     // the scroll to where it landed"). Root cause: this relied entirely on Compose's own default
@@ -197,7 +271,6 @@ fun GroupsColumn(
     // rapid repeat the scroll position never finishes catching up until the key stops. This tracks
     // the focused row's index explicitly and jumps to it with `scrollToItem` (immediate, no
     // animation to outrun) on every single focus change, independent of Compose's own mechanism.
-    var focusedIndex by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(focusedIndex) {
         focusedIndex?.let { runCatching { listState.scrollToItem(it) } }
     }
@@ -220,7 +293,7 @@ fun GroupsColumn(
             .background(SurfaceColor, RoundedCornerShape(16.dp))
             .padding(horizontal = 12.dp, vertical = 14.dp)
             .onFocusChanged { state ->
-                if (state.hasFocus && !hadFocus) {
+                if (state.hasFocus && !hadFocus && !landingRequest) {
                     runCatching { initialFocus.requestFocus() }
                 }
                 hadFocus = state.hasFocus
@@ -255,16 +328,17 @@ fun GroupsColumn(
         TvLazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             itemsIndexed(
                 rows,
-                key = { _, row ->
-                    when (row) {
-                        is GroupsRow.Header -> "hdr:${row.playlistId}"
-                        is GroupsRow.Item -> "grp:${row.group.playlistId}:${row.group.groupName}"
-                    }
-                },
+                key = { _, row -> rowKey(row) },
             ) { index, row ->
+                val targetModifier = if (rowKey(row) == targetRowKey) Modifier.focusRequester(targetFocus) else Modifier
                 when (row) {
                     is GroupsRow.Header -> PlaylistHeaderRow(
                         row = row,
+                        // Headers report their index too - the UP guard above and the explicit
+                        // focus request both read focusedIndex, and a header that left it stale
+                        // made UP from a header scroll to the wrong row.
+                        onFocused = { focusedIndex = index },
+                        modifier = targetModifier,
                         onToggle = {
                             collapsedPlaylists = if (row.collapsed) {
                                 collapsedPlaylists - row.playlistId
@@ -282,7 +356,7 @@ fun GroupsColumn(
                                 onGroupFocused(row.group.key())
                                 focusedIndex = index
                             },
-                            modifier = if (selected) Modifier.focusRequester(initialFocus) else Modifier,
+                            modifier = (if (selected) Modifier.focusRequester(initialFocus) else Modifier).then(targetModifier),
                         )
                     }
                 }
@@ -299,10 +373,15 @@ fun GroupsColumn(
  * onClick does something real.
  */
 @Composable
-private fun PlaylistHeaderRow(row: GroupsRow.Header, onToggle: () -> Unit) {
+private fun PlaylistHeaderRow(
+    row: GroupsRow.Header,
+    onToggle: () -> Unit,
+    onFocused: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     Surface(
         onClick = onToggle,
-        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+        modifier = modifier.fillMaxWidth().padding(top = 6.dp).onFocusChanged { if (it.isFocused) onFocused() },
         shape = RedSurfFocus.shape(8.dp),
         colors = RedSurfFocus.rowColors(resting = SurfaceRaised),
         scale = RedSurfFocus.scale(),

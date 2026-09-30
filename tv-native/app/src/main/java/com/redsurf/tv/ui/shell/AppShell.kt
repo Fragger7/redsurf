@@ -18,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -26,11 +27,15 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.redsurf.tv.MainViewModel
+import com.redsurf.tv.data.FAVORITES_GROUP
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.settings.AppPreferences
 import com.redsurf.tv.ui.livetv.GroupKey
+import com.redsurf.tv.ui.livetv.GroupsFocusRequest
+import com.redsurf.tv.ui.livetv.key
 import com.redsurf.tv.ui.livetv.LiveTvScreen
 import com.redsurf.tv.ui.theme.tvSafeArea
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -133,7 +138,32 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     LaunchedEffect(teleportMenuOpen) {
         Log.d(TAG, "teleportMenu -> ${if (teleportMenuOpen) "open" else "closed"}")
     }
+    // Sprint "Teleport finish", 2026-09-29 (TELEPORT_MENU.md) - the menu no longer takes Compose
+    // focus; this shell's root key handler drives it by index (see TeleportMenu's own doc for why
+    // the old focus trap made most rows inert). The chosen row's action is parked in
+    // [pendingTeleportAction] and only runs once the close animation has finished, so it always
+    // starts from a settled screen with focus exactly where the user left it.
+    var teleportIndex by remember { mutableStateOf(0) }
+    var teleportFromFullscreen by remember { mutableStateOf(false) }
+    var teleportOkArmed by remember { mutableStateOf(false) }
+    var pendingTeleportAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    // Where a Teleport jump lands in Live TV: an explicit Categories row, or leaving fullscreen
+    // without the usual return-to-grid claim (the action places focus itself).
+    var liveTvGroupsFocusRequest by remember { mutableStateOf<GroupsFocusRequest?>(null) }
+    var liveTvExitFullscreenRequest by remember { mutableStateOf(0L) }
+    // A Teleport jump that switches `destination` to Live TV places focus itself - the generic
+    // "entered Live TV, reclaim the grid" effect below must sit that one out, or it steals focus
+    // back from the Categories row the jump just landed on.
+    var suppressNextLiveTvEntryClaim by remember { mutableStateOf(false) }
+    // Real "did the pill actually get focus" signal for the Nav-Strip jump - requestFocus() not
+    // throwing isn't proof (a cancelled request doesn't throw).
+    var navHasFocus by remember { mutableStateOf(false) }
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
+    // "Now Playing" / "Return to fullscreen" mean the last channel actually *played* (user,
+    // 2026-09-22), not whatever the D-pad last rested on - the newest recent_channels row is
+    // written on every real tune (fullscreen promote, zap, tile), never on a mere preview/browse.
+    val lastPlayedList by viewModel.repository.recentChannels(1).collectAsState(initial = emptyList())
+    val lastPlayedChannel = lastPlayedList.firstOrNull()
     val scope = rememberCoroutineScope()
 
     // BACKLOG_SWEEP.md #10 - one instance for the whole shell, same lifetime as the ViewModel;
@@ -179,28 +209,73 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         }
     }
 
-    // Teleport Menu's three group-level jumps (TELEPORT_MENU.md decisions 3/4) - all reuse the
-    // already-verified cold-launch-resume machinery above (liveTvClaimInitialFocusTrigger) rather
-    // than inventing a second way to move real D-pad focus onto a category/channel row.
-    fun jumpToGroup(target: GroupKey) {
-        scope.launch {
-            val channel = viewModel.repository.firstChannelInGroup(target.playlistId, target.groupName)
-            destination = NavDestination.LiveTv
-            liveTvSelectedGroup = target
-            liveTvFocusedChannel = channel
-            if (channel != null) liveTvClaimInitialFocusTrigger = true
+    // Teleport Menu's jumps (TELEPORT_MENU.md; rebuilt 2026-09-29). Each one leaves fullscreen
+    // first when the menu was opened there, then places focus through an explicit, verified
+    // mechanism - never by hoping a single requestFocus() landed.
+    suspend fun leaveFullscreenForTeleport() {
+        if (!liveTvFullscreen) return
+        liveTvExitFullscreenRequest = System.nanoTime()
+        repeat(20) {
+            if (!liveTvFullscreen) return
+            delay(50)
         }
     }
 
-    fun returnToChannelGroup(channel: ChannelEntity) {
-        destination = NavDestination.LiveTv
-        liveTvSelectedGroup = GroupKey(channel.playlistId, channel.groupName)
-        liveTvFocusedChannel = channel
-        liveTvClaimInitialFocusTrigger = true
+    fun enterLiveTvForTeleport() {
+        if (destination != NavDestination.LiveTv) {
+            suppressNextLiveTvEntryClaim = true
+            destination = NavDestination.LiveTv
+        }
     }
 
-    fun returnToFullscreen() {
-        destination = NavDestination.LiveTv
+    fun teleportToNavStrip() {
+        scope.launch {
+            leaveFullscreenForTeleport()
+            repeat(20) { attempt ->
+                runCatching { navPillFocusRequesters[destination]?.requestFocus() }
+                delay(60)
+                if (navHasFocus) {
+                    Log.d(TAG, "teleport NavStrip landed on ${destination.label} attempt=$attempt")
+                    return@launch
+                }
+            }
+            Log.w(TAG, "teleport NavStrip gave up")
+        }
+    }
+
+    /** Playlist Root / Playlist Favorites / Root Category - land on a Categories row. [select]
+     * also makes that category the selected one (its channels load in the guide); null keeps
+     * the current selection (a playlist header isn't a category). */
+    fun teleportToCategoryRow(request: GroupsFocusRequest, select: GroupKey?) {
+        scope.launch {
+            leaveFullscreenForTeleport()
+            enterLiveTvForTeleport()
+            if (select != null && select != liveTvSelectedGroup) {
+                liveTvSelectedGroup = select
+                liveTvFocusedChannel = null
+            }
+            Log.d(TAG, "teleport -> categories $request")
+            liveTvGroupsFocusRequest = request
+        }
+    }
+
+    /** Now Playing - the last-played channel's own row in the guide, its category selected. */
+    fun teleportToChannel(channel: ChannelEntity) {
+        scope.launch {
+            leaveFullscreenForTeleport()
+            enterLiveTvForTeleport()
+            liveTvSelectedGroup = GroupKey(channel.playlistId, channel.groupName)
+            liveTvFocusedChannel = channel
+            Log.d(TAG, "teleport -> channel ${channel.name}")
+            liveTvClaimInitialFocusTrigger = true
+        }
+    }
+
+    fun teleportToFullscreen(channel: ChannelEntity) {
+        enterLiveTvForTeleport()
+        liveTvSelectedGroup = GroupKey(channel.playlistId, channel.groupName)
+        liveTvFocusedChannel = channel
+        Log.d(TAG, "teleport -> fullscreen ${channel.name}")
         liveTvAutoPlayTrigger = true
     }
 
@@ -215,35 +290,60 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // itself, so it only fires on a genuine change, not every recomposition while already there.
     LaunchedEffect(destination) {
         if (destination == NavDestination.LiveTv && activePlaylistId != null) {
-            liveTvClaimInitialFocusTrigger = true
+            if (suppressNextLiveTvEntryClaim) suppressNextLiveTvEntryClaim = false
+            else liveTvClaimInitialFocusTrigger = true
         }
     }
 
-    val playlistRootTarget = resolvePlaylistRootTarget(groups, liveTvFocusedChannel)
+    // The playlist "you're in": the channel under focus/playing, else the selected category's,
+    // else the last one played.
+    val teleportPlaylistId = liveTvFocusedChannel?.playlistId ?: liveTvSelectedGroup?.playlistId ?: lastPlayedChannel?.playlistId
+    val favoritesTarget = teleportPlaylistId
+        ?.let { GroupKey(it, FAVORITES_GROUP) }
+        ?.takeIf { key -> groups.any { it.key() == key } }
     val rootCategoryTarget = resolveRootCategoryTarget(groups, liveTvSelectedGroup)
-    val teleportCurrentChannel = liveTvFocusedChannel
     val teleportRows = buildList {
-        add(TeleportRow.Live("Nav-Strip") { runCatching { navPillFocusRequesters[destination]?.requestFocus() } })
+        add(TeleportRow.Live("Nav-Strip") { teleportToNavStrip() })
         add(
-            if (playlistRootTarget != null) TeleportRow.Live("Playlist Root") { jumpToGroup(playlistRootTarget) }
-            else TeleportRow.Grey("Playlist Root"),
-        )
-        add(TeleportRow.Grey("Playlist Favorites")) // no favorites view exists yet - permanent until it does
-        add(
-            if (rootCategoryTarget != null) TeleportRow.Live("Root Category") { jumpToGroup(rootCategoryTarget) }
-            else TeleportRow.Grey("Root Category"),
-        )
-        add(
-            if (teleportCurrentChannel != null) {
-                TeleportRow.Live("Root Channel Group") { returnToChannelGroup(teleportCurrentChannel) }
+            if (teleportPlaylistId != null) {
+                TeleportRow.Live("Playlist Root") {
+                    teleportToCategoryRow(GroupsFocusRequest.PlaylistHeader(teleportPlaylistId, System.nanoTime()), select = null)
+                }
             } else {
-                TeleportRow.Grey("Root Channel Group")
+                TeleportRow.Grey("Playlist Root")
             },
         )
         add(
-            if (teleportCurrentChannel != null) TeleportRow.Live("Return to fullscreen") { returnToFullscreen() }
-            else TeleportRow.Grey("Return to fullscreen"),
+            if (favoritesTarget != null) {
+                TeleportRow.Live("Playlist Favorites") {
+                    teleportToCategoryRow(GroupsFocusRequest.Group(favoritesTarget, System.nanoTime()), select = favoritesTarget)
+                }
+            } else {
+                TeleportRow.Grey("Playlist Favorites")
+            },
         )
+        add(
+            if (rootCategoryTarget != null) {
+                TeleportRow.Live("Root Category") {
+                    teleportToCategoryRow(GroupsFocusRequest.Group(rootCategoryTarget, System.nanoTime()), select = rootCategoryTarget)
+                }
+            } else {
+                TeleportRow.Grey("Root Category")
+            },
+        )
+        // "Root Channel Group" renamed (user, 2026-09-29) - "take me back to what I'm watching."
+        add(
+            if (lastPlayedChannel != null) TeleportRow.Live("Now Playing") { teleportToChannel(lastPlayedChannel) }
+            else TeleportRow.Grey("Now Playing"),
+        )
+        // Hidden when the menu was opened from fullscreen - you're already there.
+        if (!teleportFromFullscreen) {
+            add(
+                if (lastPlayedChannel != null) TeleportRow.Live("Return to fullscreen") { teleportToFullscreen(lastPlayedChannel) }
+                else TeleportRow.Grey("Return to fullscreen"),
+            )
+        }
+        add(TeleportRow.Grey("Multi-View")) // no Multi-View feature yet (user, 2026-09-29)
         add(TeleportRow.Live("Exit RedSurf") { (prefsContext as? Activity)?.finish() })
     }
 
@@ -282,42 +382,70 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         // discipline. This was asked for "navigating any menus" - the fullscreen player already
         // has its own working Back behaviour, left untouched here.
         .onPreviewKeyEvent { event ->
-            if (event.key != Key.Back || liveTvFullscreen) return@onPreviewKeyEvent false
             val isDown = event.type == KeyEventType.KeyDown
-            if (isDown && event.nativeKeyEvent.repeatCount == 0) backHeldLong = false
-            if (isDown && event.nativeKeyEvent.isLongPress && !backHeldLong) {
-                backHeldLong = true
-                if (teleportMenuEnabled) {
-                    // TELEPORT_MENU.md decision 2: with the setting on, long-press Back opens the
-                    // menu instead, in every context this gesture already reaches (fullscreen is
-                    // already excluded above, same as the plain fallback below) - including Live
-                    // TV, where the plain fallback's TiviMate-parity fullscreen-jump becomes one
-                    // of the menu's own rows ("Return to fullscreen") instead of the automatic
-                    // action, since the whole point is offering the choice instead of guessing one.
-                    teleportMenuOpen = true
-                } else if (destination == NavDestination.LiveTv && !liveTvFullscreen && liveTvFocusedChannel != null) {
-                    // TiviMate parity (user request, 2026-09-18): on Live TV, with a channel already
-                    // focused/previewed and not already fullscreen, jump straight into it - reusing
-                    // the exact same trigger cold-launch auto-play already uses, since "set
-                    // previewUrl, record it, go fullscreen" is exactly the same action regardless of
-                    // what asked for it. Everywhere else (including Live TV with nothing focused, or
-                    // already fullscreen), jump real D-pad focus to the pill for wherever the user
-                    // actually is - the generic "fast way back to the nav-strip" the deep-scroll
-                    // case (Settings, a long channel list, anywhere) needs.
-                    liveTvAutoPlayTrigger = true
-                } else {
-                    runCatching { navPillFocusRequesters[destination]?.requestFocus() }
+            if (event.key == Key.Back) {
+                if (isDown && event.nativeKeyEvent.repeatCount == 0) backHeldLong = false
+                if (isDown && event.nativeKeyEvent.isLongPress && !backHeldLong) {
+                    if (teleportMenuOpen) {
+                        backHeldLong = true
+                        return@onPreviewKeyEvent true
+                    }
+                    if (teleportMenuEnabled) {
+                        // TELEPORT_MENU.md decision 2: with the setting on, long-press Back opens
+                        // the menu instead, everywhere this gesture reaches - since 2026-09-29
+                        // including fullscreen (user decision), where "Return to fullscreen" is
+                        // simply left out of the list.
+                        backHeldLong = true
+                        teleportFromFullscreen = liveTvFullscreen
+                        teleportIndex = 0
+                        teleportOkArmed = false
+                        teleportMenuOpen = true
+                        return@onPreviewKeyEvent true
+                    }
+                    // Setting off: fullscreen keeps PlayerScreen's own Back behaviour, untouched.
+                    if (liveTvFullscreen) return@onPreviewKeyEvent false
+                    backHeldLong = true
+                    if (destination == NavDestination.LiveTv && liveTvFocusedChannel != null) {
+                        // TiviMate parity (user request, 2026-09-18): on Live TV, with a channel
+                        // already focused/previewed, jump straight into it - reusing the exact
+                        // trigger cold-launch auto-play already uses. Everywhere else, jump real
+                        // D-pad focus to the pill for wherever the user actually is.
+                        liveTvAutoPlayTrigger = true
+                    } else {
+                        runCatching { navPillFocusRequesters[destination]?.requestFocus() }
+                    }
+                    return@onPreviewKeyEvent true
                 }
-                return@onPreviewKeyEvent true
+                if (event.type == KeyEventType.KeyUp && backHeldLong) {
+                    // Swallow this same press's own release - same reasoning as the long-press
+                    // context-menu fix (PlayerScreen.kt): left alone, it would fall through as an
+                    // ordinary short Back press the instant the physical key comes up.
+                    backHeldLong = false
+                    return@onPreviewKeyEvent true
+                }
             }
-            if (event.type == KeyEventType.KeyUp && backHeldLong) {
-                // Swallow this same press's own release - same reasoning as the long-press
-                // context-menu fix (PlayerScreen.kt): left alone, it would fall through as an
-                // ordinary short Back press the instant the physical key comes up.
-                backHeldLong = false
-                return@onPreviewKeyEvent true
+            if (!teleportMenuOpen) return@onPreviewKeyEvent false
+            // Menu open: every key is the menu's (nothing reaches the screen underneath, whose
+            // focus stays exactly where it was).
+            when (event.key) {
+                Key.DirectionUp -> if (isDown) teleportIndex = nextLiveIndex(teleportRows, teleportIndex, -1)
+                Key.DirectionDown -> if (isDown) teleportIndex = nextLiveIndex(teleportRows, teleportIndex, 1)
+                Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                    if (isDown && event.nativeKeyEvent.repeatCount == 0) teleportOkArmed = true
+                    if (!isDown && teleportOkArmed) {
+                        teleportOkArmed = false
+                        val row = teleportRows.getOrNull(teleportIndex) as? TeleportRow.Live
+                        if (row != null) {
+                            Log.d(TAG, "teleport select -> ${row.label}")
+                            pendingTeleportAction = row.onSelect
+                            teleportMenuOpen = false
+                        }
+                    }
+                }
+                Key.Back -> if (!isDown) teleportMenuOpen = false
+                else -> {}
             }
-            false
+            true
         }
 
     // Box, not a bare Column, so the Teleport Menu overlay can render on top of everything below
@@ -326,7 +454,12 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     Box(modifier = rootModifier) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (!liveTvFullscreen) {
-                NavStrip(current = destination, onSelect = { destination = it }, focusRequesters = navPillFocusRequesters)
+                NavStrip(
+                    current = destination,
+                    onSelect = { destination = it },
+                    focusRequesters = navPillFocusRequesters,
+                    modifier = Modifier.onFocusChanged { navHasFocus = it.hasFocus },
+                )
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
@@ -352,6 +485,9 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     autoPlayTrigger = liveTvAutoPlayTrigger,
                     onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
                     claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,
+                    groupsFocusRequest = liveTvGroupsFocusRequest,
+                    onGroupsFocusRequestConsumed = { liveTvGroupsFocusRequest = null },
+                    exitFullscreenRequest = liveTvExitFullscreenRequest,
                     onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
                     onEscapeUp = { runCatching { navPillFocusRequesters[NavDestination.LiveTv]?.requestFocus() } },
                 )
@@ -425,7 +561,12 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         TeleportMenu(
             visible = teleportMenuOpen,
             rows = teleportRows,
-            onDismiss = { teleportMenuOpen = false },
+            selectedIndex = teleportIndex,
+            onClosed = {
+                val action = pendingTeleportAction
+                pendingTeleportAction = null
+                action?.invoke()
+            },
         )
     }
 }

@@ -202,7 +202,7 @@ class MainViewModel : ViewModel() {
     fun setDatabase(db: RedSurfDatabase, context: Context) {
         localDb = db
         appContext = context.applicationContext
-        repository = ChannelRepository(db.channelDao(), db.playlistDao(), db.recentChannelDao(), db.epgDao())
+        repository = ChannelRepository(db.channelDao(), db.playlistDao(), db.recentChannelDao(), db.epgDao(), db.favoriteChannelDao())
         checkLocalCache(context)
     }
 
@@ -342,6 +342,7 @@ class MainViewModel : ViewModel() {
     fun resetAndAddNewPlaylist() {
         viewModelScope.launch(Dispatchers.IO) {
             localDb?.channelDao()?.deleteAllChannels()
+            localDb?.favoriteChannelDao()?.deleteAll()
             localDb?.playlistDao()?.deleteAllPlaylists()
             currentPlaylistId = null
             withContext(Dispatchers.Main) { checkLocalCache() }
@@ -358,6 +359,7 @@ class MainViewModel : ViewModel() {
     fun deletePlaylist(playlistId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             localDb?.channelDao()?.deleteChannelsByPlaylist(playlistId)
+            localDb?.favoriteChannelDao()?.deleteByPlaylist(playlistId)
             localDb?.playlistDao()?.deletePlaylist(playlistId)
             // An orphaned periodic sync would keep firing forever for a playlist that no longer
             // exists (PHASE_3.md decision 2).

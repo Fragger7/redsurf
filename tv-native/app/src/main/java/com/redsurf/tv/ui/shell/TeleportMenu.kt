@@ -1,6 +1,18 @@
 package com.redsurf.tv.ui.shell
 
 import android.provider.Settings as AndroidSettings
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.PathMeasure
+import com.redsurf.tv.data.isFavoritesGroup
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -26,10 +38,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -47,72 +55,78 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.itemsIndexed
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.redsurf.tv.R
-import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.GroupCount
 import com.redsurf.tv.ui.livetv.GroupKey
 import com.redsurf.tv.ui.livetv.key
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.Background
-import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
 import com.redsurf.tv.ui.theme.Surface as SurfaceColor
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
-import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
 
-private val PanelWidth = 520.dp
-private val PanelHeight = 440.dp
-private const val OPEN_DURATION_MS = 260
-private const val CLOSE_DURATION_MS = 180
+private val PanelWidth = 560.dp
+private val PanelHeight = 500.dp
+// Slowed "a fraction" per the user's 2026-09-19 feedback (was 260/180) - close stays faster than
+// open, the asymmetry that keeps repeated use snappy.
+private const val OPEN_DURATION_MS = 340
+private const val CLOSE_DURATION_MS = 230
 private const val FAST_REPEAT_WINDOW_MS = 400L
 private const val CRESCENT_BITE_START_DEG = 25f
 private const val CRESCENT_BITE_SWEEP_DEG = 140f
+// The rim runner (2026-09-19 feedback, "like a selected rail"): one lap of the panel outline.
+private const val RIM_LAP_MS = 3600
+private const val RIM_SEGMENT_FRACTION = 0.16f
 
 /**
  * A RedSurf-original quick-navigation overlay (`docs/plans/TELEPORT_MENU.md`), opened by
  * long-press Back once the "Teleport Menu" Settings toggle is on (`AppShell.kt` decides when).
- * Two grades of row, same convention `SettingsScreen.kt`'s grey rows already established: real,
- * focusable [Live][TeleportRow.Live] rows for destinations that resolve to something right now,
- * and [Grey][TeleportRow.Grey] for ones that don't (either permanently, like Favorites - no
- * favorites view exists yet - or only for the current channel/category, like Root Category on a
- * category with no naming-convention "family").
+ * Two grades of row, same convention `SettingsScreen.kt`'s grey rows already established: real
+ * [Live][TeleportRow.Live] rows for destinations that resolve to something right now, and
+ * [Grey][TeleportRow.Grey] for ones that don't (permanently, like Multi-View, or only for the
+ * current context, like Root Category on a category with no naming-convention "family").
  */
 sealed class TeleportRow {
-    data class Live(val label: String, val onSelect: () -> Unit) : TeleportRow()
-    data class Grey(val label: String) : TeleportRow()
+    abstract val label: String
+    data class Live(override val label: String, val onSelect: () -> Unit) : TeleportRow()
+    data class Grey(override val label: String) : TeleportRow()
 }
+
+/** The next [TeleportRow.Live] index from [from] in [step] direction, or [from] if there's none
+ * that way - grey rows are skipped, and the list doesn't wrap (a dead end stays put). */
+internal fun nextLiveIndex(rows: List<TeleportRow>, from: Int, step: Int): Int {
+    var i = from + step
+    while (i in rows.indices) {
+        if (rows[i] is TeleportRow.Live) return i
+        i += step
+    }
+    return from
+}
+
+internal fun firstLiveIndex(rows: List<TeleportRow>): Int = rows.indexOfFirst { it is TeleportRow.Live }.coerceAtLeast(0)
 
 private val ROOT_CATEGORY_SEPARATORS = charArrayOf('-', '|', '•', ':')
 
 /** Decision 4 - the earliest of `-`, `|`, `•`, `:` in a raw category name, trimmed; null when
  * none exists (that category has no "family" to jump within). */
 internal fun categoryPrefix(groupName: String): String? {
+    if (isFavoritesGroup(groupName)) return null
     val index = groupName.indices.firstOrNull { groupName[it] in ROOT_CATEGORY_SEPARATORS } ?: return null
     return groupName.substring(0, index).trim().takeIf { it.isNotEmpty() }
 }
 
 /** Decision 4 - the first category (existing list order) sharing [selectedGroup]'s own prefix,
- * scoped to the same playlist. Null when nothing's focused, or the current category's name has
- * no separator to derive a family from. */
+ * scoped to the same playlist. Null when nothing's selected, or the current category's name has
+ * no separator to derive a family from (Favorites never has one). */
 internal fun resolveRootCategoryTarget(groups: List<GroupCount>, selectedGroup: GroupKey?): GroupKey? {
     val current = selectedGroup ?: return null
     val currentInfo = groups.firstOrNull { it.key() == current } ?: return null
     val prefix = categoryPrefix(currentInfo.groupName) ?: return null
     return groups.firstOrNull { it.playlistId == current.playlistId && categoryPrefix(it.groupName) == prefix }?.key()
-}
-
-/** Decision 3 item 2 - the first category (existing list order) belonging to [currentChannel]'s
- * own playlist. Null when nothing's focused/playing. */
-internal fun resolvePlaylistRootTarget(groups: List<GroupCount>, currentChannel: ChannelEntity?): GroupKey? {
-    val playlistId = currentChannel?.playlistId ?: return null
-    return groups.firstOrNull { it.playlistId == playlistId }?.key()
 }
 
 private fun easeOutCubic(t: Float): Float {
@@ -123,23 +137,23 @@ private fun easeOutCubic(t: Float): Float {
 /**
  * The portal itself - "The Curl" (decision 5, Opus consultation 2026-09-19): the reveal mask is
  * the mark's own crescent, closing over itself into a disc, then stretching into the panel, its
- * leading edge riding `WaveSpinner`'s own arc (same brush, same gradient - the app's only other
- * animation, made to visibly belong to the same family). Six draw ops once open (scrim, one
- * reused-`Path` clip+fill, one arc stroke, one rim stroke) - no `saveLayer`, no offscreen buffer.
- * Fully static at rest (unlike `WaveSpinner`, which legitimately loops forever) - nothing here
- * re-triggers once `p` settles at 1f, so an open menu costs nothing extra per frame.
+ * leading edge riding `WaveSpinner`'s own arc. Once open, a single short highlight laps the rim
+ * (the 2026-09-19 "selected rail" request) - one reused-`Path` segment per frame, nothing else
+ * animates.
  *
- * [visible] drives open/close; this composable renders nothing at all (not even a transparent
- * `Box`) once fully closed, so it never captures stray focus or clicks between uses. Real content
- * (the header + rows) is genuinely focusable Compose content, never masked/clipped by the reveal
- * shape - clipping live text mid-animation is the specific thing the consultation flagged as
- * reading cheap; it only fades in, decoupled from the mask.
+ * **Never takes Compose focus** (sprint "Teleport finish", 2026-09-29). The first build trapped
+ * focus inside the panel with `focusProperties { exit = Cancel }`, which also cancelled every
+ * jump's own `requestFocus()` - the reason most rows looked inert on the real remote. Now this is
+ * drawn only: `AppShell`'s root key handler moves [selectedIndex] and runs the chosen row, and
+ * whatever held focus underneath never moves. [onClosed] fires once the close animation has
+ * fully finished, which is when AppShell runs the chosen action.
  */
 @Composable
 fun TeleportMenu(
     visible: Boolean,
     rows: List<TeleportRow>,
-    onDismiss: () -> Unit,
+    selectedIndex: Int,
+    onClosed: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -152,7 +166,6 @@ fun TeleportMenu(
     }
     val p = remember { Animatable(0f) }
     var lastCloseTimeMs by remember { mutableStateOf(0L) }
-    val firstFocus = remember { FocusRequester() }
 
     LaunchedEffect(visible) {
         if (visible) {
@@ -162,14 +175,11 @@ fun TeleportMenu(
             p.snapTo(start)
             val duration = if (animatorDurationScale == 0f) 0 else OPEN_DURATION_MS
             p.animateTo(1f, tween(duration, easing = FastOutSlowInEasing))
-            delay(30)
-            runCatching { firstFocus.requestFocus() }
         } else if (p.value > 0f) {
-            // Close is deliberately faster than open (180ms vs 260ms) - asymmetry is what makes
-            // repeated use feel snappy rather than taxing.
             val duration = if (animatorDurationScale == 0f) 0 else CLOSE_DURATION_MS
             p.animateTo(0f, tween(duration, easing = FastOutLinearInEasing))
             lastCloseTimeMs = System.currentTimeMillis()
+            onClosed()
         }
     }
 
@@ -180,6 +190,24 @@ fun TeleportMenu(
     // disc. Phase 2 (60-100%, a slight overlap so there's no seam): disc -> pill -> panel.
     val pCurl = (value / 0.65f).coerceIn(0f, 1f)
     val pSettle = ((value - 0.60f) / 0.40f).coerceIn(0f, 1f)
+    val settled = value >= 1f && visible
+
+    // Reused per frame, never allocated per frame (449MB-free device - GC pressure is real).
+    val curlPath = remember { Path() }
+    val rimPath = remember { Path() }
+    val rimSegment = remember { Path() }
+    val rimMeasure = remember { PathMeasure() }
+    val rimPhase = if (settled) {
+        val transition = rememberInfiniteTransition(label = "teleportRim")
+        transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(RIM_LAP_MS, easing = LinearEasing), RepeatMode.Restart),
+            label = "teleportRimPhase",
+        ).value
+    } else {
+        -1f
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -201,12 +229,11 @@ fun TeleportMenu(
                 val biteOffset = r * 0.55f * (1f - pCurl)
                 val c2 = c + Offset(cos(thetaRad).toFloat(), sin(thetaRad).toFloat()) * biteOffset
 
-                val path = Path().apply {
-                    fillType = PathFillType.EvenOdd
-                    addOval(Rect(center = c, radius = r))
-                    addOval(Rect(center = c2, radius = r))
-                }
-                clipPath(path) {
+                curlPath.reset()
+                curlPath.fillType = PathFillType.EvenOdd
+                curlPath.addOval(Rect(center = c, radius = r))
+                curlPath.addOval(Rect(center = c2, radius = r))
+                clipPath(curlPath) {
                     drawRect(SurfaceColor.copy(alpha = shapeAlpha), topLeft = c - Offset(r, r), size = Size(r * 2, r * 2))
                 }
 
@@ -244,7 +271,7 @@ fun TeleportMenu(
                 val topLeft = c - Offset(halfW, halfH)
                 val size = Size(halfW * 2, halfH * 2)
                 drawRoundRect(color = SurfaceColor, topLeft = topLeft, size = size, cornerRadius = CornerRadius(corner, corner))
-                // The rim - persists once open, static, the portal's residue.
+                // The rim - persists once open, the portal's residue.
                 drawRoundRect(
                     color = Accent.copy(alpha = 0.35f * value),
                     topLeft = topLeft,
@@ -252,11 +279,29 @@ fun TeleportMenu(
                     cornerRadius = CornerRadius(corner, corner),
                     style = Stroke(width = 1.5.dp.toPx()),
                 )
+                // The rim runner - a short bright segment lapping the outline while open.
+                if (rimPhase >= 0f) {
+                    rimPath.reset()
+                    rimPath.addRoundRect(RoundRect(Rect(topLeft, size), CornerRadius(corner, corner)))
+                    rimMeasure.setPath(rimPath, forceClosed = true)
+                    val length = rimMeasure.length
+                    val segment = length * RIM_SEGMENT_FRACTION
+                    val startD = rimPhase * length
+                    rimSegment.reset()
+                    val endD = startD + segment
+                    if (endD <= length) {
+                        rimMeasure.getSegment(startD, endD, rimSegment, startWithMoveTo = true)
+                    } else {
+                        rimMeasure.getSegment(startD, length, rimSegment, startWithMoveTo = true)
+                        rimMeasure.getSegment(0f, endD - length, rimSegment, startWithMoveTo = true)
+                    }
+                    drawPath(rimSegment, color = Accent, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
+                }
             }
         }
 
-        // Real, focusable content - fades in across phase 2, never clipped by the reveal mask
-        // above (the consultation's specific warning: text cut mid-shape reads as cheap).
+        // Content - fades in across phase 2, never clipped by the reveal mask above (the
+        // consultation's specific warning: text cut mid-shape reads as cheap).
         if (pSettle > 0f) {
             Column(
                 modifier = Modifier
@@ -264,31 +309,16 @@ fun TeleportMenu(
                     .width(PanelWidth)
                     .height(PanelHeight)
                     .graphicsLayer { alpha = pSettle; translationY = (1f - pSettle) * 8.dp.toPx() }
-                    .padding(24.dp)
-                    // Focus trap (same fix as PlayerScreen.kt's own fullscreen root, AGENTS.md
-                    // "state and focus discipline"): the screen this overlay sits on top of stays
-                    // composed and focusable underneath it, so UP/DOWN with nowhere left to go
-                    // inside this list must not escape into it.
-                    .focusProperties { exit = { FocusRequester.Cancel } },
+                    .padding(24.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 14.dp)) {
                     Image(painter = painterResource(R.drawable.ic_mark), contentDescription = null, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Text("Teleport to…", style = RedSurfType.sectionTitle, color = TextPrimary)
                 }
-                TvLazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    itemsIndexed(rows) { index, row ->
-                        when (row) {
-                            is TeleportRow.Live -> TeleportLiveRow(
-                                label = row.label,
-                                onSelect = {
-                                    row.onSelect()
-                                    onDismiss()
-                                },
-                                modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
-                            )
-                            is TeleportRow.Grey -> TeleportGreyRow(row.label)
-                        }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    rows.forEachIndexed { index, row ->
+                        TeleportRowView(row = row, selected = index == selectedIndex && row is TeleportRow.Live)
                     }
                 }
             }
@@ -296,55 +326,41 @@ fun TeleportMenu(
     }
 }
 
-/** A real row - `RedSurfFocus` styling like every other picker, plus the one deliberate deviation
- * from it (Opus consultation): a static crescent tick on the focused row's leading edge instead
- * of a plain bar, carrying the portal's own motif into the part of the UI the user stares at
- * while the menu is open. Scoped to this menu only, not a restyle of every picker in the app. */
+/** One row. The selected live row gets a soft accent fill, an accent outline and the crescent
+ * tick (the one deliberate deviation from `RedSurfFocus`, carrying the portal's motif - Opus
+ * consultation); grey rows are dimmed and the key handler never lands on them. */
 @Composable
-private fun TeleportLiveRow(label: String, onSelect: () -> Unit, modifier: Modifier = Modifier) {
-    var isFocused by remember { mutableStateOf(false) }
-    Surface(
-        onClick = onSelect,
-        modifier = modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused },
-        shape = RedSurfFocus.shape(8.dp),
-        colors = RedSurfFocus.rowColors(),
-        scale = RedSurfFocus.scale(),
-        border = RedSurfFocus.border(),
-        glow = RedSurfFocus.glow(),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = Modifier.size(14.dp)) {
-                if (isFocused) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawArc(
-                            color = Accent,
-                            startAngle = -60f,
-                            sweepAngle = 300f,
-                            useCenter = false,
-                            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
-                        )
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(label, style = RedSurfType.rowTitle, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-/** A grey, unfocusable row - the exact same visual shape as [TeleportLiveRow] minus the
- * `Surface`/focus/click, matching `SettingsScreen.kt`'s own `GreyRowContent` convention: the
- * D-pad skips it entirely, there is nothing to press. */
-@Composable
-private fun TeleportGreyRow(label: String) {
+private fun TeleportRowView(row: TeleportRow, selected: Boolean) {
+    val shape = RoundedCornerShape(8.dp)
     Row(
-        modifier = Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(shape)
+            .then(if (selected) Modifier.background(Accent.copy(alpha = 0.18f)).border(1.5.dp, Accent, shape) else Modifier)
+            .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Spacer(modifier = Modifier.width(24.dp))
-        Text(label, style = RedSurfType.rowTitle, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Box(modifier = Modifier.size(14.dp)) {
+            if (selected) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawArc(
+                        color = Accent,
+                        startAngle = -60f,
+                        sweepAngle = 300f,
+                        useCenter = false,
+                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            row.label,
+            style = RedSurfType.rowTitle,
+            color = if (row is TeleportRow.Live) TextPrimary else TextSecondary.copy(alpha = 0.55f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }

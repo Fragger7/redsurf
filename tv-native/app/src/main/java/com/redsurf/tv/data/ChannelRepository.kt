@@ -7,12 +7,30 @@ import com.redsurf.tv.db.ChannelDao
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.EpgDao
 import com.redsurf.tv.db.EpgProgramEntity
+import com.redsurf.tv.db.FavoriteChannelDao
+import com.redsurf.tv.db.FavoriteChannelEntity
 import com.redsurf.tv.db.GroupCount
 import com.redsurf.tv.db.PlaylistDao
 import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.db.RecentChannelDao
 import com.redsurf.tv.db.RecentChannelEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+
+/**
+ * The Favorites category's `groupName` (TELEPORT_MENU.md, 2026-09-29). A private-use-area
+ * character up front so it can never collide with a real provider category name, and has no
+ * `-`/`|`/`•`/`:` separator so Root Category never treats it as part of a family. Every
+ * group-scoped repository method below routes this to the favorites table instead of
+ * `channels.groupName`; display goes through `formatGroupName`.
+ */
+const val FAVORITES_GROUP = "\uE000favorites"
+
+fun isFavoritesGroup(groupName: String?): Boolean = groupName == FAVORITES_GROUP
+
+/** Stable key for "is this channel a favorite" lookups - see [ChannelRepository.favoriteKeys]. */
+fun favoriteKey(playlistId: String, streamId: String): String = playlistId + '\u001f' + streamId
 
 /**
  * Thin wrapper over the DAOs (PHASE_1.md #1.2). Every method here is O(1) in playlist size -
@@ -24,6 +42,7 @@ class ChannelRepository(
     private val playlistDao: PlaylistDao,
     private val recentChannelDao: RecentChannelDao,
     private val epgDao: EpgDao,
+    private val favoriteDao: FavoriteChannelDao,
 ) {
     fun playlists(): Flow<List<PlaylistEntity>> = playlistDao.getAllPlaylists()
 
@@ -34,7 +53,28 @@ class ChannelRepository(
 
     /** Across every loaded playlist (user request, 2026-09-12 - multiple playlists can coexist
      * and all show up under Live TV, grouped by playlist name; see [GroupCount]). */
-    fun liveGroups(): Flow<List<GroupCount>> = channelDao.getLiveGroupCounts()
+    fun liveGroups(): Flow<List<GroupCount>> =
+        combine(channelDao.getLiveGroupCounts(), favoriteDao.countsByPlaylist()) { groups, favoriteCounts ->
+            if (favoriteCounts.isEmpty()) return@combine groups
+            val favoritesByPlaylist = favoriteCounts.associateBy { it.playlistId }
+            val seen = HashSet<String>()
+            buildList(groups.size + favoriteCounts.size) {
+                for (group in groups) {
+                    // Favorites is the first category under each playlist (the user's own
+                    // TiviMate observation) - inserted just before that playlist's first group.
+                    if (seen.add(group.playlistId)) {
+                        favoritesByPlaylist[group.playlistId]?.let { add(it.copy(groupName = FAVORITES_GROUP)) }
+                    }
+                    add(group)
+                }
+            }
+        }
+
+    /** Every favorite as a [favoriteKey] - one small reactive set for "is this a favorite?"
+     * checks (hero star, context-menu label, zap context) without a query per channel. */
+    fun favoriteKeys(): Flow<Set<String>> = favoriteDao.keys().map { it.toSet() }
+
+    suspend fun isFavorite(playlistId: String, streamId: String): Boolean = favoriteDao.count(playlistId, streamId) > 0
 
     /**
      * Paged live channels for one group. Caller applies `.cachedIn(scope)` when collecting -
@@ -47,11 +87,15 @@ class ChannelRepository(
         Pager(
             config = PagingConfig(pageSize = 60, prefetchDistance = 120, enablePlaceholders = false),
             initialKey = initialOffset.takeIf { it > 0 },
-            pagingSourceFactory = { channelDao.getLiveChannelsInGroup(playlistId, groupName) },
+            pagingSourceFactory = {
+                if (isFavoritesGroup(groupName)) favoriteDao.paged(playlistId)
+                else channelDao.getLiveChannelsInGroup(playlistId, groupName)
+            },
         ).flow
 
     suspend fun channelOffsetInGroup(playlistId: String, groupName: String, num: Int, name: String): Int =
-        channelDao.offsetInGroup(playlistId, groupName, num, name)
+        if (isFavoritesGroup(groupName)) favoriteDao.offset(playlistId, num, name)
+        else channelDao.offsetInGroup(playlistId, groupName, num, name)
 
     /**
      * Zap neighbours (PHASE_2.md #2.2, decision 13), wrapping at the ends - the DAO's
@@ -59,16 +103,19 @@ class ChannelRepository(
      * to the first/last channel rather than leaving zap dead-ended at whichever end you reach.
      */
     suspend fun nextChannel(playlistId: String, groupName: String, num: Int): ChannelEntity? =
-        channelDao.nextInGroup(playlistId, groupName, num) ?: channelDao.firstInGroup(playlistId, groupName)
+        if (isFavoritesGroup(groupName)) favoriteDao.next(playlistId, num) ?: favoriteDao.first(playlistId)
+        else channelDao.nextInGroup(playlistId, groupName, num) ?: channelDao.firstInGroup(playlistId, groupName)
 
     suspend fun prevChannel(playlistId: String, groupName: String, num: Int): ChannelEntity? =
-        channelDao.prevInGroup(playlistId, groupName, num) ?: channelDao.lastInGroup(playlistId, groupName)
+        if (isFavoritesGroup(groupName)) favoriteDao.prev(playlistId, num) ?: favoriteDao.last(playlistId)
+        else channelDao.prevInGroup(playlistId, groupName, num) ?: channelDao.lastInGroup(playlistId, groupName)
 
     /** Teleport Menu (docs/plans/TELEPORT_MENU.md decision 3) - the group's own first channel by
      * num/name order, for jumps that land on a category rather than an already-known channel
      * (Playlist Root, Root Category). */
     suspend fun firstChannelInGroup(playlistId: String, groupName: String): ChannelEntity? =
-        channelDao.firstInGroup(playlistId, groupName)
+        if (isFavoritesGroup(groupName)) favoriteDao.first(playlistId)
+        else channelDao.firstInGroup(playlistId, groupName)
 
     /** Zap-order diagnostics (AGENTS.md, 2026-09-14 mini-sprint) - see `ChannelDao.firstNInGroup`. */
     suspend fun debugFirstInGroup(playlistId: String, groupName: String, limit: Int = 30): List<ChannelEntity> =
@@ -98,8 +145,14 @@ class ChannelRepository(
     /** PHASE_2.md decision 12's context menu - both DAO methods already existed (dead, unused
      * until now). Hiding takes effect immediately end-to-end: every live query already filters
      * `isHidden = 0`. */
-    suspend fun setFavorite(playlistId: String, streamId: String, isFavorite: Boolean) =
+    suspend fun setFavorite(playlistId: String, streamId: String, isFavorite: Boolean) {
+        // The favorites table is the source of truth (survives re-import - see
+        // FavoriteChannelEntity); the old column is kept in step only so nothing reading it
+        // disagrees within a session.
+        if (isFavorite) favoriteDao.insert(FavoriteChannelEntity(streamId, playlistId, System.currentTimeMillis()))
+        else favoriteDao.delete(playlistId, streamId)
         channelDao.updateFavorite(playlistId, streamId, isFavorite)
+    }
 
     suspend fun setHidden(playlistId: String, streamId: String, isHidden: Boolean) =
         channelDao.updateHidden(playlistId, streamId, isHidden)
@@ -108,7 +161,8 @@ class ChannelRepository(
      * `ChannelDao.allInGroup`'s own doc comment for why this is bounded per-category, not a
      * return to loading a whole playlist into memory). */
     suspend fun channelsInGroup(playlistId: String, groupName: String): List<ChannelEntity> =
-        channelDao.allInGroup(playlistId, groupName)
+        if (isFavoritesGroup(groupName)) favoriteDao.allInPlaylist(playlistId)
+        else channelDao.allInGroup(playlistId, groupName)
 
     /** PHASE_3.md decision 4 - one batch EPG fetch for every channel row currently on screen,
      * bounded to the grid's own rolling time window. */

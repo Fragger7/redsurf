@@ -140,6 +140,10 @@ fun PlayerScreen(
     // very first frame before a channel is known). Computed by the caller (LiveTvScreen already
     // has the group/playlist context) rather than re-derived here.
     breadcrumb: String = "",
+    // Favorites (TELEPORT_MENU.md, 2026-09-29): when the channel was reached from its playlist's
+    // Favorites category, UP/DOWN zap inside Favorites instead of the channel's own category.
+    // Null = the channel's own category, as before.
+    zapGroupName: String? = null,
     // Most-recently-watched first, capped at 8 by the caller (decision 8) - an in-memory stub
     // until #2.5's real `recent_channels` table lands; the tile row and History picker both read
     // this same list. Excludes the channel currently playing - the caller's job, not this one's.
@@ -232,11 +236,12 @@ fun PlayerScreen(
     fun zap(goingUp: Boolean) {
         overlay = PlayerOverlay.ZapBanner
         val channel = currentChannel ?: return
+        val zapGroup = zapGroupName ?: channel.groupName
         scope.launch {
             val next = if (goingUp) {
-                repository.nextChannel(channel.playlistId, channel.groupName, channel.num)
+                repository.nextChannel(channel.playlistId, zapGroup, channel.num)
             } else {
-                repository.prevChannel(channel.playlistId, channel.groupName, channel.num)
+                repository.prevChannel(channel.playlistId, zapGroup, channel.num)
             }
             // Zap-order diagnostics (AGENTS.md, 2026-09-14 mini-sprint) - debug builds only in
             // spirit (this whole app is unreleased-signed-release-only anyway, but this line
@@ -758,7 +763,12 @@ private fun ContextMenuPanel(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    var isFavorite by remember(channel.streamId) { mutableStateOf(channel.isFavorite) }
+    // The favorites table, not the old `channels.isFavorite` column (TELEPORT_MENU.md,
+    // 2026-09-29 - the column is wiped by any playlist re-import).
+    var isFavorite by remember(channel.streamId) { mutableStateOf(false) }
+    LaunchedEffect(channel.playlistId, channel.streamId) {
+        isFavorite = repository.isFavorite(channel.playlistId, channel.streamId)
+    }
     // Claims focus onto the "Add/Remove favourites" row the moment the long-press context menu opens.
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {

@@ -114,3 +114,18 @@ data class RecentChannelEntity(
     val playlistId: String,
     val watchedAt: Long,
 )
+
+/**
+ * Favorites (docs/plans/TELEPORT_MENU.md, sprint "Teleport finish", 2026-09-29) - one table for
+ * every playlist, shown per playlist as a "Favorites" category first under each playlist root
+ * (the user's own TiviMate observation). Keyed (playlistId, streamId) like [RecentChannelEntity],
+ * and deliberately *not* the old `channels.isFavorite` column: channel import is
+ * `OnConflictStrategy.REPLACE`, so any playlist refresh would silently wipe a column-held
+ * favorite. `addedAt` is kept for a future user-ordered Favorites (TiviMate's "Manage favorites").
+ */
+@Entity(tableName = "favorite_channels", primaryKeys = ["playlistId", "streamId"])
+data class FavoriteChannelEntity(
+    val streamId: String,
+    val playlistId: String,
+    val addedAt: Long,
+)

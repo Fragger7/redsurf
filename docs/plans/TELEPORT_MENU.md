@@ -294,6 +294,44 @@ unconfirmed pending real re-testing next session** - not retracted (the sweep ge
 and genuinely logged what it logged), but not to be relied on either until it matches what the
 user sees with the actual remote.
 
+## Sprint "Teleport finish" - decisions (user, 2026-09-29) and diagnosis
+
+**Decisions (asked and answered, don't re-ask):**
+1. **Favorites - build now, TiviMate parity.** Hold OK on a channel in the guide → context menu →
+   "Add to Favorites" / "Remove from Favorites" (TiviMate's own add path). Stored in one table
+   (`favorite_channels`, keyed (playlistId, streamId) so it survives re-import - same pattern as
+   `recent_channels`); displayed per playlist: a "Favorites" category first under each playlist in
+   Categories (what the user saw on their TiviMate), only when that playlist has any. Zapping while
+   watching from Favorites stays inside Favorites. Sub-groups/reorder (TiviMate "Manage
+   favorites") deferred. The hero band's star lights up for a favorite.
+2. **Category jumps land on the category row** in Categories (its channels load in the guide) -
+   Playlist Root (the playlist's accordion header, or its first category with one playlist),
+   Root Category (first category sharing the prefix), Playlist Favorites (that playlist's
+   Favorites row).
+3. **"Root Channel Group" becomes "Now Playing"** - the last channel actually played (not merely
+   focused): its category selected, focus on its own row in the guide.
+4. **Teleport opens from fullscreen too** (long-press Back while watching, Teleport setting on).
+   "Return to fullscreen" is hidden there. New grey row **"Multi-View"** (no feature yet).
+   Return to fullscreen plays the last *played* channel (user, 2026-09-22), not the focused one.
+5. Nav-Strip keeps "current destination's pill" (configurable pill stays backlog). Exit = finish().
+6. Refinements from 2026-09-19: open/close slightly slower; a cheap travelling highlight on the
+   panel rim while open. T.5 tips still deferred (needs the user's threshold).
+
+**Diagnosis (from reading the code, 2026-09-29 - to be confirmed on device):**
+- The menu's focus trap (`focusProperties { exit = Cancel }`) also cancels the *explicit*
+  `requestFocus()` each jump makes (the same inconsistency AGENTS.md logged 2026-09-13), and the
+  retry loops treat a cancelled request as success (`runCatching{}.isSuccess` - `requestFocus()`
+  doesn't throw when cancelled), so no retry happens. Then the menu's rows are removed with
+  focus still in them and focus falls wherever. Explains "inert except Exit" (Exit needs no focus).
+- `jumpToGroup` targets the guide's first channel, not the category row the user expects.
+- Return to fullscreen used the *focused* channel, not the last played.
+
+**Fix shape:** the menu no longer takes Compose focus at all - `AppShell`'s root key handler
+drives it by index while open (UP/DOWN/OK/Back), so whatever had focus underneath never moves:
+Back-to-close is a true no-op, and each action runs from a stable focus state after close.
+Category-row targets go through a new explicit GroupsColumn focus request (scroll to the row,
+then focus it, verifying the row really holds focus before stopping the retry).
+
 ## Acceptance - machine-verifiable
 
 1. Teleport Menu off (default): long-press Back behaves exactly as today's build, everywhere.

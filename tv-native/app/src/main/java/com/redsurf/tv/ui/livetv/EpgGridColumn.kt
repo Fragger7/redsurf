@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
+import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
@@ -132,6 +133,14 @@ fun EpgGridColumn(
     now: Long,
     windowStart: Long,
     onTuneChannel: (ChannelEntity) -> Unit,
+    // Hold OK on any cell of a channel's row (TiviMate's own add-to-favorites path,
+    // TELEPORT_MENU.md 2026-09-29) - the Surface's built-in long-click, so the short OK's own
+    // click never fires alongside it.
+    onLongPressChannel: (ChannelEntity) -> Unit = {},
+    // Bumped by LiveTvScreen's claimGridFocus: bring the focus-target row into view if it isn't
+    // already (a lazy row that isn't composed can't take focus - the reason a deep target, e.g.
+    // Teleport's Now Playing on channel 80 of a category, never landed).
+    scrollToTargetNonce: Int = 0,
     firstCellFocusRequester: FocusRequester,
     // Sprint 2, 2026-09-23 (SEQUENCING.md Finding 5/6, FOCUS_MODEL.md rule 2) - when non-null and
     // present in [channels], the entry focus target is *that* channel's row (its first/current
@@ -240,7 +249,13 @@ fun EpgGridColumn(
                 val targetIndex = remember(channels, targetChannelStreamId) {
                     targetChannelStreamId?.let { id -> channels.indexOfFirst { it.streamId == id } } ?: -1
                 }
-                TvLazyColumn(modifier = Modifier.fillMaxSize()) {
+                val rowsState = rememberTvLazyListState()
+                LaunchedEffect(scrollToTargetNonce) {
+                    if (scrollToTargetNonce == 0 || targetIndex < 0) return@LaunchedEffect
+                    val visible = rowsState.layoutInfo.visibleItemsInfo.any { it.index == targetIndex }
+                    if (!visible) runCatching { rowsState.scrollToItem(targetIndex) }
+                }
+                TvLazyColumn(state = rowsState, modifier = Modifier.fillMaxSize()) {
                     items(count = channels.size, key = { channels[it].streamId }) { index ->
                         val channel = channels[index]
                         val isFocusTarget = if (targetIndex >= 0) index == targetIndex else index == 0
@@ -265,6 +280,7 @@ fun EpgGridColumn(
                                 }
                             },
                             onTune = onTuneChannel,
+                            onLongPress = onLongPressChannel,
                             onShowInfo = { infoCardProgramme = it },
                             firstCellFocusRequester = if (isFocusTarget) firstCellFocusRequester else null,
                         )
@@ -362,6 +378,7 @@ private fun EpgChannelRow(
     wash: Animatable<Float, *>,
     onCursor: (CursorKey, EpgSlot) -> Unit,
     onTune: (ChannelEntity) -> Unit,
+    onLongPress: (ChannelEntity) -> Unit,
     onShowInfo: (EpgProgramEntity) -> Unit,
     firstCellFocusRequester: FocusRequester?,
 ) {
@@ -417,6 +434,7 @@ private fun EpgChannelRow(
                         wash = wash,
                         onCursor = onCursor,
                         onTune = onTune,
+                        onLongPress = onLongPress,
                         onShowInfo = onShowInfo,
                         focusRequester = if (index == 0) firstCellFocusRequester else null,
                     )
@@ -482,6 +500,7 @@ private fun SlotCell(
     wash: Animatable<Float, *>,
     onCursor: (CursorKey, EpgSlot) -> Unit,
     onTune: (ChannelEntity) -> Unit,
+    onLongPress: (ChannelEntity) -> Unit,
     onShowInfo: (EpgProgramEntity) -> Unit,
     focusRequester: FocusRequester?,
 ) {
@@ -509,6 +528,7 @@ private fun SlotCell(
                 is GapSlot -> onTune(channel)
             }
         },
+        onLongClick = { onLongPress(channel) },
         modifier = Modifier
             .width(width)
             .fillMaxHeight()

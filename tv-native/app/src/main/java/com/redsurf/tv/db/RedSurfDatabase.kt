@@ -199,6 +199,88 @@ interface RecentChannelDao {
     suspend fun deleteAll()
 }
 
+/**
+ * Favorites - see [FavoriteChannelEntity]. Every channel-returning read joins back to `channels`
+ * (same shape as [RecentChannelDao]) and applies the same live/not-hidden filter as every other
+ * Live TV query, ordered `num, name` like a real category so zapping inside Favorites behaves
+ * exactly like zapping inside any other category.
+ */
+@Dao
+interface FavoriteChannelDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(entity: FavoriteChannelEntity)
+
+    @Query("DELETE FROM favorite_channels WHERE playlistId = :playlistId AND streamId = :streamId")
+    suspend fun delete(playlistId: String, streamId: String)
+
+    @Query("SELECT playlistId || char(31) || streamId FROM favorite_channels")
+    fun keys(): Flow<List<String>>
+
+    @Query("SELECT COUNT(*) FROM favorite_channels WHERE playlistId = :playlistId AND streamId = :streamId")
+    suspend fun count(playlistId: String, streamId: String): Int
+
+    /** One count per playlist that has any favorites - becomes that playlist's Favorites row. */
+    @Query(
+        "SELECT f.playlistId AS playlistId, p.name AS playlistName, '' AS groupName, COUNT(*) AS count " +
+            "FROM favorite_channels f JOIN channels c ON c.playlistId = f.playlistId AND c.streamId = f.streamId " +
+            "JOIN playlists p ON p.id = f.playlistId " +
+            "WHERE c.streamType = 'live' AND c.isHidden = 0 GROUP BY f.playlistId"
+    )
+    fun countsByPlaylist(): Flow<List<GroupCount>>
+
+    @Query(
+        "SELECT c.* FROM favorite_channels f JOIN channels c ON c.playlistId = f.playlistId AND c.streamId = f.streamId " +
+            "WHERE f.playlistId = :playlistId AND c.streamType = 'live' AND c.isHidden = 0 ORDER BY c.num, c.name"
+    )
+    suspend fun allInPlaylist(playlistId: String): List<ChannelEntity>
+
+    @Query(
+        "SELECT c.* FROM favorite_channels f JOIN channels c ON c.playlistId = f.playlistId AND c.streamId = f.streamId " +
+            "WHERE f.playlistId = :playlistId AND c.streamType = 'live' AND c.isHidden = 0 ORDER BY c.num, c.name"
+    )
+    fun paged(playlistId: String): PagingSource<Int, ChannelEntity>
+
+    @Query(
+        "SELECT COUNT(*) FROM favorite_channels f JOIN channels c ON c.playlistId = f.playlistId AND c.streamId = f.streamId " +
+            "WHERE f.playlistId = :playlistId AND c.streamType = 'live' AND c.isHidden = 0 " +
+            "AND (c.num < :num OR (c.num = :num AND c.name < :name))"
+    )
+    suspend fun offset(playlistId: String, num: Int, name: String): Int
+
+    @Query(
+        "SELECT c.* FROM favorite_channels f JOIN channels c ON c.playlistId = f.playlistId AND c.streamId = f.streamId " +
+            "WHERE f.playlistId = :playlistId AND c.streamType = 'live' AND c.isHidden = 0 AND c.num > :num " +
+            "ORDER BY c.num, c.name LIMIT 1"
+    )
+    suspend fun next(playlistId: String, num: Int): ChannelEntity?
+
+    @Query(
+        "SELECT c.* FROM favorite_channels f JOIN channels c ON c.playlistId = f.playlistId AND c.streamId = f.streamId " +
+            "WHERE f.playlistId = :playlistId AND c.streamType = 'live' AND c.isHidden = 0 AND c.num < :num " +
+            "ORDER BY c.num DESC, c.name DESC LIMIT 1"
+    )
+    suspend fun prev(playlistId: String, num: Int): ChannelEntity?
+
+    @Query(
+        "SELECT c.* FROM favorite_channels f JOIN channels c ON c.playlistId = f.playlistId AND c.streamId = f.streamId " +
+            "WHERE f.playlistId = :playlistId AND c.streamType = 'live' AND c.isHidden = 0 ORDER BY c.num, c.name LIMIT 1"
+    )
+    suspend fun first(playlistId: String): ChannelEntity?
+
+    @Query(
+        "SELECT c.* FROM favorite_channels f JOIN channels c ON c.playlistId = f.playlistId AND c.streamId = f.streamId " +
+            "WHERE f.playlistId = :playlistId AND c.streamType = 'live' AND c.isHidden = 0 ORDER BY c.num DESC, c.name DESC LIMIT 1"
+    )
+    suspend fun last(playlistId: String): ChannelEntity?
+
+    /** Removing a playlist removes its favorites too (Settings → Playlists → Remove). */
+    @Query("DELETE FROM favorite_channels WHERE playlistId = :playlistId")
+    suspend fun deleteByPlaylist(playlistId: String)
+
+    @Query("DELETE FROM favorite_channels")
+    suspend fun deleteAll()
+}
+
 @Dao
 interface GroupDao {
     @Query("SELECT * FROM channel_groups WHERE playlistId = :playlistId AND groupType = :groupType AND isHidden = 0 ORDER BY groupName")
@@ -240,7 +322,8 @@ interface PlaylistDao {
     PlaylistEntity::class,
     ChannelGroupEntity::class,
     RecentChannelEntity::class,
-], version = 10, exportSchema = false)
+    FavoriteChannelEntity::class,
+], version = 11, exportSchema = false)
 // v6: added the (playlistId, streamType, groupName) index (PHASE_1.md #2b).
 // v7: ChannelEntity's primary key is now composite (playlistId, streamId) - see EpgEntities.kt's
 // doc comment on ChannelEntity (BACKLOG_SWEEP.md #13). Destructive migration was acceptable then -
@@ -265,12 +348,14 @@ interface PlaylistDao {
 // its own primary-key autoindex - pure write amplification on ~200K rows/sync, zero read
 // benefit); adds a real covering index for ChannelDao.getLiveGroupCounts, confirmed live via
 // `dumpsys dbinfo` to be running a full unindexed scan of ~140K rows on every cold launch.
+// v11: favorite_channels (Teleport finish sprint, 2026-09-29) - additive, see MIGRATION_10_11.
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao
     abstract fun groupDao(): GroupDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun recentChannelDao(): RecentChannelDao
+    abstract fun favoriteChannelDao(): FavoriteChannelDao
 
     companion object {
         @Volatile
@@ -323,6 +408,25 @@ abstract class RedSurfDatabase : RoomDatabase() {
             }
         }
 
+        /** Additive, real data preserved. Also carries over every favorite already set through
+         * the fullscreen player's hold-OK menu (which wrote `channels.isFavorite`, a column a
+         * playlist re-import would wipe) so nothing the user already favorited is lost. */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `favorite_channels` (" +
+                        "`streamId` TEXT NOT NULL, `playlistId` TEXT NOT NULL, " +
+                        "`addedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`playlistId`, `streamId`))"
+                )
+                db.execSQL(
+                    "INSERT OR IGNORE INTO `favorite_channels` (`streamId`, `playlistId`, `addedAt`) " +
+                        "SELECT `streamId`, `playlistId`, " + System.currentTimeMillis() +
+                        " FROM `channels` WHERE `isFavorite` = 1"
+                )
+            }
+        }
+
         // Sprint 1 performance pass, 2026-09-22 (Opus consult, "must-do" M2/M3): a dedicated
         // single-thread transaction executor means EPG ingest's write transactions can never
         // occupy more than one slot of the shared pool the UI's own reads use - previously both
@@ -346,7 +450,7 @@ abstract class RedSurfDatabase : RoomDatabase() {
                     RedSurfDatabase::class.java,
                     "redsurf_tv_database"
                 )
-                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                     // Still the fallback for any *other* version jump this app doesn't carry an
                     // explicit migration for (e.g. a real install predating v6) - decision 14's
                     // protection is specifically for this release's own upgrade path (v7 -> v8),
