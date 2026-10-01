@@ -121,6 +121,8 @@ fun SettingsScreen(
     onTogglePreviewOnSelect: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
+    doubleHeightRow: Boolean = true,
+    onToggleDoubleHeightRow: () -> Unit = {},
     // AGENTS.md backlog, 2026-09-15 - same AppPreferences pattern as the two above.
     autoPlayLastChannelOnLaunch: Boolean,
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
@@ -285,6 +287,8 @@ fun SettingsScreen(
             onTogglePreviewOnSelect = onTogglePreviewOnSelect,
             showRawResolution = showRawResolution,
             onToggleShowRawResolution = onToggleShowRawResolution,
+            doubleHeightRow = doubleHeightRow,
+            onToggleDoubleHeightRow = onToggleDoubleHeightRow,
             autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
             onToggleAutoPlayLastChannelOnLaunch = onToggleAutoPlayLastChannelOnLaunch,
             teleportMenuEnabled = teleportMenuEnabled,
@@ -486,6 +490,8 @@ private fun SettingsPane(
     onTogglePreviewOnSelect: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
+    doubleHeightRow: Boolean = true,
+    onToggleDoubleHeightRow: () -> Unit = {},
     autoPlayLastChannelOnLaunch: Boolean,
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
     teleportMenuEnabled: Boolean,
@@ -552,6 +558,8 @@ private fun SettingsPane(
                 SettingsCategory.Appearance -> appearanceContent(
                     showRawResolution = showRawResolution,
                     onToggle = onToggleShowRawResolution,
+                    doubleHeightRow = doubleHeightRow,
+                    onToggleDoubleHeightRow = onToggleDoubleHeightRow,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.RemoteControl -> remoteControlContent(
@@ -986,6 +994,8 @@ private fun TvLazyListScope.playbackContent(
 private fun TvLazyListScope.appearanceContent(
     showRawResolution: Boolean,
     onToggle: () -> Unit,
+    doubleHeightRow: Boolean,
+    onToggleDoubleHeightRow: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
@@ -994,6 +1004,14 @@ private fun TvLazyListScope.appearanceContent(
             value = if (showRawResolution) "Exact (e.g. 1920x1080)" else "Class (SD/HD/FHD/4K)",
             onClick = onToggle,
             modifier = Modifier.focusRequester(firstRowFocus),
+        )
+    }
+    // EPG_WRAPUP.md 1.7 - TiviMate's double-height selected row in the guide.
+    item {
+        LiveRow(
+            label = "Double-height focused row in guide",
+            value = if (doubleHeightRow) "On" else "Off",
+            onClick = onToggleDoubleHeightRow,
         )
     }
     items(SETTINGS_GREY_ROWS[SettingsCategory.Appearance].orEmpty()) { GreyRowContent(it) }

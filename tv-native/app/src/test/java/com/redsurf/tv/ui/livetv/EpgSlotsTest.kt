@@ -28,29 +28,45 @@ class EpgSlotsTest {
     }
 
     @Test
-    fun noProgrammes_oneFullWindowGap() {
+    fun noProgrammes_halfHourGapsAcrossWholeWindow() {
         val slots = slotsFor(emptyList(), windowStart, windowEnd)
-        assertEquals(1, slots.size)
-        assertTrue(slots[0] is GapSlot)
+        assertEquals(WINDOW_MINUTES / 30, slots.size)
+        assertTrue(slots.all { it is GapSlot && it.end - it.start == HALF_HOUR_MS })
         assertTilesWindow(slots)
+    }
+
+    @Test
+    fun gaps_neverCrossHalfHourBoundaries() {
+        val slots = slotsFor(listOf(programme(10, 20), programme(95, 100)), windowStart, windowEnd)
+        slots.filterIsInstance<GapSlot>().forEach { gap ->
+            assertTrue("gap within one column", (gap.start - windowStart) / HALF_HOUR_MS == (gap.end - 1 - windowStart) / HALF_HOUR_MS)
+        }
+        assertTilesWindow(slots)
+    }
+
+    @Test
+    fun nowSlotIndex_landsOnAiringThenUpcoming() {
+        val slots = slotsFor(listOf(programme(0, 60, "a"), programme(120, 180, "b")), windowStart, windowEnd)
+        assertEquals("a", (slots[nowSlotIndex(slots, windowStart + 10 * MINUTE_MS)] as AiredSlot).programme.title)
+        val inGap = slots[nowSlotIndex(slots, windowStart + 70 * MINUTE_MS)]
+        assertTrue(inGap is GapSlot && inGap.start <= windowStart + 70 * MINUTE_MS)
     }
 
     @Test
     fun holesBetweenProgrammes_becomeGaps() {
         val slots = slotsFor(listOf(programme(30, 60, "a"), programme(150, 210, "b")), windowStart, windowEnd)
-        assertEquals(5, slots.size)
         assertTrue(slots[0] is GapSlot)
         assertEquals("a", (slots[1] as AiredSlot).programme.title)
-        assertTrue(slots[2] is GapSlot)
-        assertEquals(90 * MINUTE_MS, slots[2].end - slots[2].start)
-        assertEquals("b", (slots[3] as AiredSlot).programme.title)
-        assertTrue(slots[4] is GapSlot)
+        // the 90-minute hole between them is three half-hour gaps
+        assertTrue(slots.subList(2, 5).all { it is GapSlot && it.end - it.start == HALF_HOUR_MS })
+        assertEquals("b", (slots[5] as AiredSlot).programme.title)
         assertTilesWindow(slots)
     }
 
     @Test
     fun programmesOverlappingWindowEdges_areClipped() {
-        val slots = slotsFor(listOf(programme(-60, 30), programme(330, 420)), windowStart, windowEnd)
+        val last = WINDOW_MINUTES.toLong()
+        val slots = slotsFor(listOf(programme(-60, 30), programme(last - 30, last + 60)), windowStart, windowEnd)
         assertEquals(windowStart, slots.first().start)
         assertEquals(30 * MINUTE_MS, slots.first().end - slots.first().start)
         assertEquals(windowEnd, slots.last().end)
@@ -60,9 +76,9 @@ class EpgSlotsTest {
 
     @Test
     fun programmesOutsideWindow_areIgnored() {
-        val slots = slotsFor(listOf(programme(-120, -60), programme(400, 460)), windowStart, windowEnd)
-        assertEquals(1, slots.size)
-        assertTrue(slots[0] is GapSlot)
+        val last = WINDOW_MINUTES.toLong()
+        val slots = slotsFor(listOf(programme(-120, -60), programme(last + 40, last + 100)), windowStart, windowEnd)
+        assertTrue(slots.all { it is GapSlot })
         assertTilesWindow(slots)
     }
 

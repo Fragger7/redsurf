@@ -31,6 +31,8 @@ data class XtreamLiveStream(
     val groupName: String,
     val epgChannelId: String,
     val num: Int,
+    // Catch-up (EPG_WRAPUP.md 1.4): days of archive, 0 when `tv_archive` is off.
+    val archiveDays: Int = 0,
 )
 
 /**
@@ -49,6 +51,21 @@ object XtreamApi {
         val (server, user, pass) = match.destructured
         return Triple(server, user, pass)
     }
+
+    /** The panel's own timezone (`server_info.timezone`), which catch-up URLs are written in.
+     * Null on any failure - the caller falls back to the device's zone. */
+    suspend fun getServerTimezone(serverUrl: String, user: String, pass: String, userAgent: String? = null): String? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val client = IptvNetworkModule.getOkHttpClient(userAgent)
+                val request = Request.Builder().url("$serverUrl/player_api.php?username=$user&password=$pass").build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use null
+                    val body = response.body?.string() ?: return@use null
+                    JSONObject(body).optJSONObject("server_info")?.optString("timezone")?.takeIf { it.isNotBlank() }
+                }
+            }.getOrNull()
+        }
 
     // Feature 2: Fetching Categories (Live, VOD, Series)
     suspend fun getCategories(serverUrl: String, user: String, pass: String, type: String, userAgent: String? = null): List<XtreamCategory> = withContext(Dispatchers.IO) {
@@ -211,6 +228,8 @@ object XtreamApi {
                     var categoryId = ""
                     var epgChannelId = ""
                     var num: Int? = null
+                    var tvArchive = 0
+                    var tvArchiveDuration = 0
 
                     while (reader.hasNext()) {
                         when (reader.nextName()) {
@@ -220,6 +239,8 @@ object XtreamApi {
                             "category_id" -> categoryId = reader.nextFlexibleString()
                             "epg_channel_id" -> epgChannelId = reader.nextFlexibleString()
                             "num" -> num = reader.nextFlexibleString().toIntOrNull()
+                            "tv_archive" -> tvArchive = reader.nextFlexibleString().toIntOrNull() ?: 0
+                            "tv_archive_duration" -> tvArchiveDuration = reader.nextFlexibleString().toIntOrNull() ?: 0
                             else -> reader.skipValue()
                         }
                     }
@@ -237,6 +258,7 @@ object XtreamApi {
                                 groupName = groupName,
                                 epgChannelId = epgChannelId,
                                 num = num ?: fallbackNum,
+                                archiveDays = if (tvArchive == 1) tvArchiveDuration.coerceAtLeast(1) else 0,
                             )
                         )
                     }

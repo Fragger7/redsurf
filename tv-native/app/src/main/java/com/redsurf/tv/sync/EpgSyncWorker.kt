@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.redsurf.tv.db.RedSurfDatabase
+import com.redsurf.tv.player.Catchup
 import com.redsurf.tv.network.IptvNetworkModule
 import com.redsurf.tv.parser.XmlTvParser
 import com.redsurf.tv.vod.XtreamApi
@@ -30,6 +31,24 @@ class EpgSyncWorker(
     appContext: Context,
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
+
+    private suspend fun refreshCatchup(db: RedSurfDatabase, playlistId: String, server: String, user: String, pass: String, userAgent: String?) {
+        XtreamApi.getServerTimezone(server, user, pass, userAgent)?.let {
+            Catchup.setServerTimezone(applicationContext, playlistId, it)
+        }
+        val dao = db.channelDao()
+        db.runInTransaction { dao.clearArchiveDays(playlistId) }
+        var withArchive = 0
+        XtreamApi.getLiveStreams(server, user, pass, userAgent) { batch ->
+            val archived = batch.filter { it.archiveDays > 0 }
+            if (archived.isEmpty()) return@getLiveStreams
+            withArchive += archived.size
+            db.runInTransaction {
+                archived.forEach { dao.setArchiveDays(playlistId, "$server/live/$user/$pass/${it.streamId}.ts", it.archiveDays) }
+            }
+        }
+        Log.d(TAG, "catchup -> playlist=$playlistId channelsWithArchive=$withArchive")
+    }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val playlistId = inputData.getString(EPG_SYNC_INPUT_PLAYLIST_ID)
@@ -60,6 +79,12 @@ class EpgSyncWorker(
         }
         val (server, user, pass) = creds
         val epgUrl = "$server/xmltv.php?username=$user&password=$pass"
+
+        // Catch-up flags + the panel's timezone (EPG_WRAPUP.md 1.4/1.5), refreshed every sync so
+        // playlists imported before catch-up support get them without being re-added. Best
+        // effort: a failure here must never cost the EPG sync itself.
+        runCatching { refreshCatchup(db, playlistId, server, user, pass, playlist.userAgent) }
+            .onFailure { Log.w(TAG, "catchup refresh failed for playlist $playlistId", it) }
 
         try {
             // Host only, never the credentials - enough to tell which provider a 502 came from.

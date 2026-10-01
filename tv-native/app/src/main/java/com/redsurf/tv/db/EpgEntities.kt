@@ -1,5 +1,6 @@
 package com.redsurf.tv.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -67,7 +68,11 @@ data class ChannelEntity(
     val epgChannelId: String?,
     val groupName: String,
     val isHidden: Boolean = false,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    // Catch-up (EPG_WRAPUP.md 1.4): days of archive the provider keeps for this channel, from
+    // Xtream's `tv_archive`/`tv_archive_duration`; 0 = no catch-up. Added in v12 with a real
+    // DEFAULT so existing rows migrate in place; refreshed by EpgSyncWorker.
+    @ColumnInfo(defaultValue = "0") val tvArchiveDays: Int = 0,
 )
 
 // PHASE_3.md decision 1 - playlistId scoping, the same cross-playlist collision fix already

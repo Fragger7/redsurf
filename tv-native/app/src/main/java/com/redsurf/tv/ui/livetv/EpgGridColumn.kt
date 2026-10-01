@@ -60,6 +60,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.db.ChannelEntity
+import com.redsurf.tv.player.Catchup
 import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.Background
@@ -137,10 +138,16 @@ fun EpgGridColumn(
     // TELEPORT_MENU.md 2026-09-29) - the Surface's built-in long-click, so the short OK's own
     // click never fires alongside it.
     onLongPressChannel: (ChannelEntity) -> Unit = {},
+    // Catch-up (EPG_WRAPUP.md 1.5): OK on a past programme still inside the channel's archive.
+    onPlayCatchup: (ChannelEntity, EpgProgramEntity) -> Unit = { _, _ -> },
     // Bumped by LiveTvScreen's claimGridFocus: bring the focus-target row into view if it isn't
     // already (a lazy row that isn't composed can't take focus - the reason a deep target, e.g.
     // Teleport's Now Playing on channel 80 of a category, never landed).
     scrollToTargetNonce: Int = 0,
+    // EPG_WRAPUP.md 1.7 / 1.6 - the focused row grows to 2x (Settings → Appearance), and the
+    // channel playing right now (the hero preview) gets TiviMate's blue ▶ in its row.
+    doubleHeightRow: Boolean = true,
+    playingStreamId: String? = null,
     firstCellFocusRequester: FocusRequester,
     // Sprint 2, 2026-09-23 (SEQUENCING.md Finding 5/6, FOCUS_MODEL.md rule 2) - when non-null and
     // present in [channels], the entry focus target is *that* channel's row (its first/current
@@ -167,7 +174,9 @@ fun EpgGridColumn(
     // newly-focused row-0 cell (already correctly "now"-aligned) scrolled out of view - reading as
     // "focus lands on the rightmost cell" even though the real target was always the leftmost one.
     // A fresh category's timeline always starts back at "now."
-    LaunchedEffect(channels, groupName) { sharedScroll.scrollTo(0) }
+    // EPG_WRAPUP.md 1.3: "the start" is now the current half-hour, not the window's left edge
+    // (the window reaches PAST_MINUTES back) - see the scroll effect inside BoxWithConstraints,
+    // which needs the measured minute scale.
     var cursorKey by remember { mutableStateOf<CursorKey?>(null) }
     val wash = remember { Animatable(1f) }
     LaunchedEffect(cursorKey) {
@@ -202,6 +211,10 @@ fun EpgGridColumn(
         val nowCapPx = with(density) { 3.dp.toPx() }
         val wakePx = with(density) { 28.dp.toPx() }
         val hasRows = channels.isNotEmpty()
+        val nowOffsetPx = ((floorToHalfHour(now) - windowStart) / MINUTE_MS) * pxPerMinutePx
+        LaunchedEffect(channels, groupName, windowStart, pxPerMinutePx) {
+            sharedScroll.scrollTo(nowOffsetPx.toInt())
+        }
 
         Column(
             modifier = Modifier
@@ -281,8 +294,11 @@ fun EpgGridColumn(
                             },
                             onTune = onTuneChannel,
                             onLongPress = onLongPressChannel,
+                            onPlayCatchup = onPlayCatchup,
                             onShowInfo = { infoCardProgramme = it },
                             firstCellFocusRequester = if (isFocusTarget) firstCellFocusRequester else null,
+                            expandOnFocus = doubleHeightRow,
+                            isPlaying = channel.streamId == playingStreamId,
                         )
                     }
                 }
@@ -379,10 +395,14 @@ private fun EpgChannelRow(
     onCursor: (CursorKey, EpgSlot) -> Unit,
     onTune: (ChannelEntity) -> Unit,
     onLongPress: (ChannelEntity) -> Unit,
+    onPlayCatchup: (ChannelEntity, EpgProgramEntity) -> Unit,
     onShowInfo: (EpgProgramEntity) -> Unit,
     firstCellFocusRequester: FocusRequester?,
+    expandOnFocus: Boolean = false,
+    isPlaying: Boolean = false,
 ) {
     var rowHasFocus by remember { mutableStateOf(false) }
+    val expanded = expandOnFocus && rowHasFocus
     val density = LocalDensity.current
     val hairlinePx = with(density) { RedSurfDensity.Hairline.toPx() }
     val halfHourPx = with(density) { (pxPerMinute * 30).toPx() }
@@ -391,7 +411,7 @@ private fun EpgChannelRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(RedSurfDensity.GridRowHeight)
+            .height(if (expanded) RedSurfDensity.GridRowHeight * 2 else RedSurfDensity.GridRowHeight)
             .onFocusChanged { rowHasFocus = it.hasFocus }
             .drawBehind {
                 drawRect(if (rowHasFocus) SurfaceBand else Background)
@@ -402,7 +422,9 @@ private fun EpgChannelRow(
         ChannelLabelBlock(
             channel = channel,
             displayName = displayName,
-            marquee = rowHasFocus,
+            marquee = rowHasFocus && !expanded,
+            expanded = expanded,
+            isPlaying = isPlaying,
             modifier = Modifier
                 .width(RedSurfDensity.GridLabelWidth)
                 .fillMaxHeight()
@@ -423,6 +445,7 @@ private fun EpgChannelRow(
                         }
                     },
             ) {
+                val nowIndex = remember(slots, now) { nowSlotIndex(slots, now) }
                 slots.forEachIndexed { index, slot ->
                     SlotCell(
                         slot = slot,
@@ -435,8 +458,13 @@ private fun EpgChannelRow(
                         onCursor = onCursor,
                         onTune = onTune,
                         onLongPress = onLongPress,
+                        onPlayCatchup = onPlayCatchup,
                         onShowInfo = onShowInfo,
-                        focusRequester = if (index == 0) firstCellFocusRequester else null,
+                        // Entry lands on the cell airing now (EPG_WRAPUP.md 1.3), not index 0 -
+                        // index 0 is six hours in the past now.
+                        focusRequester = if (index == nowIndex) firstCellFocusRequester else null,
+                        isNowCell = index == nowIndex,
+                        expanded = expanded,
                     )
                 }
             }
@@ -451,6 +479,8 @@ private fun ChannelLabelBlock(
     displayName: String,
     marquee: Boolean,
     modifier: Modifier = Modifier,
+    expanded: Boolean = false,
+    isPlaying: Boolean = false,
 ) {
     Row(modifier = modifier.padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -468,12 +498,23 @@ private fun ChannelLabelBlock(
             displayName,
             style = RedSurfType.gridChannel,
             color = ChannelName,
-            maxLines = 1,
+            maxLines = if (expanded) 2 else 1,
             overflow = TextOverflow.Ellipsis,
             // The app's established focused-row marquee convention (AGENTS.md, 2026-09-15) - the
             // row holding the cursor, not the cell, since the name belongs to the whole row.
+            // A double-height row shows two lines instead of scrolling.
             modifier = Modifier.weight(1f).let { if (marquee) it.basicMarquee() else it },
         )
+        // TiviMate's own order (EPG_WRAPUP.md 1.6, the user's reference screenshots): name, then
+        // the blue ▶ when this channel is the one playing, then the catch-up glyph.
+        if (isPlaying) {
+            Spacer(modifier = Modifier.width(4.dp))
+            PlayingGlyph()
+        }
+        if (channel.tvArchiveDays > 0) {
+            Spacer(modifier = Modifier.width(4.dp))
+            CatchupGlyph()
+        }
     }
 }
 
@@ -501,8 +542,11 @@ private fun SlotCell(
     onCursor: (CursorKey, EpgSlot) -> Unit,
     onTune: (ChannelEntity) -> Unit,
     onLongPress: (ChannelEntity) -> Unit,
+    onPlayCatchup: (ChannelEntity, EpgProgramEntity) -> Unit,
     onShowInfo: (EpgProgramEntity) -> Unit,
     focusRequester: FocusRequester?,
+    isNowCell: Boolean = false,
+    expanded: Boolean = false,
 ) {
     val minutes = (slot.end - slot.start) / MINUTE_MS.toFloat()
     val width = pxPerMinute * minutes
@@ -524,7 +568,11 @@ private fun SlotCell(
     Surface(
         onClick = {
             when (slot) {
-                is AiredSlot -> if (isCurrent) onTune(channel) else onShowInfo(slot.programme)
+                is AiredSlot -> when {
+                    isCurrent -> onTune(channel)
+                    Catchup.isInArchive(channel.tvArchiveDays, slot.programme.startTime, now) -> onPlayCatchup(channel, slot.programme)
+                    else -> onShowInfo(slot.programme)
+                }
                 is GapSlot -> onTune(channel)
             }
         },
@@ -593,18 +641,31 @@ private fun SlotCell(
             contentAlignment = Alignment.CenterStart,
         ) {
             when (slot) {
-                is AiredSlot -> Text(
-                    slot.programme.title.ifBlank { "Untitled" },
-                    style = RedSurfType.gridCell,
-                    color = when {
-                        focused || isCurrent -> TextPrimary
-                        isPast -> PastTitle
-                        else -> RestingTitle
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                is GapSlot -> if (isFirstInRow && minutes >= 45f) {
+                is AiredSlot -> Column {
+                    Text(
+                        slot.programme.title.ifBlank { "Untitled" },
+                        style = RedSurfType.gridCell,
+                        color = when {
+                            focused || isCurrent -> TextPrimary
+                            isPast -> PastTitle
+                            else -> RestingTitle
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    // Double-height row: the second line carries the times (TiviMate).
+                    if (expanded) {
+                        Text(
+                            "${cellTimeFormat.format(Date(slot.start))} – ${cellTimeFormat.format(Date(slot.end))}",
+                            style = RedSurfType.gridMeta,
+                            color = NoListings,
+                            maxLines = 1,
+                        )
+                    }
+                }
+                // Gaps are half-hour cells now (EPG_WRAPUP.md 1.2), so the label sits on the
+                // one airing now - where the cursor lands - instead of the row's first cell.
+                is GapSlot -> if (isNowCell) {
                     Text("No listings", style = RedSurfType.gridMeta, color = NoListings, maxLines = 1)
                 }
             }
@@ -700,3 +761,45 @@ private val halfHourFormat = SimpleDateFormat("h:mm", Locale.US)
 private val headerDateFormat = SimpleDateFormat("EEE, MMM d", Locale.US)
 private fun formatTimeRange(start: Long, end: Long): String =
     "${hourFormat.format(Date(start))} – ${hourFormat.format(Date(end))}"
+
+private val cellTimeFormat = java.text.SimpleDateFormat("h:mm", java.util.Locale.US)
+private val PlayingBlue = Color(0xFF3B82F6)
+
+/** TiviMate's "this channel is playing" mark - a small blue play triangle (EPG_WRAPUP.md 1.6). */
+@Composable
+private fun PlayingGlyph() {
+    Canvas(modifier = Modifier.size(10.dp)) {
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(size.width * 0.15f, 0f)
+            lineTo(size.width, size.height / 2f)
+            lineTo(size.width * 0.15f, size.height)
+            close()
+        }
+        drawPath(path, PlayingBlue)
+    }
+}
+
+/** Catch-up available - a history glyph (open arc + arrowhead + clock hands), drawn rather than
+ * pulled from an icon pack the app doesn't depend on (EPG_WRAPUP.md 1.6). */
+@Composable
+private fun CatchupGlyph() {
+    Canvas(modifier = Modifier.size(12.dp)) {
+        val stroke = 1.4.dp.toPx()
+        val r = size.minDimension / 2f - stroke
+        val c = center
+        drawArc(
+            color = TextPrimary,
+            startAngle = -200f,
+            sweepAngle = 300f,
+            useCenter = false,
+            topLeft = Offset(c.x - r, c.y - r),
+            size = Size(r * 2, r * 2),
+            style = Stroke(stroke, cap = StrokeCap.Round),
+        )
+        val tip = Offset(c.x - r, c.y - r * 0.35f)
+        drawLine(TextPrimary, tip, Offset(tip.x - r * 0.35f, tip.y - r * 0.35f), stroke, StrokeCap.Round)
+        drawLine(TextPrimary, tip, Offset(tip.x + r * 0.35f, tip.y - r * 0.35f), stroke, StrokeCap.Round)
+        drawLine(TextPrimary, c, Offset(c.x, c.y - r * 0.55f), stroke, StrokeCap.Round)
+        drawLine(TextPrimary, c, Offset(c.x + r * 0.4f, c.y + r * 0.2f), stroke, StrokeCap.Round)
+    }
+}

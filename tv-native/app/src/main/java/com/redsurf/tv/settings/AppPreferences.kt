@@ -28,6 +28,16 @@ class AppPreferences(context: Context) {
         _blackScreenBetweenZaps.value = enabled
     }
 
+    // EPG_WRAPUP.md 1.7 - TiviMate's "double-height selected row": the focused guide row grows to
+    // 2x so the name gets two lines and the playing/catch-up icons get room. Default on.
+    private val _doubleHeightRow = MutableStateFlow(prefs.getBoolean(KEY_DOUBLE_HEIGHT_ROW, true))
+    val doubleHeightRow: StateFlow<Boolean> = _doubleHeightRow.asStateFlow()
+
+    fun setDoubleHeightRow(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DOUBLE_HEIGHT_ROW, enabled).apply()
+        _doubleHeightRow.value = enabled
+    }
+
     private val _showRawResolution =
         MutableStateFlow(prefs.getBoolean(KEY_SHOW_RAW_RESOLUTION, false))
     val showRawResolution: StateFlow<Boolean> = _showRawResolution.asStateFlow()
@@ -113,6 +123,7 @@ class AppPreferences(context: Context) {
     companion object {
         private const val KEY_BLACK_SCREEN_BETWEEN_ZAPS = "black_screen_between_zaps"
         private const val KEY_SHOW_RAW_RESOLUTION = "show_raw_resolution"
+        private const val KEY_DOUBLE_HEIGHT_ROW = "double_height_focused_row"
         private const val KEY_AUTO_PLAY_LAST_CHANNEL = "auto_play_last_channel_on_launch"
         private const val KEY_LAST_PLAYLIST_ID = "last_watched_playlist_id"
         private const val KEY_LAST_STREAM_ID = "last_watched_stream_id"

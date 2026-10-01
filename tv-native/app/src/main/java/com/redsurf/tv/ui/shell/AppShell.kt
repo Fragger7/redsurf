@@ -183,6 +183,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val blackScreenBetweenZaps by appPreferences.blackScreenBetweenZaps.collectAsState()
     val previewOnSelect by appPreferences.previewOnSelect.collectAsState()
     val showRawResolution by appPreferences.showRawResolution.collectAsState()
+    val doubleHeightRow by appPreferences.doubleHeightRow.collectAsState()
     val autoPlayLastChannelOnLaunch by appPreferences.autoPlayLastChannelOnLaunch.collectAsState()
     val teleportMenuEnabled by appPreferences.teleportMenuEnabled.collectAsState()
 
@@ -507,6 +508,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     blackScreenBetweenZaps = blackScreenBetweenZaps,
                     previewOnSelect = previewOnSelect,
                     showRawResolution = showRawResolution,
+                    doubleHeightRow = doubleHeightRow,
                     selectedGroup = liveTvSelectedGroup,
                     onSelectedGroupChanged = { liveTvSelectedGroup = it },
                     focusedChannel = liveTvFocusedChannel,
@@ -558,6 +560,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         appPreferences.setPreviewOnSelect(!previewOnSelect)
                     },
                     showRawResolution = showRawResolution,
+                    doubleHeightRow = doubleHeightRow,
+                    onToggleDoubleHeightRow = { appPreferences.setDoubleHeightRow(!doubleHeightRow) },
                     onToggleShowRawResolution = {
                         appPreferences.setShowRawResolution(!showRawResolution)
                     },

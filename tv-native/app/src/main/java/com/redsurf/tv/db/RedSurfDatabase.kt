@@ -141,6 +141,13 @@ interface ChannelDao {
     @Query("UPDATE channels SET isFavorite = :isFavorite WHERE playlistId = :playlistId AND streamId = :streamId")
     suspend fun updateFavorite(playlistId: String, streamId: String, isFavorite: Boolean)
 
+    /** Catch-up flags (EPG_WRAPUP.md 1.4) - see EpgSyncWorker's refresh. */
+    @Query("UPDATE channels SET tvArchiveDays = 0 WHERE playlistId = :playlistId")
+    fun clearArchiveDays(playlistId: String)
+
+    @Query("UPDATE channels SET tvArchiveDays = :days WHERE playlistId = :playlistId AND streamId = :streamId")
+    fun setArchiveDays(playlistId: String, streamId: String, days: Int)
+
     @Query("UPDATE channels SET isHidden = :isHidden WHERE playlistId = :playlistId AND streamId = :streamId")
     suspend fun updateHidden(playlistId: String, streamId: String, isHidden: Boolean)
 
@@ -323,7 +330,7 @@ interface PlaylistDao {
     ChannelGroupEntity::class,
     RecentChannelEntity::class,
     FavoriteChannelEntity::class,
-], version = 11, exportSchema = false)
+], version = 12, exportSchema = false)
 // v6: added the (playlistId, streamType, groupName) index (PHASE_1.md #2b).
 // v7: ChannelEntity's primary key is now composite (playlistId, streamId) - see EpgEntities.kt's
 // doc comment on ChannelEntity (BACKLOG_SWEEP.md #13). Destructive migration was acceptable then -
@@ -349,6 +356,7 @@ interface PlaylistDao {
 // benefit); adds a real covering index for ChannelDao.getLiveGroupCounts, confirmed live via
 // `dumpsys dbinfo` to be running a full unindexed scan of ~140K rows on every cold launch.
 // v11: favorite_channels (Teleport finish sprint, 2026-09-29) - additive, see MIGRATION_10_11.
+// v12: channels.tvArchiveDays (catch-up, EPG_WRAPUP.md 1.4) - additive, see MIGRATION_11_12.
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao
@@ -427,6 +435,13 @@ abstract class RedSurfDatabase : RoomDatabase() {
             }
         }
 
+        /** Additive column with a DEFAULT, real data preserved. */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `channels` ADD COLUMN `tvArchiveDays` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         // Sprint 1 performance pass, 2026-09-22 (Opus consult, "must-do" M2/M3): a dedicated
         // single-thread transaction executor means EPG ingest's write transactions can never
         // occupy more than one slot of the shared pool the UI's own reads use - previously both
@@ -450,7 +465,7 @@ abstract class RedSurfDatabase : RoomDatabase() {
                     RedSurfDatabase::class.java,
                     "redsurf_tv_database"
                 )
-                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                     // Still the fallback for any *other* version jump this app doesn't carry an
                     // explicit migration for (e.g. a real install predating v6) - decision 14's
                     // protection is specifically for this release's own upgrade path (v7 -> v8),

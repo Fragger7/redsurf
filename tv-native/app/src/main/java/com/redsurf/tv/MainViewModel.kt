@@ -410,6 +410,7 @@ class MainViewModel : ViewModel() {
                             streamIcon = s.streamIcon,
                             epgChannelId = s.epgChannelId,
                             groupName = s.groupName,
+                            tvArchiveDays = s.archiveDays,
                         )
                     }
                     localDb?.channelDao()?.insertChannels(entities)

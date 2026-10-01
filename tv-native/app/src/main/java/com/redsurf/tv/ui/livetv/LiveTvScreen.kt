@@ -59,6 +59,7 @@ import com.redsurf.tv.data.favoriteKey
 import com.redsurf.tv.data.isFavoritesGroup
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.EpgProgramEntity
+import com.redsurf.tv.player.Catchup
 import com.redsurf.tv.player.PreviewPlayerHost
 import com.redsurf.tv.player.rememberPreviewPlayerController
 import com.redsurf.tv.ui.player.PlayerScreen
@@ -114,6 +115,7 @@ fun LiveTvScreen(
     // [openChannel] below).
     previewOnSelect: Boolean = true,
     showRawResolution: Boolean = false,
+    doubleHeightRow: Boolean = true,
     // Hoisted to AppShell (found live, 2026-09-15, user report) - same conditional-composition
     // trap SettingsScreen's own selectedCategory already had to escape: this composable is torn
     // down and recomposed fresh every time `destination` switches away from Live TV and back, so
@@ -263,6 +265,24 @@ fun LiveTvScreen(
         }
     }
 
+    // Catch-up (EPG_WRAPUP.md 1.5) - a timeshift URL overrides the live one while it plays;
+    // cleared by leaving fullscreen or zapping (both mean "back to live").
+    var catchupUrl by remember { mutableStateOf<String?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun playCatchup(channel: ChannelEntity, programme: EpgProgramEntity) {
+        val url = Catchup.timeshiftUrl(
+            channel.streamId, programme.startTime, programme.endTime,
+            Catchup.serverTimezone(context, channel.playlistId),
+        ) ?: return
+        Log.d("LiveTvScreen", "catchup -> ${channel.name} \"${programme.title}\"")
+        onFocusedChannelChanged(channel)
+        catchupUrl = url
+        previewingChannel = null
+        isFullscreen = true
+        onFullscreenChanged(true)
+    }
+    LaunchedEffect(isFullscreen) { if (!isFullscreen) catchupUrl = null }
+
     // Auto-play last channel on launch, the trigger's actual effect - see the parameter doc
     // above for why this reacts to the dedicated trigger, not to focusedChannel itself.
     LaunchedEffect(autoPlayTrigger) {
@@ -318,7 +338,9 @@ fun LiveTvScreen(
     }
     // G.2 - the grid's window starts on the previous :00/:30, and only changes value at those
     // boundaries even though `now` ticks every 30s (same Long → nothing keyed on it recomposes).
-    val windowStart = remember(now) { floorToHalfHour(now) }
+    // EPG_WRAPUP.md 1.3 - the window now reaches PAST_MINUTES back (LEFT walks into the past /
+    // catch-up); the grid opens scrolled to the current half-hour, not the window's left edge.
+    val windowStart = remember(now) { gridWindowStart(now) }
     val windowEnd = windowStart + WINDOW_MINUTES * MINUTE_MS
 
     // The grid's own data (PHASE_3.md decision 4) - now unconditional, the grid is the only
@@ -637,6 +659,7 @@ fun LiveTvScreen(
                     playlists.firstOrNull { it.id == previewingChannel?.playlistId }?.userAgent
                 },
                 isFavorite = isFavorite(heroChannel ?: previewingChannel),
+                previewOnSelect = previewOnSelect,
                 modifier = Modifier.fillMaxWidth().padding(bottom = RedSurfDensity.ColumnGap),
             )
 
@@ -668,11 +691,14 @@ fun LiveTvScreen(
                     now = now,
                     windowStart = windowStart,
                     onTuneChannel = { channel -> openChannel(channel) },
+                    onPlayCatchup = { channel, programme -> playCatchup(channel, programme) },
                     onLongPressChannel = { channel ->
                         contextMenuArmed = false
                         contextMenuChannel = channel
                     },
                     scrollToTargetNonce = gridScrollNonce,
+                    doubleHeightRow = doubleHeightRow,
+                    playingStreamId = previewingChannel?.streamId,
                     firstCellFocusRequester = gridFocus,
                     targetChannelStreamId = focusedChannel?.streamId,
                     onCursorChanged = { channel, slot -> onCursorChanged(channel, slot) },
@@ -708,7 +734,7 @@ fun LiveTvScreen(
                 if (info != null) "${info.playlistName} › ${formatGroupName(info.groupName)}" else ""
             }
             PlayerScreen(
-                streamUrl = previewUrl,
+                streamUrl = catchupUrl ?: previewUrl,
                 focusRequester = fullscreenFocus,
                 onExitFullscreen = {
                     // TiviMate parity (user, 2026-09-30): an ordinary Back out of fullscreen keeps
@@ -728,6 +754,7 @@ fun LiveTvScreen(
                 currentChannel = focusedChannel,
                 repository = viewModel.repository,
                 onChannelChanged = { channel ->
+                    catchupUrl = null
                     onFocusedChannelChanged(channel)
                     // Bypass the browse-debounce, same reason as openChannel above: zapping is
                     // a deliberate action, not a D-pad fly-by.
@@ -794,6 +821,9 @@ private fun HeroPreviewBand(
     groupCount: Int?,
     playlistUserAgent: String?,
     isFavorite: Boolean = false,
+    // EPG_WRAPUP.md 1.1 (user report, 2026-09-30) - the hints used to promise a preview even with
+    // "Preview channel on select" off, where one OK goes straight to fullscreen.
+    previewOnSelect: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val height by animateDpAsState(
@@ -808,15 +838,15 @@ private fun HeroPreviewBand(
             .background(Surface),
     ) {
         if (expanded) {
-            ExpandedHero(focusedChannel, previewingChannel, programme, now, playlistUserAgent, isFavorite)
+            ExpandedHero(focusedChannel, previewingChannel, programme, now, playlistUserAgent, isFavorite, previewOnSelect)
         } else {
-            CollapsedHero(groupLabel, groupCount, now)
+            CollapsedHero(groupLabel, groupCount, now, previewOnSelect)
         }
     }
 }
 
 @Composable
-private fun CollapsedHero(groupLabel: String?, groupCount: Int?, now: Long) {
+private fun CollapsedHero(groupLabel: String?, groupCount: Int?, now: Long, previewOnSelect: Boolean) {
     Row(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -836,7 +866,7 @@ private fun CollapsedHero(groupLabel: String?, groupCount: Int?, now: Long) {
         }
         Spacer(modifier = Modifier.weight(1f))
         Text(
-            "Press OK to preview  ·  OK again for fullscreen",
+            if (previewOnSelect) "Press OK to preview  ·  OK again for fullscreen" else "Press OK to watch",
             style = RedSurfType.gridMeta,
             color = TextSecondary,
             maxLines = 1,
@@ -856,6 +886,7 @@ private fun ExpandedHero(
     now: Long,
     playlistUserAgent: String?,
     isFavorite: Boolean,
+    previewOnSelect: Boolean,
 ) {
     // Text follows the cursor (or the OK'd channel), video follows what's previewing - TiviMate's
     // own split: the thumbnail is clearly "playing," the text is clearly "what you're looking at."
@@ -963,10 +994,10 @@ private fun ExpandedHero(
                 Text("No schedule information", style = RedSurfType.rowSecondary, color = TextSecondary)
             }
             Spacer(modifier = Modifier.height(2.dp))
-            val hint = if (isSameChannel(previewingChannel, focusedChannel)) {
-                "Press OK again to open fullscreen"
-            } else {
-                "Press OK to preview this channel"
+            val hint = when {
+                isSameChannel(previewingChannel, displayChannel) -> "Press OK to open fullscreen"
+                previewOnSelect -> "Press OK to preview this channel"
+                else -> "Press OK to watch"
             }
             Text(hint, style = RedSurfType.gridMeta, color = Accent, maxLines = 1)
         }
