@@ -182,6 +182,7 @@ fun PlayerHost(
                 // whatever was on screen even earlier - until the next stream's first frame is
                 // ready, instead of clearing to a blank/default surface the instant media is
                 // reset. [blackScreenBetweenZaps] (BACKLOG_SWEEP.md #11) inverts this.
+                VideoFrames.registerFullscreen(this)
                 setKeepContentOnPlayerReset(!blackScreenBetweenZaps)
                 setShutterBackgroundColor(android.graphics.Color.BLACK)
                 // Screensaver/screen-off kicking in mid-playback (found live, 2026-09-12) -
@@ -197,6 +198,7 @@ fun PlayerHost(
             view.setKeepContentOnPlayerReset(!blackScreenBetweenZaps)
             view.resizeMode = resizeMode
         },
+        onRelease = { VideoFrames.registerFullscreen(null) },
         modifier = modifier.fillMaxSize(),
     )
 

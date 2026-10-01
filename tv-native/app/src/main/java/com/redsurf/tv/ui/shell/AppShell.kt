@@ -1,6 +1,11 @@
 package com.redsurf.tv.ui.shell
 
 import android.app.Activity
+import kotlin.math.roundToInt
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -167,6 +172,13 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // rail, Search from its pane - found live 2026-09-30). The last key seen decides it, so
     // LEFT/RIGHT along the strip itself is never redirected.
     var lastKeyWasUp by remember { mutableStateOf(false) }
+    // Nav-strip auto-hide (EPG_WRAPUP.md 2.3, scoped 2026-09-21): slides away after
+    // [navAutoHideSeconds] without a key press while focus is elsewhere; comes back only when
+    // focus reaches the strip itself (UP from a screen's top, Back to Home, long-press Back, the
+    // Teleport row) - never on any key, or it would pop back on every cursor move. The strip is
+    // only collapsed, never removed, so every one of those jumps can still land on a pill.
+    var lastKeyAt by remember { mutableStateOf(0L) }
+    var navHidden by remember { mutableStateOf(false) }
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     // "Now Playing" / "Return to fullscreen" mean the last channel actually *played* (user,
     // 2026-09-22), not whatever the D-pad last rested on - the newest recent_channels row is
@@ -184,6 +196,19 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val previewOnSelect by appPreferences.previewOnSelect.collectAsState()
     val showRawResolution by appPreferences.showRawResolution.collectAsState()
     val doubleHeightRow by appPreferences.doubleHeightRow.collectAsState()
+    val publicEpgEnabled by appPreferences.publicEpgEnabled.collectAsState()
+    val navAutoHideSeconds by appPreferences.navAutoHideSeconds.collectAsState()
+    LaunchedEffect(navHasFocus, navAutoHideSeconds, lastKeyAt) {
+        if (navHasFocus || navAutoHideSeconds == 0) {
+            navHidden = false
+            return@LaunchedEffect
+        }
+        if (!navHidden) {
+            delay(navAutoHideSeconds * 1000L)
+            navHidden = true
+        }
+    }
+    val navReveal by animateFloatAsState(if (navHidden) 0f else 1f, tween(240), label = "navReveal")
     val autoPlayLastChannelOnLaunch by appPreferences.autoPlayLastChannelOnLaunch.collectAsState()
     val teleportMenuEnabled by appPreferences.teleportMenuEnabled.collectAsState()
 
@@ -390,7 +415,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         // A short Back is never touched here - PlayerScreen's Back-peel owns it.
         .onPreviewKeyEvent { event ->
             val isDown = event.type == KeyEventType.KeyDown
-            if (isDown) lastKeyWasUp = event.key == Key.DirectionUp
+            if (isDown) {
+                lastKeyWasUp = event.key == Key.DirectionUp
+                lastKeyAt = System.currentTimeMillis()
+            }
             if (event.key == Key.Back) {
                 if (isDown && event.nativeKeyEvent.repeatCount == 0) backHeldLong = false
                 if (isDown && event.nativeKeyEvent.isLongPress && !backHeldLong) {
@@ -473,24 +501,34 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     Box(modifier = rootModifier) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (!liveTvFullscreen) {
-                NavStrip(
-                    current = destination,
-                    onSelect = { destination = it },
-                    focusRequesters = navPillFocusRequesters,
-                    modifier = Modifier.onFocusChanged {
-                        val arrived = it.hasFocus && !navHasFocus
-                        navHasFocus = it.hasFocus
-                        if (arrived && lastKeyWasUp) {
-                            // After the focus change settles, never from inside it (FOCUS_MODEL.md
-                            // rule 3 addendum).
-                            scope.launch {
-                                delay(16)
-                                if (navHasFocus) runCatching { navPillFocusRequesters[destination]?.requestFocus() }
-                            }
-                        }
+                // Collapse by measured height (children still placed, just clipped off the top),
+                // so pills stay focusable while hidden - see navHidden above.
+                Column(
+                    modifier = Modifier.clipToBounds().layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints)
+                        val height = (placeable.height * navReveal).roundToInt()
+                        layout(placeable.width, height) { placeable.place(0, height - placeable.height) }
                     },
-                )
-                Spacer(modifier = Modifier.height(20.dp))
+                ) {
+                    NavStrip(
+                        current = destination,
+                        onSelect = { destination = it },
+                        focusRequesters = navPillFocusRequesters,
+                        modifier = Modifier.onFocusChanged {
+                            val arrived = it.hasFocus && !navHasFocus
+                            navHasFocus = it.hasFocus
+                            if (arrived && lastKeyWasUp) {
+                                // After the focus change settles, never from inside it (FOCUS_MODEL.md
+                                // rule 3 addendum).
+                                scope.launch {
+                                    delay(16)
+                                    if (navHasFocus) runCatching { navPillFocusRequesters[destination]?.requestFocus() }
+                                }
+                            }
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
             }
 
             // Performance/state audit, 2026-09-22 (SEQUENCING.md Sprint 1) - LiveTvScreen now
@@ -562,6 +600,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     showRawResolution = showRawResolution,
                     doubleHeightRow = doubleHeightRow,
                     onToggleDoubleHeightRow = { appPreferences.setDoubleHeightRow(!doubleHeightRow) },
+                    publicEpgEnabled = publicEpgEnabled,
+                    onTogglePublicEpg = { appPreferences.setPublicEpgEnabled(!publicEpgEnabled) },
+                    navAutoHideSeconds = navAutoHideSeconds,
+                    onCycleNavAutoHide = { appPreferences.cycleNavAutoHide() },
                     onToggleShowRawResolution = {
                         appPreferences.setShowRawResolution(!showRawResolution)
                     },

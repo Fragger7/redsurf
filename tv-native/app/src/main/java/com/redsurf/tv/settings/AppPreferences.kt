@@ -38,6 +38,28 @@ class AppPreferences(context: Context) {
         _doubleHeightRow.value = enabled
     }
 
+    // EPG_WRAPUP.md 2.1 - fill channels the provider has no guide for from public XMLTV
+    // (EPGSHARE01). Default on (the user's ask: "sick of seeing empty guides"). Read by
+    // EpgSyncWorker, so it's a plain preference, not only a flow.
+    private val _publicEpgEnabled = MutableStateFlow(prefs.getBoolean(KEY_PUBLIC_EPG, true))
+    val publicEpgEnabled: StateFlow<Boolean> = _publicEpgEnabled.asStateFlow()
+
+    fun setPublicEpgEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_PUBLIC_EPG, enabled).apply()
+        _publicEpgEnabled.value = enabled
+    }
+
+    // EPG_WRAPUP.md 2.3 - the nav strip slides away after this many idle seconds; 0 = never.
+    // Cycles 3 → 5 → 10 → Off in Settings → Appearance. Default 5s (scoped 2026-09-21).
+    private val _navAutoHideSeconds = MutableStateFlow(prefs.getInt(KEY_NAV_AUTO_HIDE, 5))
+    val navAutoHideSeconds: StateFlow<Int> = _navAutoHideSeconds.asStateFlow()
+
+    fun cycleNavAutoHide() {
+        val next = when (_navAutoHideSeconds.value) { 3 -> 5; 5 -> 10; 10 -> 0; else -> 3 }
+        prefs.edit().putInt(KEY_NAV_AUTO_HIDE, next).apply()
+        _navAutoHideSeconds.value = next
+    }
+
     private val _showRawResolution =
         MutableStateFlow(prefs.getBoolean(KEY_SHOW_RAW_RESOLUTION, false))
     val showRawResolution: StateFlow<Boolean> = _showRawResolution.asStateFlow()
@@ -124,6 +146,8 @@ class AppPreferences(context: Context) {
         private const val KEY_BLACK_SCREEN_BETWEEN_ZAPS = "black_screen_between_zaps"
         private const val KEY_SHOW_RAW_RESOLUTION = "show_raw_resolution"
         private const val KEY_DOUBLE_HEIGHT_ROW = "double_height_focused_row"
+        private const val KEY_PUBLIC_EPG = "public_epg_supplement"
+        private const val KEY_NAV_AUTO_HIDE = "nav_auto_hide_seconds"
         private const val KEY_AUTO_PLAY_LAST_CHANNEL = "auto_play_last_channel_on_launch"
         private const val KEY_LAST_PLAYLIST_ID = "last_watched_playlist_id"
         private const val KEY_LAST_STREAM_ID = "last_watched_stream_id"

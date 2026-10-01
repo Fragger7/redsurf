@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.Flow
  * real identity now - two different playlists can legitimately both have a "Sports" group and
  * they must stay distinct, not merge. Powers the Categories column (PHASE_1.md #1.4).
  */
+/** Public EPG matching row - see ChannelDao.matchPage. */
+data class MatchRow(val streamId: String, val name: String, val epgChannelId: String?)
+
 data class GroupCount(val playlistId: String, val playlistName: String, val groupName: String, val count: Int)
 
 @Dao
@@ -140,6 +143,23 @@ interface ChannelDao {
     // provider, matching ChannelEntity's own composite primary key.
     @Query("UPDATE channels SET isFavorite = :isFavorite WHERE playlistId = :playlistId AND streamId = :streamId")
     suspend fun updateFavorite(playlistId: String, streamId: String, isFavorite: Boolean)
+
+    /** Public EPG matching (EPG_WRAPUP.md 2.1) - small columns only, paged, never a whole playlist
+     * of full rows in memory (HARDWARE.md). */
+    @Query(
+        "SELECT streamId, name, epgChannelId FROM channels WHERE playlistId = :playlistId " +
+            "AND streamType = 'live' ORDER BY streamId LIMIT :limit OFFSET :offset"
+    )
+    fun matchPage(playlistId: String, limit: Int, offset: Int): List<MatchRow>
+
+    @Query("SELECT DISTINCT groupName FROM channels WHERE playlistId = :playlistId AND streamType = 'live'")
+    suspend fun distinctGroupNames(playlistId: String): List<String>
+
+    @Query("UPDATE channels SET epgFallbackId = NULL WHERE playlistId = :playlistId")
+    fun clearFallbackIds(playlistId: String)
+
+    @Query("UPDATE channels SET epgFallbackId = :id WHERE playlistId = :playlistId AND streamId = :streamId")
+    fun setFallbackId(playlistId: String, streamId: String, id: String)
 
     /** Catch-up flags (EPG_WRAPUP.md 1.4) - see EpgSyncWorker's refresh. */
     @Query("UPDATE channels SET tvArchiveDays = 0 WHERE playlistId = :playlistId")
@@ -330,7 +350,7 @@ interface PlaylistDao {
     ChannelGroupEntity::class,
     RecentChannelEntity::class,
     FavoriteChannelEntity::class,
-], version = 12, exportSchema = false)
+], version = 13, exportSchema = false)
 // v6: added the (playlistId, streamType, groupName) index (PHASE_1.md #2b).
 // v7: ChannelEntity's primary key is now composite (playlistId, streamId) - see EpgEntities.kt's
 // doc comment on ChannelEntity (BACKLOG_SWEEP.md #13). Destructive migration was acceptable then -
@@ -357,6 +377,7 @@ interface PlaylistDao {
 // `dumpsys dbinfo` to be running a full unindexed scan of ~140K rows on every cold launch.
 // v11: favorite_channels (Teleport finish sprint, 2026-09-29) - additive, see MIGRATION_10_11.
 // v12: channels.tvArchiveDays (catch-up, EPG_WRAPUP.md 1.4) - additive, see MIGRATION_11_12.
+// v13: channels.epgFallbackId (public EPG supplement, EPG_WRAPUP.md 2.1) - additive.
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao
@@ -442,6 +463,12 @@ abstract class RedSurfDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `channels` ADD COLUMN `epgFallbackId` TEXT")
+            }
+        }
+
         // Sprint 1 performance pass, 2026-09-22 (Opus consult, "must-do" M2/M3): a dedicated
         // single-thread transaction executor means EPG ingest's write transactions can never
         // occupy more than one slot of the shared pool the UI's own reads use - previously both
@@ -465,7 +492,7 @@ abstract class RedSurfDatabase : RoomDatabase() {
                     RedSurfDatabase::class.java,
                     "redsurf_tv_database"
                 )
-                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                     // Still the fallback for any *other* version jump this app doesn't carry an
                     // explicit migration for (e.g. a real install predating v6) - decision 14's
                     // protection is specifically for this release's own upgrade path (v7 -> v8),

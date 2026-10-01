@@ -123,6 +123,10 @@ fun SettingsScreen(
     onToggleShowRawResolution: () -> Unit,
     doubleHeightRow: Boolean = true,
     onToggleDoubleHeightRow: () -> Unit = {},
+    publicEpgEnabled: Boolean = true,
+    onTogglePublicEpg: () -> Unit = {},
+    navAutoHideSeconds: Int = 5,
+    onCycleNavAutoHide: () -> Unit = {},
     // AGENTS.md backlog, 2026-09-15 - same AppPreferences pattern as the two above.
     autoPlayLastChannelOnLaunch: Boolean,
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
@@ -289,6 +293,10 @@ fun SettingsScreen(
             onToggleShowRawResolution = onToggleShowRawResolution,
             doubleHeightRow = doubleHeightRow,
             onToggleDoubleHeightRow = onToggleDoubleHeightRow,
+            publicEpgEnabled = publicEpgEnabled,
+            onTogglePublicEpg = onTogglePublicEpg,
+            navAutoHideSeconds = navAutoHideSeconds,
+            onCycleNavAutoHide = onCycleNavAutoHide,
             autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
             onToggleAutoPlayLastChannelOnLaunch = onToggleAutoPlayLastChannelOnLaunch,
             teleportMenuEnabled = teleportMenuEnabled,
@@ -492,6 +500,10 @@ private fun SettingsPane(
     onToggleShowRawResolution: () -> Unit,
     doubleHeightRow: Boolean = true,
     onToggleDoubleHeightRow: () -> Unit = {},
+    publicEpgEnabled: Boolean = true,
+    onTogglePublicEpg: () -> Unit = {},
+    navAutoHideSeconds: Int = 5,
+    onCycleNavAutoHide: () -> Unit = {},
     autoPlayLastChannelOnLaunch: Boolean,
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
     teleportMenuEnabled: Boolean,
@@ -547,6 +559,8 @@ private fun SettingsPane(
                     status = epgSyncStatus,
                     onUpdateNow = onUpdateEpgNow,
                     firstRowFocus = firstRowFocus,
+                    publicEpgEnabled = publicEpgEnabled,
+                    onTogglePublicEpg = onTogglePublicEpg,
                 )
                 SettingsCategory.Playback -> playbackContent(
                     blackScreenBetweenZaps = blackScreenBetweenZaps,
@@ -560,6 +574,8 @@ private fun SettingsPane(
                     onToggle = onToggleShowRawResolution,
                     doubleHeightRow = doubleHeightRow,
                     onToggleDoubleHeightRow = onToggleDoubleHeightRow,
+                    navAutoHideSeconds = navAutoHideSeconds,
+                    onCycleNavAutoHide = onCycleNavAutoHide,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.RemoteControl -> remoteControlContent(
@@ -835,6 +851,8 @@ private fun TvLazyListScope.epgContent(
     status: EpgSyncStatus,
     onUpdateNow: () -> Unit,
     firstRowFocus: FocusRequester,
+    publicEpgEnabled: Boolean,
+    onTogglePublicEpg: () -> Unit,
 ) {
     item {
         LiveRow(
@@ -873,6 +891,15 @@ private fun TvLazyListScope.epgContent(
                 )
             }
         }
+    }
+    // EPG_WRAPUP.md 2.1 - flipped live from the grey "Sources · Provider only" row. Takes effect
+    // on the next sync ("Update EPG now" above, or the daily one).
+    item {
+        LiveRow(
+            label = "Sources",
+            value = if (publicEpgEnabled) "Provider + public guides (EPGSHARE01)" else "Provider only",
+            onClick = onTogglePublicEpg,
+        )
     }
     items(SETTINGS_GREY_ROWS.getValue(SettingsCategory.Epg)) { GreyRowContent(it) }
 }
@@ -996,6 +1023,8 @@ private fun TvLazyListScope.appearanceContent(
     onToggle: () -> Unit,
     doubleHeightRow: Boolean,
     onToggleDoubleHeightRow: () -> Unit,
+    navAutoHideSeconds: Int,
+    onCycleNavAutoHide: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
@@ -1012,6 +1041,14 @@ private fun TvLazyListScope.appearanceContent(
             label = "Double-height focused row in guide",
             value = if (doubleHeightRow) "On" else "Off",
             onClick = onToggleDoubleHeightRow,
+        )
+    }
+    // EPG_WRAPUP.md 2.3 - flipped live from the grey "Hide nav strip when idle" row.
+    item {
+        LiveRow(
+            label = "Hide nav strip when idle",
+            value = if (navAutoHideSeconds == 0) "Off" else "After ${navAutoHideSeconds}s",
+            onClick = onCycleNavAutoHide,
         )
     }
     items(SETTINGS_GREY_ROWS[SettingsCategory.Appearance].orEmpty()) { GreyRowContent(it) }

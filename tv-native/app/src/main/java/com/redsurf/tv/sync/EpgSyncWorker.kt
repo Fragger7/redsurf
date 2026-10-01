@@ -5,7 +5,9 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.redsurf.tv.db.RedSurfDatabase
+import com.redsurf.tv.epg.PublicEpg
 import com.redsurf.tv.player.Catchup
+import com.redsurf.tv.settings.AppPreferences
 import com.redsurf.tv.network.IptvNetworkModule
 import com.redsurf.tv.parser.XmlTvParser
 import com.redsurf.tv.vod.XtreamApi
@@ -31,6 +33,17 @@ class EpgSyncWorker(
     appContext: Context,
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
+
+    private suspend fun supplementFromPublic(db: RedSurfDatabase, playlistId: String) {
+        if (!AppPreferences(applicationContext).publicEpgEnabled.value) {
+            db.runInTransaction { db.channelDao().clearFallbackIds(playlistId) }
+            return
+        }
+        val files = PublicEpg.filesFor(db.channelDao().distinctGroupNames(playlistId))
+        if (files.isEmpty()) return
+        PublicEpg.syncFiles(applicationContext, db, files)
+        PublicEpg.matchPlaylist(db, playlistId)
+    }
 
     private suspend fun refreshCatchup(db: RedSurfDatabase, playlistId: String, server: String, user: String, pass: String, userAgent: String?) {
         XtreamApi.getServerTimezone(server, user, pass, userAgent)?.let {
@@ -137,6 +150,10 @@ class EpgSyncWorker(
                 sqlite.execSQL("ANALYZE")
             }
                 .onFailure { Log.w(TAG, "epgSync -> ANALYZE failed for playlist $playlistId", it) }
+            // Public supplement (EPG_WRAPUP.md 2.1) - after the provider's own data, so matching
+            // knows which channels the provider actually covered. Best effort, like catch-up.
+            runCatching { supplementFromPublic(db, playlistId) }
+                .onFailure { Log.w(TAG, "public EPG supplement failed for playlist $playlistId", it) }
             EpgSyncState.markCompleted(applicationContext, playlistId, now)
             EpgSyncState.markAttempt(applicationContext, playlistId, null, now)
             Log.d(TAG, "epgSync -> done playlist=$playlistId inserted=$inserted")

@@ -60,6 +60,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.db.ChannelEntity
+import com.redsurf.tv.epg.PublicEpg
 import com.redsurf.tv.player.Catchup
 import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.ui.theme.Accent
@@ -272,7 +273,7 @@ fun EpgGridColumn(
                     items(count = channels.size, key = { channels[it].streamId }) { index ->
                         val channel = channels[index]
                         val isFocusTarget = if (targetIndex >= 0) index == targetIndex else index == 0
-                        val programmes = programsByChannel[channel.epgChannelId].orEmpty()
+                        val programmes = programsByChannel[channel.streamId].orEmpty()
                         val slots = remember(programmes, windowStart) {
                             slotsFor(programmes, windowStart, windowStart + WINDOW_MINUTES * MINUTE_MS)
                         }
@@ -590,17 +591,26 @@ private fun SlotCell(
                 val h = size.height
                 when (slot) {
                     is AiredSlot -> {
+                        // Public-supplement listings (EPG_WRAPUP.md 2.2; AGENTS.md's indicator
+                        // decision, 2026-09-15): a cool tint *and* a dashed start tick - never colour
+                        // alone, and never another red, which already means "focus/now".
+                        val supplemented = slot.programme.playlistId == PublicEpg.PLAYLIST_ID
+                        if (supplemented) {
+                            drawRoundRect(SupplementFill, Offset(0f, insetPx), Size(w, h - 2 * insetPx), CornerRadius(radiusPx))
+                        }
                         if (isCurrent) {
                             drawRoundRect(CurrentFill, Offset(0f, insetPx), Size(w, h - 2 * insetPx), CornerRadius(radiusPx))
                             drawRect(Accent, Offset.Zero, Size(barPx, h))
+                        } else if (supplemented) {
+                            drawLine(SupplementTick, Offset(tickStrokePx / 2f, tickInsetPx), Offset(tickStrokePx / 2f, h - tickInsetPx), tickStrokePx, pathEffect = gapDash)
                         } else {
                             drawLine(SlotTick, Offset(tickStrokePx / 2f, tickInsetPx), Offset(tickStrokePx / 2f, h - tickInsetPx), tickStrokePx)
                         }
                     }
                     is GapSlot -> {
-                        // Leave room for the "No listings" caption when this slot shows one
-                        // (first in its row and ≥45 min) - otherwise the dash runs through it.
-                        val dashStart = if (isFirstInRow && minutes >= 45f) labelClearancePx else 0f
+                        // Leave room for the "No listings" caption on the now-cell, which is
+                        // where it's drawn since gaps became half-hour cells.
+                        val dashStart = if (isNowCell) labelClearancePx else 0f
                         if (w > dashStart) drawLine(GapLine, Offset(dashStart, h / 2f), Offset(w, h / 2f), hairlinePx, pathEffect = gapDash)
                     }
                 }
@@ -764,6 +774,8 @@ private fun formatTimeRange(start: Long, end: Long): String =
 
 private val cellTimeFormat = java.text.SimpleDateFormat("h:mm", java.util.Locale.US)
 private val PlayingBlue = Color(0xFF3B82F6)
+private val SupplementFill = Color(0xFF38BDF8).copy(alpha = 0.07f)
+private val SupplementTick = Color(0xFF7DD3FC).copy(alpha = 0.8f)
 
 /** TiviMate's "this channel is playing" mark - a small blue play triangle (EPG_WRAPUP.md 1.6). */
 @Composable

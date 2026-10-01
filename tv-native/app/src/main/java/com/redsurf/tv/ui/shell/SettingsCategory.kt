@@ -48,14 +48,12 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
     // (2026-09-21). The real cadence today is daily (EpgSyncScheduler), so the planned default
     // here says so rather than promising a 12h picker that doesn't exist yet.
     SettingsCategory.Epg to listOf(
-        GreyRow("Sources", "Provider only"),
         GreyRow("Time offset", "0h"),
         GreyRow("Refresh every", "Daily"),
     ),
     // "Resolution badge" flipped live (BACKLOG_SWEEP.md #12) - now AppearanceContent's own toggle
     // row in SettingsScreen.kt, not a grey row here.
     SettingsCategory.Appearance to listOf(
-        GreyRow("Hide nav strip when idle", "Off"),
         GreyRow("Show full category name on hold", "Off"),
         GreyRow("Accent", "Red"),
     ),

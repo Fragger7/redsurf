@@ -196,9 +196,11 @@ fun PreviewPlayerHost(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
                 setShutterBackgroundColor(android.graphics.Color.BLACK)
+                VideoFrames.registerPreview(this)
             }
         },
         update = { view -> view.player = controller.exoPlayer },
+        onRelease = { VideoFrames.registerPreview(null) },
         modifier = modifier,
     )
 }

@@ -34,6 +34,10 @@ interface EpgDao {
      * any EPG at all, so a one-time sync stuck in WorkManager's exponential backoff after a
      * transient provider error (observed: a run of 502s pushed the retry out 4+ hours) gets
      * replaced with a fresh attempt instead of leaving the guide empty until the backoff expires. */
+    /** Public supplement matching (EPG_WRAPUP.md 2.1) - which channel ids actually have rows. */
+    @Query("SELECT DISTINCT channelEpgId FROM epg_programs WHERE playlistId = :playlistId")
+    fun distinctChannelIdsBlocking(playlistId: String): List<String>
+
     @Query("SELECT COUNT(*) FROM epg_programs WHERE playlistId = :playlistId")
     suspend fun countForPlaylist(playlistId: String): Int
 

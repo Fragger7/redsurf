@@ -4,6 +4,7 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import com.redsurf.tv.db.ChannelDao
+import com.redsurf.tv.epg.PublicEpg
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.EpgDao
 import com.redsurf.tv.db.EpgProgramEntity
@@ -166,6 +167,31 @@ class ChannelRepository(
     suspend fun channelsInGroup(playlistId: String, groupName: String): List<ChannelEntity> =
         if (isFavoritesGroup(groupName)) favoriteDao.allInPlaylist(playlistId)
         else channelDao.allInGroup(playlistId, groupName)
+
+    /**
+     * Programmes for a set of channels, keyed by `streamId`, provider first with the public
+     * supplement as per-channel fallback (EPG_WRAPUP.md 2.1; AGENTS.md "Resolution order", user
+     * decision 2026-09-15): a channel whose provider has *any* listing in the window uses only
+     * those; otherwise its `epgFallbackId`'s public listings. Two batched queries, not one per row.
+     */
+    suspend fun programmesFor(channels: List<ChannelEntity>, windowStart: Long, windowEnd: Long): Map<String, List<EpgProgramEntity>> {
+        if (channels.isEmpty()) return emptyMap()
+        val out = HashMap<String, List<EpgProgramEntity>>()
+        channels.groupBy { it.playlistId }.forEach { (playlistId, inPlaylist) ->
+            val providerIds = inPlaylist.mapNotNull { it.epgChannelId?.takeIf { id -> id.isNotBlank() } }.distinct()
+            val provider = if (providerIds.isEmpty()) emptyMap()
+            else epgDao.getProgramsForChannels(playlistId, providerIds, windowStart, windowEnd).groupBy { it.channelEpgId }
+            val needFallback = inPlaylist.filter { c -> provider[c.epgChannelId].isNullOrEmpty() && !c.epgFallbackId.isNullOrBlank() }
+            val fallbackIds = needFallback.mapNotNull { it.epgFallbackId }.distinct()
+            val public = if (fallbackIds.isEmpty()) emptyMap()
+            else epgDao.getProgramsForChannels(PublicEpg.PLAYLIST_ID, fallbackIds, windowStart, windowEnd).groupBy { it.channelEpgId }
+            inPlaylist.forEach { c ->
+                val own = provider[c.epgChannelId].orEmpty()
+                out[c.streamId] = own.ifEmpty { public[c.epgFallbackId].orEmpty() }
+            }
+        }
+        return out
+    }
 
     /** PHASE_3.md decision 4 - one batch EPG fetch for every channel row currently on screen,
      * bounded to the grid's own rolling time window. */

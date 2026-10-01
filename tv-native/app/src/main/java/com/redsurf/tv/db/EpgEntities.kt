@@ -73,6 +73,9 @@ data class ChannelEntity(
     // Xtream's `tv_archive`/`tv_archive_duration`; 0 = no catch-up. Added in v12 with a real
     // DEFAULT so existing rows migrate in place; refreshed by EpgSyncWorker.
     @ColumnInfo(defaultValue = "0") val tvArchiveDays: Int = 0,
+    // Public EPG supplement (EPG_WRAPUP.md 2.1, v13): the matched public channel id, used only when
+    // the provider has no listings for this channel. Null = no match / not needed.
+    val epgFallbackId: String? = null,
 )
 
 // PHASE_3.md decision 1 - playlistId scoping, the same cross-playlist collision fix already

@@ -1,6 +1,12 @@
 package com.redsurf.tv.ui.livetv
 
 import android.util.Log
+import com.redsurf.tv.player.VideoFrames
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -59,6 +65,7 @@ import com.redsurf.tv.data.favoriteKey
 import com.redsurf.tv.data.isFavoritesGroup
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.EpgProgramEntity
+import com.redsurf.tv.epg.PublicEpg
 import com.redsurf.tv.player.Catchup
 import com.redsurf.tv.player.PreviewPlayerHost
 import com.redsurf.tv.player.rememberPreviewPlayerController
@@ -234,13 +241,48 @@ fun LiveTvScreen(
     // autoPlayTrigger/claimInitialFocusTrigger both want "go straight to fullscreen," never the
     // two-step preview - they're "resume where I left off," not a fresh browse-and-select action
     // (PREVIEW.md point 5).
+    // Preview ↔ fullscreen grow/shrink (EPG_WRAPUP.md 2.4) - the frame-based version: a captured
+    // frame animates between the hero box and the full screen while the other player starts
+    // underneath. See player/VideoFrames.kt for why it isn't one continuous video yet.
+    var heroThumbBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var screenBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var transitionFrame by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var transitionGrow by remember { mutableStateOf(true) }
+    val transitionProgress = remember { androidx.compose.animation.core.Animatable(0f) }
+    val transitionAlpha = remember { androidx.compose.animation.core.Animatable(1f) }
+    val transitionContext = androidx.compose.ui.platform.LocalContext.current
+    val animationsOn = remember {
+        runCatching {
+            android.provider.Settings.Global.getFloat(
+                transitionContext.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
+            )
+        }.getOrDefault(1f) > 0f
+    }
+    LaunchedEffect(transitionFrame) {
+        if (transitionFrame == null) return@LaunchedEffect
+        transitionAlpha.snapTo(1f)
+        transitionProgress.snapTo(0f)
+        transitionProgress.animateTo(1f, tween(320, easing = FastOutSlowInEasing))
+        transitionAlpha.animateTo(0f, tween(220))
+        transitionFrame = null
+    }
+
     fun promoteToFullscreen(channel: ChannelEntity) {
-        onFocusedChannelChanged(channel)
-        previewUrl = channel.streamId
-        recordRecent(channel)
-        previewingChannel = null
-        isFullscreen = true
-        onFullscreenChanged(true)
+        val growFromPreview = animationsOn && isSameChannel(previewingChannel, channel) && heroThumbBounds != null
+        scope.launch {
+            // Grab before the preview is torn down; skipped (plain cut) if it fails.
+            val frame = if (growFromPreview) VideoFrames.grabPreview() else null
+            onFocusedChannelChanged(channel)
+            previewUrl = channel.streamId
+            recordRecent(channel)
+            previewingChannel = null
+            isFullscreen = true
+            onFullscreenChanged(true)
+            if (frame != null) {
+                transitionGrow = true
+                transitionFrame = frame.asImageBitmap()
+            }
+        }
     }
 
     // The grid's own onTuneChannel for its current-airing cell (LIVE_TV_GUIDE_MERGE.md - the
@@ -376,13 +418,8 @@ fun LiveTvScreen(
         Log.d("LiveTvScreen", "gridQuery group=$group channels=${channelsInGroup.size} tookMs=${System.currentTimeMillis() - queryStart}")
         gridChannels = channelsInGroup
         gridLoadedFor = group
-        val epgIds = channelsInGroup.mapNotNull { it.epgChannelId?.takeIf { id -> id.isNotBlank() } }.distinct()
-        gridPrograms = if (epgIds.isEmpty()) {
-            emptyMap()
-        } else {
-            viewModel.repository.programsForChannels(group.playlistId, epgIds, windowStart, windowEnd)
-                .groupBy { it.channelEpgId }
-        }
+        // Keyed by streamId now - provider listings, else the public supplement (EPG_WRAPUP.md 2.1).
+        gridPrograms = viewModel.repository.programmesFor(channelsInGroup, windowStart, windowEnd)
     }
 
     // LIVE_TV_GUIDE_MERGE.md M.3 - the hero band's own programme lookup for the *previewing*
@@ -393,11 +430,10 @@ fun LiveTvScreen(
     var heroProgrammes by remember { mutableStateOf<List<EpgProgramEntity>>(emptyList()) }
     LaunchedEffect(previewingChannel, windowStart) {
         val channel = previewingChannel
-        val epgId = channel?.epgChannelId?.takeIf { it.isNotBlank() }
-        heroProgrammes = if (channel == null || epgId == null) {
+        heroProgrammes = if (channel == null) {
             emptyList()
         } else {
-            viewModel.repository.programsForChannels(channel.playlistId, listOf(epgId), windowStart, windowEnd)
+            viewModel.repository.programmesFor(listOf(channel), windowStart, windowEnd)[channel.streamId].orEmpty()
         }
     }
     // G.3 - "browsing" detection for the hero band's collapsed state: a burst of cursor moves
@@ -437,10 +473,10 @@ fun LiveTvScreen(
         val slot = cursorSlot
         when {
             cursorChannel != null && slot is AiredSlot -> slot.programme
-            cursorChannel != null -> gridPrograms[cursorChannel?.epgChannelId].orEmpty()
+            cursorChannel != null -> gridPrograms[cursorChannel?.streamId].orEmpty()
                 .firstOrNull { now >= it.startTime && now < it.endTime }
             previewingChannel != null -> heroProgrammes.firstOrNull { now >= it.startTime && now < it.endTime }
-            else -> gridPrograms[focusedChannel?.epgChannelId].orEmpty()
+            else -> gridPrograms[focusedChannel?.streamId].orEmpty()
                 .firstOrNull { now >= it.startTime && now < it.endTime }
         }
     }
@@ -620,6 +656,7 @@ fun LiveTvScreen(
         modifier = Modifier
             .hiddenButComposed(visible)
             .fillMaxSize()
+            .onGloballyPositioned { screenBounds = it.boundsInRoot() }
             .onPreviewKeyEvent { event ->
                 val channel = contextMenuChannel ?: return@onPreviewKeyEvent false
                 val isDown = event.type == KeyEventType.KeyDown
@@ -660,6 +697,7 @@ fun LiveTvScreen(
                 },
                 isFavorite = isFavorite(heroChannel ?: previewingChannel),
                 previewOnSelect = previewOnSelect,
+                onThumbBounds = { heroThumbBounds = it },
                 modifier = Modifier.fillMaxWidth().padding(bottom = RedSurfDensity.ColumnGap),
             )
 
@@ -736,7 +774,8 @@ fun LiveTvScreen(
             PlayerScreen(
                 streamUrl = catchupUrl ?: previewUrl,
                 focusRequester = fullscreenFocus,
-                onExitFullscreen = {
+                onExitFullscreen = { scope.launch {
+                    val frame = if (animationsOn && heroThumbBounds != null) VideoFrames.grabFullscreen() else null
                     // TiviMate parity (user, 2026-09-30): an ordinary Back out of fullscreen keeps
                     // the channel playing in the hero's preview pane, focus on its guide row; OK
                     // on it goes straight back to fullscreen (it's the previewing channel).
@@ -745,7 +784,11 @@ fun LiveTvScreen(
                     previewingChannel = focusedChannel
                     isFullscreen = false
                     onFullscreenChanged(false)
-                },
+                    if (frame != null) {
+                        transitionGrow = false
+                        transitionFrame = frame.asImageBitmap()
+                    }
+                } },
                 // LIVE_TV_GUIDE_MERGE.md M.1 - the player's "Guide" quick-action used to switch
                 // AppShell's destination to a separate Guide pill; that pill no longer exists, and
                 // this screen's browse view already always shows the grid, so the action is just
@@ -782,6 +825,28 @@ fun LiveTvScreen(
                     playlists.firstOrNull { it.id == focusedChannel?.playlistId }?.userAgent
                 },
                 modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        // The grow/shrink overlay (EPG_WRAPUP.md 2.4) - drawn above the player, never focusable.
+        val frame = transitionFrame
+        val hero = heroThumbBounds
+        val screen = screenBounds
+        if (frame != null && hero != null && screen != null) {
+            val heroLocal = hero.translate(-screen.left, -screen.top)
+            val full = androidx.compose.ui.geometry.Rect(0f, 0f, screen.width, screen.height)
+            val p = transitionProgress.value
+            val rect = if (transitionGrow) androidx.compose.ui.geometry.lerp(heroLocal, full, p)
+            else androidx.compose.ui.geometry.lerp(full, heroLocal, p)
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.foundation.Image(
+                bitmap = frame,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .offset { androidx.compose.ui.unit.IntOffset(rect.left.toInt(), rect.top.toInt()) }
+                    .size(with(density) { rect.width.toDp() }, with(density) { rect.height.toDp() })
+                    .graphicsLayer { alpha = transitionAlpha.value },
             )
         }
     }
@@ -824,6 +889,7 @@ private fun HeroPreviewBand(
     // EPG_WRAPUP.md 1.1 (user report, 2026-09-30) - the hints used to promise a preview even with
     // "Preview channel on select" off, where one OK goes straight to fullscreen.
     previewOnSelect: Boolean = true,
+    onThumbBounds: (androidx.compose.ui.geometry.Rect) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val height by animateDpAsState(
@@ -838,7 +904,7 @@ private fun HeroPreviewBand(
             .background(Surface),
     ) {
         if (expanded) {
-            ExpandedHero(focusedChannel, previewingChannel, programme, now, playlistUserAgent, isFavorite, previewOnSelect)
+            ExpandedHero(focusedChannel, previewingChannel, programme, now, playlistUserAgent, isFavorite, previewOnSelect, onThumbBounds)
         } else {
             CollapsedHero(groupLabel, groupCount, now, previewOnSelect)
         }
@@ -887,6 +953,7 @@ private fun ExpandedHero(
     playlistUserAgent: String?,
     isFavorite: Boolean,
     previewOnSelect: Boolean,
+    onThumbBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
 ) {
     // Text follows the cursor (or the OK'd channel), video follows what's previewing - TiviMate's
     // own split: the thumbnail is clearly "playing," the text is clearly "what you're looking at."
@@ -900,6 +967,7 @@ private fun ExpandedHero(
             modifier = Modifier
                 .fillMaxHeight()
                 .aspectRatio(16f / 9f)
+                .onGloballyPositioned { onThumbBounds(it.boundsInRoot()) }
                 .clip(RoundedCornerShape(RedSurfDensity.PanelRadius))
                 .background(SurfaceRaised),
             contentAlignment = Alignment.Center,
@@ -983,6 +1051,10 @@ private fun ExpandedHero(
                     overflow = TextOverflow.Ellipsis,
                 )
                 ProgrammeProgressRow(programme, now)
+                // Where this listing came from, when it isn't the provider (EPG_WRAPUP.md 2.2).
+                if (programme.playlistId == PublicEpg.PLAYLIST_ID) {
+                    Text("Guide: ${PublicEpg.SOURCE_NAME} (public)", style = RedSurfType.gridMeta, color = TextSecondary, maxLines = 1)
+                }
                 Text(
                     programme.description.ifBlank { "No description available." },
                     style = RedSurfType.rowSecondary,

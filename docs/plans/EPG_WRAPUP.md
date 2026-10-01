@@ -43,8 +43,8 @@ Failures fixed in batch, then re-swept. Ends with the user's short feel-check li
 | Sprint | State |
 |---|---|
 | Dev 1 | built 2026-09-30 (v0.39.0): all 7 items, 35/35 unit tests; device smoke only - real checks in Integration |
-| Dev 2 | in progress |
-| Integration | not started |
+| Dev 2 | built 2026-09-30 (v0.40.0): 2.1-2.4; unit-tested; device smoke only |
+| Integration | next |
 
 ## Dev sprint 1 - as built (2026-09-30)
 
@@ -63,3 +63,22 @@ Failures fixed in batch, then re-swept. Ends with the user's short feel-check li
 - 1.6 Blue ▶ on the previewing channel's row; history glyph on catch-up channels.
 - 1.7 Focused row 2x tall (two-line name, programme times) - Settings → Appearance →
   "Double-height focused row in guide", default On.
+
+## Dev sprint 2 - as built (2026-09-30)
+
+- 2.1 `epg/PublicEpg.kt`: EPGSHARE01 US2 + US_SPORTS1 + UK1, picked from category prefixes; stored
+  once under pseudo-playlist `public:epgshare01`; matched by normalised provider EPG id or channel
+  name, exact-normalised only; `channels.epgFallbackId` (Room v12→v13, additive). Runs at the end of
+  each provider sync (public files refreshed at most every 20h). Grid/hero use provider listings,
+  else the fallback (`ChannelRepository.programmesFor`). The **measured match count** is logged as
+  `publicEpg match -> ... candidates=N matched=M` - that number is Phase A's answer. Settings → EPG
+  → Sources (default "Provider + public guides"). 56MB US-locals file skipped.
+- 2.2 Supplemented programmes: cool tint + **dashed** start tick (not colour alone); hero shows
+  "Guide: EPGSHARE01 (public)". Not built: per-playlist toggle (needs the playlist detail page),
+  Manage Sources catalog, custom XMLTV URL, priority list - Phase B proper, still on record.
+- 2.3 Nav-strip auto-hide: collapses after 3/5/10s idle (default 5s, Settings → Appearance), stays
+  composed/focusable, revealed only when focus reaches it.
+- 2.4 Grow/shrink, **frame-based**: PixelCopy of the playing view animates between the hero box and
+  full screen (320ms) while the other player starts; skipped when animations are off or a frame
+  can't be grabbed. Not the true single-persistent-player version - that's an architecture reversal
+  of the two-player design, logged as follow-up (needs its own design pass).
