@@ -63,6 +63,10 @@ import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.tv.foundation.lazy.list.rememberTvLazyListState
+import androidx.tv.foundation.lazy.list.TvLazyListState
 
 private const val TAG = "SettingsScreen"
 
@@ -133,6 +137,13 @@ fun SettingsScreen(
     // fullscreen-exit bug (Finding 5), just never reported live because a 9-row rail composes fast.
     // Now permanently composed once reached; `visible` swaps real layout for zero size instead.
     visible: Boolean = true,
+    // UP from the rail's top row: AppShell lands focus on the Settings pill itself (the canonical
+    // "current destination's pill", same as Live TV's Categories) - default spatial search
+    // picked whichever pill sat nearest, which is "Home" in this layout (found live 2026-09-30).
+    onEscapeUp: () -> Unit = {},
+    // DOWN from the Settings pill (AppShell sends a new nonce): land on the selected category's
+    // rail row - spatial search dropped into the pane, which sits directly under that pill.
+    railEntryRequest: Long = 0L,
 ) {
     val railFocus = remember { FocusRequester() }
     val paneFirstRowFocus = remember { FocusRequester() }
@@ -147,12 +158,32 @@ fun SettingsScreen(
     // *value* changes, so this fires exactly on the false->true edge (a genuine re-entry) and does
     // nothing on true->false (leaving) - the same "key on the event" idiom `LiveTvScreen`'s own
     // grid-entry claim uses (FOCUS_MODEL.md rule 5). Bounded retry, not a single attempt (rule 3).
-    LaunchedEffect(visible) {
-        if (!visible) return@LaunchedEffect
-        repeat(10) {
+    // 2026-09-30: success = the rail actually holds focus afterwards, not "requestFocus() didn't
+    // throw" - found live that choosing the Settings pill left focus on the pill (the request on
+    // a just-shown, not-yet-placed rail silently did nothing and the old check called it done).
+    val railListState = rememberTvLazyListState()
+    var railHasFocus by remember { mutableStateOf(false) }
+    suspend fun claimRail() {
+        repeat(10) { attempt ->
             delay(100)
-            if (runCatching { railFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+            val index = SettingsCategory.entries.indexOf(selectedCategory)
+            if (railListState.layoutInfo.visibleItemsInfo.none { it.index == index }) {
+                runCatching { railListState.scrollToItem(index) }
+            }
+            runCatching { railFocus.requestFocus() }
+            delay(40)
+            if (railHasFocus) {
+                Log.d(TAG, "settings entry focus -> rail $selectedCategory attempt=$attempt")
+                return
+            }
         }
+        Log.w(TAG, "settings entry focus gave up")
+    }
+    LaunchedEffect(visible) {
+        if (visible) claimRail()
+    }
+    LaunchedEffect(railEntryRequest) {
+        if (railEntryRequest != 0L && visible) claimRail()
     }
 
     LaunchedEffect(selectedCategory) {
@@ -214,10 +245,15 @@ fun SettingsScreen(
             // #3, found live 2026-09-14/15) - the pane side of this same row was never guarded and
             // already let UP escape to the Settings NavStrip pill correctly; the rail side blocked
             // it for no functional reason (there's nothing above "General" to protect), so the
-            // asymmetry was just a bug, not an intentional guard. Dropped.
+            // asymmetry was just a bug, not an intentional guard. Dropped. **Revised 2026-09-30:**
+            // UP there now goes explicitly to the Settings pill via [onEscapeUp] - the default
+            // escape did work, but landed on the spatially-nearest pill ("Home"), not Settings.
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown || focusInPane) return@onPreviewKeyEvent false
                 when (event.key) {
+                    Key.DirectionUp -> (selectedCategory == SettingsCategory.entries.first()).also { atTop ->
+                        if (atTop) onEscapeUp()
+                    }
                     Key.DirectionDown -> selectedCategory == SettingsCategory.entries.last()
                     Key.DirectionRight -> !hasLiveContent
                     else -> false
@@ -228,6 +264,8 @@ fun SettingsScreen(
             selected = selectedCategory,
             onFocused = onCategorySelected,
             railFocus = railFocus,
+            listState = railListState,
+            onRailFocusChanged = { railHasFocus = it },
             modifier = Modifier.weight(1f),
         )
         Spacer(modifier = Modifier.width(20.dp))
@@ -280,9 +318,41 @@ private fun CategoryRail(
     selected: SettingsCategory,
     onFocused: (SettingsCategory) -> Unit,
     railFocus: FocusRequester,
+    listState: TvLazyListState,
+    onRailFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var hadFocus by remember { mutableStateOf(false) }
+    // 2026-09-30 rebuild of the BACKLOG_SWEEP.md #5 redirect, found regressed live: LEFT from a
+    // pane landed on the spatially-nearest rail row. Two flaws in the old version: (1) the row
+    // focus landed on *selected itself* the instant it got focus (focus selects), so the pane
+    // switched away from the category you were in; (2) the redirect called requestFocus() from
+    // inside the focus-change callback and never checked it landed (FOCUS_MODEL.md rule 3
+    // addendum). Now: the row that receives focus *from outside the rail* doesn't select itself;
+    // the redirect runs after the focus change, scrolls the target in, and retries until the
+    // selected row really reports focus. [focusedRow] is null whenever the rail doesn't hold
+    // focus, which is what identifies "arriving from outside" without depending on whether the
+    // row's or the rail's own onFocusChanged fires first.
+    var focusedRow by remember { mutableStateOf<SettingsCategory?>(null) }
+    val scope = rememberCoroutineScope()
+    fun redirectToSelected(landed: SettingsCategory) {
+        scope.launch {
+            repeat(10) { attempt ->
+                if (focusedRow == selected) {
+                    Log.d(TAG, "rail entry landed on $selected (via $landed) attempt=$attempt")
+                    return@launch
+                }
+                if (focusedRow == null) return@launch // focus left the rail meanwhile
+                val index = SettingsCategory.entries.indexOf(selected)
+                if (listState.layoutInfo.visibleItemsInfo.none { it.index == index }) {
+                    runCatching { listState.scrollToItem(index) }
+                }
+                delay(30)
+                runCatching { railFocus.requestFocus() }
+                delay(40)
+            }
+            Log.w(TAG, "rail entry redirect gave up target=$selected focused=$focusedRow")
+        }
+    }
 
     Column(
         modifier = modifier
@@ -290,10 +360,8 @@ private fun CategoryRail(
             .background(SurfaceColor, RoundedCornerShape(16.dp))
             .padding(horizontal = 12.dp, vertical = 14.dp)
             .onFocusChanged { state ->
-                if (state.hasFocus && !hadFocus) {
-                    runCatching { railFocus.requestFocus() }
-                }
-                hadFocus = state.hasFocus
+                if (!state.hasFocus) focusedRow = null
+                onRailFocusChanged(state.hasFocus)
             },
     ) {
         Text(
@@ -307,12 +375,20 @@ private fun CategoryRail(
         // was clipped by the card's fixed height with no way to bring it into view. Every other
         // real list in the app (GroupsColumn, ChannelsColumn, SettingsPane itself) already uses
         // TvLazyColumn specifically because it scrolls to keep focus on-screen for free.
-        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        TvLazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             items(SettingsCategory.entries, key = { it.name }) { category ->
                 CategoryRow(
                     category = category,
                     selected = category == selected,
-                    onFocused = { onFocused(category) },
+                    onFocused = {
+                        val enteringFromOutside = focusedRow == null
+                        focusedRow = category
+                        if (enteringFromOutside && category != selected) {
+                            redirectToSelected(category)
+                        } else {
+                            onFocused(category)
+                        }
+                    },
                     modifier = if (category == selected) Modifier.focusRequester(railFocus) else Modifier,
                 )
             }

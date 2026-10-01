@@ -158,6 +158,14 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // Real "did the pill actually get focus" signal for the Nav-Strip jump - requestFocus() not
     // throwing isn't proof (a cancelled request doesn't throw).
     var navHasFocus by remember { mutableStateOf(false) }
+    // DOWN from the strip while on Settings - see SettingsScreen's railEntryRequest.
+    var settingsRailEntryRequest by remember { mutableStateOf(0L) }
+    // Escape-to-strip lands on the *current destination's* pill (AGENTS.md backlog, decided
+    // 2026-09-15: fix the missing concept once, not each spatial quirk): when UP carries focus
+    // from content into the strip, default search picks the nearest pill (Home from Settings'
+    // rail, Search from its pane - found live 2026-09-30). The last key seen decides it, so
+    // LEFT/RIGHT along the strip itself is never redirected.
+    var lastKeyWasUp by remember { mutableStateOf(false) }
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     // "Now Playing" / "Return to fullscreen" mean the last channel actually *played* (user,
     // 2026-09-22), not whatever the D-pad last rested on - the newest recent_channels row is
@@ -383,6 +391,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         // has its own working Back behaviour, left untouched here.
         .onPreviewKeyEvent { event ->
             val isDown = event.type == KeyEventType.KeyDown
+            if (isDown) lastKeyWasUp = event.key == Key.DirectionUp
             if (event.key == Key.Back) {
                 if (isDown && event.nativeKeyEvent.repeatCount == 0) backHeldLong = false
                 if (isDown && event.nativeKeyEvent.isLongPress && !backHeldLong) {
@@ -424,7 +433,13 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     return@onPreviewKeyEvent true
                 }
             }
-            if (!teleportMenuOpen) return@onPreviewKeyEvent false
+            if (!teleportMenuOpen) {
+                if (navHasFocus && destination == NavDestination.Settings && event.key == Key.DirectionDown) {
+                    if (isDown) settingsRailEntryRequest = System.nanoTime()
+                    return@onPreviewKeyEvent true
+                }
+                return@onPreviewKeyEvent false
+            }
             // Menu open: every key is the menu's (nothing reaches the screen underneath, whose
             // focus stays exactly where it was).
             when (event.key) {
@@ -458,7 +473,18 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     current = destination,
                     onSelect = { destination = it },
                     focusRequesters = navPillFocusRequesters,
-                    modifier = Modifier.onFocusChanged { navHasFocus = it.hasFocus },
+                    modifier = Modifier.onFocusChanged {
+                        val arrived = it.hasFocus && !navHasFocus
+                        navHasFocus = it.hasFocus
+                        if (arrived && lastKeyWasUp) {
+                            // After the focus change settles, never from inside it (FOCUS_MODEL.md
+                            // rule 3 addendum).
+                            scope.launch {
+                                delay(16)
+                                if (navHasFocus) runCatching { navPillFocusRequesters[destination]?.requestFocus() }
+                            }
+                        }
+                    },
                 )
                 Spacer(modifier = Modifier.height(20.dp))
             }
@@ -507,6 +533,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     if (selectedSettingsCategory == SettingsCategory.Epg) viewModel.refreshEpgSyncStatus()
                 }
                 SettingsScreen(
+                    onEscapeUp = { runCatching { navPillFocusRequesters[NavDestination.Settings]?.requestFocus() } },
+                    railEntryRequest = settingsRailEntryRequest,
                     selectedCategory = selectedSettingsCategory,
                     onCategorySelected = { selectedSettingsCategory = it },
                     updateStatus = updateStatus,

@@ -2,6 +2,19 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-30 (later) — Settings rail regression + escape-to-pill, v0.38.1
+
+Root cause (both halves were FOCUS_MODEL.md rule 3's "a cancelled/no-op requestFocus() doesn't
+throw"): Settings' entry claim counted a silent no-op as success, and the rail's re-entry redirect
+ran *inside* the focus-change callback while the spatially-landed row had already selected itself.
+Rebuilt: a row receiving focus from outside the rail no longer selects itself; the redirect runs
+after the change, scrolls the target in, and retries until the selected row reports focus. Plus
+the long-standing "escape lands on the nearest pill" class (AGENTS.md backlog, 2026-09-15) fixed
+once in AppShell: focus arriving in the strip via UP is moved to the current destination's pill;
+DOWN from the Settings pill enters the rail at the selected category. Verified on device: 11
+checks (rail LEFT/Back incl. About, pill OK/DOWN entry, UP from rail top / page / Home / guide,
+LEFT along the strip unaffected, Remove→Cancel→rapid UP/LEFT crash battery, 0 FATALs).
+
 ## 2026-09-29/30 — Teleport finish + Favorites, v0.38.0
 
 Full account: `TELEPORT_MENU.md` → "Teleport finish - what happened". Short version: the menu's

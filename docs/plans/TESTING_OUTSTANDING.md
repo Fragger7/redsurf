@@ -43,9 +43,12 @@ Machine-verified on the TV already (see the brief); these are the real-remote ch
 4. Does anything feel less sluggish, especially right after launch while EPG is updating?
 (NFL GAME 04 on Random Score was left as a favorite so there's a Favorites category to look at.)
 
-**Known regression, found 2026-09-30, not fixed yet:** Settings - LEFT from a pane lands on
-"General" instead of the category you were in; DOWN from the Settings pill lands on whichever rail
-row is nearest.
+**Settings rail regression - fixed v0.38.1 (2026-09-30), verified on device:** LEFT/Back from a
+page returns to the category you were in (incl. About, which needs a scroll); choosing the Settings
+pill and DOWN from it land on the selected category; UP out of any screen's content now lands on
+*that screen's* pill (was: nearest pill - Home from Settings' rail, Search from its page, Movies
+from Home). 5. Worth a feel-check with the real remote: does moving between the menu bar and
+Settings / Live TV / Home always land where you expect?
 
 ## A. The Lattice - EPG grid redesign (v0.37.x) - `EPG_GRID_REDESIGN.md`
 

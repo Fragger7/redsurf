@@ -176,8 +176,8 @@ merging.
   v0.37.13) closed; the Settings Playlists-pane crash fixed for real in v0.37.14-16 (hidden screens
   were 0dp-but-placed and stayed in focus search - `Modifier.hiddenButComposed`, `FOCUS_MODEL.md`
   rule 4). Device is on the genuine CI v0.37.16 (versionCode 138). **Update 2026-09-30:
-  Teleport Menu finished + per-playlist Favorites built, v0.38.0 (`TELEPORT_MENU.md`); device on
-  v0.38.0/139. Next session: `docs/plans/SEQUENCING.md`'s RESUME HERE.**
+  Teleport Menu finished + per-playlist Favorites built, v0.38.0 (`TELEPORT_MENU.md`); Settings
+  rail regression + "escape lands on the nearest pill" fixed, v0.38.1; device on v0.38.1/140. Next session: `docs/plans/SEQUENCING.md`'s RESUME HERE.**
   Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud
@@ -674,7 +674,9 @@ before the report comes in, not after.
   top row isn't** - **no longer backlog: built and machine-swept, BACKLOG_SWEEP.md #3, 2026-09-15.**
   Dropped the `DirectionUp`/rail-top-row branch of `SettingsScreen.kt`'s `onPreviewKeyEvent` guard;
   UP now escapes via default `moveFocus`, same as the pane side always did.
-  **The "lands on Home, not Settings" finding this swept up - user decided, 2026-09-15, don't
+  **Fixed 2026-09-30 (v0.38.1):** AppShell now moves focus arriving in the strip via UP to the
+  current destination's pill, for every screen. History: **The "lands on Home, not Settings"
+  finding this swept up - user decided, 2026-09-15, don't
   patch this one spot, fix the actual missing concept:** every escape-to-NavStrip in the app today
   (this one, and `PlaceholderScreen`'s own RIGHT-from-Home landing on Guide instead of Live TV -
   found live the same day) is really the same bug - Compose's default spatial search picks
