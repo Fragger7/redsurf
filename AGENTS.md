@@ -177,7 +177,7 @@ merging.
   were 0dp-but-placed and stayed in focus search - `Modifier.hiddenButComposed`, `FOCUS_MODEL.md`
   rule 4). Device is on the genuine CI v0.37.16 (versionCode 138). **Update 2026-09-30:
   Teleport Menu finished + per-playlist Favorites built, v0.38.0 (`TELEPORT_MENU.md`); Settings
-  rail regression + "escape lands on the nearest pill" fixed, v0.38.1; device on v0.38.1/140. Next session: `docs/plans/SEQUENCING.md`'s RESUME HERE.**
+  rail regression + "escape lands on the nearest pill" fixed, v0.38.1; device on v0.38.2/141 (TiviMate-parity Back from fullscreen, `TESTING_OUTSTANDING.md` J). Next session: `docs/plans/SEQUENCING.md`'s RESUME HERE.**
   Two deliberate reorderings from the original plan:
   - *Cloud Sync before VOD.* It's the differentiator (the "credential locker" in
     `PRODUCT_VISION.md`), and it changes the data model - `playlists` becomes a cache of cloud

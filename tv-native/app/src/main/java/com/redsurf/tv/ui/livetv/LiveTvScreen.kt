@@ -171,6 +171,9 @@ fun LiveTvScreen(
     // claim, because the Teleport action that asked for this places focus itself. A nonce - any
     // new value is a new request; 0 means none.
     exitFullscreenRequest: Long = 0L,
+    // TiviMate's long-press Back in fullscreen (user, 2026-09-30, Teleport setting off): back to
+    // the playing channel's guide row with playback *stopped* - OK starts it again. Nonce, 0 = none.
+    exitFullscreenStoppedRequest: Long = 0L,
 ) {
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     // PLAYER_ENGINEERING_BRIEF.md §6/§9 - resolved here, reactively, well before any fullscreen
@@ -218,6 +221,13 @@ fun LiveTvScreen(
     // state already does here (this whole composable is torn down and recomposed fresh on
     // destination change).
     var previewingChannel by remember { mutableStateOf<ChannelEntity?>(null) }
+    // Leaving Live TV stops the preview (PREVIEW.md point 6; the user, 2026-09-22: play "unless
+    // the user navigates away"). Since Sprint 1 this screen stays composed while hidden, so the
+    // plain-`remember` reset described above no longer happened on its own - found live
+    // 2026-09-30: the preview's audio kept playing behind Settings.
+    LaunchedEffect(visible) {
+        if (!visible) previewingChannel = null
+    }
 
     // autoPlayTrigger/claimInitialFocusTrigger both want "go straight to fullscreen," never the
     // two-step preview - they're "resume where I left off," not a fresh browse-and-select action
@@ -496,6 +506,14 @@ fun LiveTvScreen(
         }
     }
 
+    LaunchedEffect(exitFullscreenStoppedRequest) {
+        if (exitFullscreenStoppedRequest != 0L && isFullscreen) {
+            Log.d("LiveTvScreen", "fullscreen -> browse (stopped)")
+            isFullscreen = false
+            onFullscreenChanged(false)
+        }
+    }
+
     LaunchedEffect(exitFullscreenRequest) {
         if (exitFullscreenRequest != 0L && isFullscreen) {
             skipNextExitClaim = true
@@ -693,6 +711,12 @@ fun LiveTvScreen(
                 streamUrl = previewUrl,
                 focusRequester = fullscreenFocus,
                 onExitFullscreen = {
+                    // TiviMate parity (user, 2026-09-30): an ordinary Back out of fullscreen keeps
+                    // the channel playing in the hero's preview pane, focus on its guide row; OK
+                    // on it goes straight back to fullscreen (it's the previewing channel).
+                    // Long-press Back is the "stop" variant - [exitFullscreenStoppedRequest].
+                    Log.d("LiveTvScreen", "fullscreen -> browse (keep playing in preview)")
+                    previewingChannel = focusedChannel
                     isFullscreen = false
                     onFullscreenChanged(false)
                 },

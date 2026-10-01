@@ -2,6 +2,19 @@
 
 One entry per module sprint (`docs/plans/WORKFLOW.md` "Sprint mode"). Newest first.
 
+## 2026-09-30 (evening) — Back from fullscreen, TiviMate parity, v0.38.2
+
+User described TiviMate: short Back from fullscreen returns to the playing channel *still playing*
+in the preview; long-press returns to it *stopped*. Built: short Back sets the preview to the
+playing channel; long-press (Teleport off) exits stopped; Teleport on keeps opening the menu (user
+decision - Now Playing gives the stopped return). Also fixed: the preview kept playing behind other
+screens since Sprint 1 (LiveTvScreen stays composed) - leaving Live TV now stops it. Verified:
+decoder configured + RedSurf AudioTrack `state:started` after short Back; no RedSurf audio after
+long-press and after leaving to Home; one OK from the playing preview → fullscreen READY in ~2s.
+**deviated:** stopped sending keys mid-sweep when SmartTube appeared in the foreground (my own
+script likely exited the app, but the user may have been using the TV); the Teleport setting was
+left OFF and the guide→Categories Back-while-previewing check is unverified.
+
 ## 2026-09-30 (later) — Settings rail regression + escape-to-pill, v0.38.1
 
 Root cause (both halves were FOCUS_MODEL.md rule 3's "a cancelled/no-op requestFocus() doesn't

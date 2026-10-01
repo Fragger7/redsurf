@@ -30,6 +30,20 @@ Categories UP escaping to the nav strip early (fixed Sprint 2 #24). Section D fe
 true top), #25 (focus lands on "now"), overall sluggishness after Sprint 1, and the 2026-09-28
 Settings crash fix.
 
+## J. Back from fullscreen, TiviMate parity (v0.38.2, 2026-09-30)
+
+User-described TiviMate behavior, now built and device-verified (decoder + audio-state checks, since
+this device's screenshots can't capture video surfaces):
+- **Short Back** → the channel's guide row, *still playing* in the preview pane; one OK → fullscreen.
+- **Long-press Back, Teleport setting off** → the channel's guide row, playback *stopped*.
+- **Long-press Back, Teleport setting on** → the Teleport menu (user decision); its Now Playing row
+  gives the same stopped return.
+- **Leaving Live TV stops the preview** (it had kept playing behind Settings since Sprint 1).
+Check with the remote: does each feel like TiviMate? **Not verified:** the first Back from the guide
+while a preview plays should go to Categories - I had to stop sending keys before re-checking.
+**⚠ Your Teleport Menu setting is OFF** (turned off for this test) - Settings → Remote control →
+Teleport Menu to turn it back on.
+
 ## I. Teleport finish + Favorites (v0.38.0, 2026-09-30) - `TELEPORT_MENU.md`
 
 Machine-verified on the TV already (see the brief); these are the real-remote checks only:

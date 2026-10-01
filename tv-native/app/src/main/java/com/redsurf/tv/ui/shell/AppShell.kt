@@ -151,6 +151,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // without the usual return-to-grid claim (the action places focus itself).
     var liveTvGroupsFocusRequest by remember { mutableStateOf<GroupsFocusRequest?>(null) }
     var liveTvExitFullscreenRequest by remember { mutableStateOf(0L) }
+    var liveTvExitFullscreenStoppedRequest by remember { mutableStateOf(0L) }
     // A Teleport jump that switches `destination` to Live TV places focus itself - the generic
     // "entered Live TV, reclaim the grid" effect below must sit that one out, or it steals focus
     // back from the Categories row the jump just landed on.
@@ -383,12 +384,9 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         // qualifying repeat tick, and that same press's own release) - every ordinary short Back
         // press passes through completely untouched.
         //
-        // Deliberately not intercepted while already `liveTvFullscreen` (scope decision, not an
-        // oversight): `NavStrip` isn't even composed then (hidden during fullscreen, above), so
-        // a pill-focus jump would silently fail, and there's no clean single-press way to also
-        // exit fullscreen first without fighting `PlayerScreen`'s own well-established Back-peel
-        // discipline. This was asked for "navigating any menus" - the fullscreen player already
-        // has its own working Back behaviour, left untouched here.
+        // In fullscreen (since 2026-09-29/30): with Teleport on, the long-press opens the menu;
+        // with it off, it's TiviMate's own long-press - leave fullscreen with playback stopped.
+        // A short Back is never touched here - PlayerScreen's Back-peel owns it.
         .onPreviewKeyEvent { event ->
             val isDown = event.type == KeyEventType.KeyDown
             if (isDown) lastKeyWasUp = event.key == Key.DirectionUp
@@ -411,9 +409,14 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         teleportMenuOpen = true
                         return@onPreviewKeyEvent true
                     }
-                    // Setting off: fullscreen keeps PlayerScreen's own Back behaviour, untouched.
-                    if (liveTvFullscreen) return@onPreviewKeyEvent false
                     backHeldLong = true
+                    if (liveTvFullscreen) {
+                        // Setting off, fullscreen: TiviMate's own long-press (user, 2026-09-30) -
+                        // back to the channel's guide row, playback stopped; OK replays it. (A
+                        // short Back keeps it playing in the preview instead - LiveTvScreen.)
+                        liveTvExitFullscreenStoppedRequest = System.nanoTime()
+                        return@onPreviewKeyEvent true
+                    }
                     if (destination == NavDestination.LiveTv && liveTvFocusedChannel != null) {
                         // TiviMate parity (user request, 2026-09-18): on Live TV, with a channel
                         // already focused/previewed, jump straight into it - reusing the exact
@@ -514,6 +517,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     groupsFocusRequest = liveTvGroupsFocusRequest,
                     onGroupsFocusRequestConsumed = { liveTvGroupsFocusRequest = null },
                     exitFullscreenRequest = liveTvExitFullscreenRequest,
+                    exitFullscreenStoppedRequest = liveTvExitFullscreenStoppedRequest,
                     onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
                     onEscapeUp = { runCatching { navPillFocusRequesters[NavDestination.LiveTv]?.requestFocus() } },
                 )
