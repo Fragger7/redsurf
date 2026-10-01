@@ -2,7 +2,7 @@
 
 **⏸ RESUME HERE (updated 2026-09-30).** Teleport Menu track **done** (v0.38.0) plus per-playlist
 Favorites, and an EPG-sync write-starvation fix - see `TELEPORT_MENU.md`. Device is on v0.38.2
-(versionCode 141, verify with `gh release list` + `dumpsys package`). **Next: the user's real-remote
+(versionCode 141, verify with `gh release list` + `dumpsys package`). **Next: `TESTING_OUTSTANDING.md` section K first (two user-reported EPG bugs), then the user's real-remote
 checks (`TESTING_OUTSTANDING.md` section I, plus the four rechecks in its top note), (the Settings
 rail regression logged there is fixed, v0.38.1), then Sprint 3** (double-row EPG rows + play/catch-up icons),
 Sprint 4 (public EPG supplement), Sprint 5 (nav-strip auto-hide), Sprint 6 (preview↔fullscreen

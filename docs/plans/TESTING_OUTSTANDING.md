@@ -30,6 +30,24 @@ Categories UP escaping to the nav strip early (fixed Sprint 2 #24). Section D fe
 true top), #25 (focus lands on "now"), overall sluggishness after Sprint 1, and the 2026-09-28
 Settings crash fix.
 
+## K. User-reported EPG bugs (2026-09-30) - test and fix FIRST next session
+
+1. **"One OK goes straight to fullscreen, no preview."** Likely cause (code read, not yet
+   confirmed on device): the device's Settings → Playback → "Preview channel on select" is **off**
+   (noted off during Sprint 2), and the guide's hints ("Press OK to preview…") are hard-coded and
+   ignore that setting, so the screen promises a preview that the setting has disabled. Confirm the
+   setting on the device; either way fix the hints to follow the setting. If it's ON and still
+   skips preview, it's a real regression - check `LiveTvScreen.openChannel`.
+2. **"Can't scroll forward in time on a channel - stuck on the first cell."** Not yet reproduced.
+   A channel with no listings is one "No listings" cell spanning the whole window, so RIGHT has
+   nowhere to go - check a channel *with* listings (Faraz Strong US| FOX / US| CW) before calling
+   it a regression. The user confirmed forward scrolling worked on 2026-09-22 (A3), so if it's
+   broken on a listed channel, suspect changes since then (Sprint 2's shared-scroll reset,
+   2026-09-29's grid scroll-to-target / Favorites re-query). Also decide: should a no-listings row
+   still step through half-hour blocks so the cursor can move (TiviMate shows empty slots)?
+3. **Backward in time / catch-up** - not built (the window starts at the current half-hour).
+   Already planned with Sprint 3 (catch-up icon) / catch-up playback brief; user calls it essential.
+
 ## J. Back from fullscreen, TiviMate parity (v0.38.2, 2026-09-30)
 
 User-described TiviMate behavior, now built and device-verified (decoder + audio-state checks, since
