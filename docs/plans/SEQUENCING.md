@@ -1,12 +1,11 @@
 # Execution sequencing — post-Lattice, 2026-09-22
 
-**⏸ RESUME HERE (updated 2026-09-30).** Teleport Menu track **done** (v0.38.0) plus per-playlist
-Favorites, and an EPG-sync write-starvation fix - see `TELEPORT_MENU.md`. Device is on v0.38.2
-(versionCode 141, verify with `gh release list` + `dumpsys package`). **Next: `TESTING_OUTSTANDING.md` section K first (two user-reported EPG bugs), then the user's real-remote
-checks (`TESTING_OUTSTANDING.md` section I, plus the four rechecks in its top note), (the Settings
-rail regression logged there is fixed, v0.38.1), then Sprint 3** (double-row EPG rows + play/catch-up icons),
-Sprint 4 (public EPG supplement), Sprint 5 (nav-strip auto-hide), Sprint 6 (preview↔fullscreen
-grow/shrink). T.5 Teleport tips still wait on the user's threshold.
+**⏸ RESUME HERE (updated 2026-10-05).** All EPG work (old Sprints 3-6) is done per
+`EPG_WRAPUP.md` - two dev sprints + an integration pass, v0.41.1. Next: the user's feel-check
+(`TESTING_OUTSTANDING.md` section L), the remaining unverified items listed at the end of
+`EPG_WRAPUP.md`, then the roadmap's next module (Cloud Sync, then VOD/Series - `AGENTS.md`).
+Known follow-ups: true single-player grow/shrink; public EPG Phase B (per-playlist toggle, Manage
+Sources, custom XMLTV); the 56MB US-locals public file; T.5 Teleport tips.
 
 **What this is:** every open item from `docs/plans/TESTING_OUTSTANDING.md` plus the 2026-09-21/22
 feedback round, grouped into an actual build order with reasoning. Nothing here is built yet -

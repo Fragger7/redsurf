@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -310,19 +311,30 @@ fun LiveTvScreen(
     // Catch-up (EPG_WRAPUP.md 1.5) - a timeshift URL overrides the live one while it plays;
     // cleared by leaving fullscreen or zapping (both mean "back to live").
     var catchupUrl by remember { mutableStateOf<String?>(null) }
+    // Shown briefly when the provider has no working archive for that programme.
+    var catchupFailed by remember { mutableStateOf<String?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     fun playCatchup(channel: ChannelEntity, programme: EpgProgramEntity) {
-        val url = Catchup.timeshiftUrl(
-            channel.streamId, programme.startTime, programme.endTime,
-            Catchup.serverTimezone(context, channel.playlistId),
-        ) ?: return
         Log.d("LiveTvScreen", "catchup -> ${channel.name} \"${programme.title}\"")
-        onFocusedChannelChanged(channel)
-        catchupUrl = url
-        previewingChannel = null
-        isFullscreen = true
-        onFullscreenChanged(true)
+        scope.launch {
+            val ua = playlists.firstOrNull { it.id == channel.playlistId }?.userAgent
+            val url = Catchup.resolve(
+                channel.streamId, programme.startTime, programme.endTime,
+                Catchup.serverTimezone(context, channel.playlistId), ua,
+            )
+            if (url == null) {
+                Log.w("LiveTvScreen", "catchup -> no working timeshift URL for ${channel.name}")
+                catchupFailed = channel.name
+                return@launch
+            }
+            onFocusedChannelChanged(channel)
+            catchupUrl = url
+            previewingChannel = null
+            isFullscreen = true
+            onFullscreenChanged(true)
+        }
     }
+    LaunchedEffect(catchupFailed) { if (catchupFailed != null) { delay(3_000); catchupFailed = null } }
     LaunchedEffect(isFullscreen) { if (!isFullscreen) catchupUrl = null }
 
     // Auto-play last channel on launch, the trigger's actual effect - see the parameter doc
@@ -394,6 +406,7 @@ fun LiveTvScreen(
     // category must wait for *that* category's rows, or it lands on the previous category's row 0
     // a moment before those rows are replaced (focus then falls out of the removed row).
     var gridLoadedFor by remember { mutableStateOf<GroupKey?>(null) }
+    var gridReclaimNonce by remember { mutableStateOf(0) }
     var gridPrograms by remember { mutableStateOf<Map<String, List<EpgProgramEntity>>>(emptyMap()) }
     // The Favorites category's contents change without the selected category changing (found
     // live 2026-09-30: after removing a favorite the removed row stayed on screen, and the next
@@ -416,8 +429,12 @@ fun LiveTvScreen(
         val queryStart = System.currentTimeMillis()
         val channelsInGroup = viewModel.repository.channelsInGroup(group.playlistId, group.groupName)
         Log.d("LiveTvScreen", "gridQuery group=$group channels=${channelsInGroup.size} tookMs=${System.currentTimeMillis() - queryStart}")
+        // Safety net for the same race: if real focus was inside the grid when its rows are about
+        // to be replaced, it will be orphaned - reclaim it onto the new rows.
+        val hadGridFocus = channelsHasFocus
         gridChannels = channelsInGroup
         gridLoadedFor = group
+        if (hadGridFocus) gridReclaimNonce++
         // Keyed by streamId now - provider listings, else the public supplement (EPG_WRAPUP.md 2.1).
         gridPrograms = viewModel.repository.programmesFor(channelsInGroup, windowStart, windowEnd)
     }
@@ -591,9 +608,31 @@ fun LiveTvScreen(
     LaunchedEffect(contextMenuChannel) {
         Log.d("LiveTvScreen", "contextMenu -> ${contextMenuChannel?.name ?: "closed"}")
     }
-    // Local Categories-row landing (same mechanism Teleport uses via AppShell) - for the one
-    // in-screen case that needs it: the last favorite removed while inside Favorites.
+    // Local Categories-row landing (same mechanism Teleport uses via AppShell) - the last favorite
+    // removed while inside Favorites, Back from the grid, and LEFT off the grid's past edge.
     var localGroupsFocusRequest by remember { mutableStateOf<GroupsFocusRequest?>(null) }
+    // RIGHT from Categories while the grid still holds the *previous* category's rows (found live
+    // 2026-10-05): focus entered those rows, they were replaced a moment later, and focus was left
+    // nowhere - a dead D-pad. Hold the press and enter once the selected category has loaded.
+    LaunchedEffect(gridReclaimNonce) {
+        if (gridReclaimNonce > 0) {
+            Log.d("LiveTvScreen", "grid rows replaced while focused -> reclaim")
+            claimGridFocus()
+        }
+    }
+    var categoriesHaveFocus by remember { mutableStateOf(false) }
+    var pendingGridEntry by remember { mutableStateOf(false) }
+    LaunchedEffect(gridLoadedFor, pendingGridEntry) {
+        if (pendingGridEntry && gridLoadedFor == selectedGroup) {
+            pendingGridEntry = false
+            Log.d("LiveTvScreen", "held RIGHT -> entering grid for $selectedGroup")
+            claimGridFocus()
+        }
+    }
+
+    fun goToCategories() {
+        selectedGroup?.let { localGroupsFocusRequest = GroupsFocusRequest.Group(it, System.nanoTime()) }
+    }
     fun toggleFavorite(channel: ChannelEntity) {
         val nowFavorite = !isFavorite(channel)
         val inFavorites = isFavoritesGroup(selectedGroup?.groupName) && selectedGroup?.playlistId == channel.playlistId
@@ -649,7 +688,10 @@ fun LiveTvScreen(
     // (unlike a key router), so this is cheap insurance against exactly the failure mode this
     // change is designed to avoid: Back in Settings accidentally peeling a hidden Live TV.
     BackHandler(enabled = visible && !isFullscreen && channelsHasFocus) {
-        focusManager.moveFocus(FocusDirection.Left)
+        // 2026-10-05: an explicit landing on the selected category's row, not
+        // moveFocus(Left) - since the grid reaches into the past, a LEFT move just stepped one
+        // half-hour back and Back never reached Categories.
+        goToCategories()
     }
 
     Box(
@@ -658,6 +700,20 @@ fun LiveTvScreen(
             .fillMaxSize()
             .onGloballyPositioned { screenBounds = it.boundsInRoot() }
             .onPreviewKeyEvent { event ->
+                // Any other move in Categories cancels a held RIGHT - otherwise it would pull focus
+                // into the grid later, while the user is still browsing categories.
+                if (pendingGridEntry && event.type == KeyEventType.KeyDown && event.key != Key.DirectionRight) {
+                    pendingGridEntry = false
+                }
+                if (contextMenuChannel == null && categoriesHaveFocus && event.key == Key.DirectionRight &&
+                    selectedGroup != null && gridLoadedFor != selectedGroup
+                ) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        pendingGridEntry = true
+                        Log.d("LiveTvScreen", "RIGHT held until $selectedGroup loads (grid has $gridLoadedFor)")
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 val channel = contextMenuChannel ?: return@onPreviewKeyEvent false
                 val isDown = event.type == KeyEventType.KeyDown
                 when (event.key) {
@@ -714,7 +770,7 @@ fun LiveTvScreen(
                             onFocusedChannelChanged(null)
                         }
                     },
-                    modifier = Modifier.width(RedSurfDensity.CategoriesWidth),
+                    modifier = Modifier.width(RedSurfDensity.CategoriesWidth).onFocusChanged { categoriesHaveFocus = it.hasFocus },
                     onEscapeUp = onEscapeUp,
                     focusRequest = groupsFocusRequest ?: localGroupsFocusRequest,
                     onFocusRequestConsumed = {
@@ -730,6 +786,7 @@ fun LiveTvScreen(
                     windowStart = windowStart,
                     onTuneChannel = { channel -> openChannel(channel) },
                     onPlayCatchup = { channel, programme -> playCatchup(channel, programme) },
+                    onLeftEdge = { goToCategories() },
                     onLongPressChannel = { channel ->
                         contextMenuArmed = false
                         contextMenuChannel = channel
@@ -749,6 +806,19 @@ fun LiveTvScreen(
                     },
                     modifier = Modifier.weight(1f),
                 )
+            }
+        }
+
+        catchupFailed?.let { name ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Surface.copy(alpha = 0.95f))
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Text("Catch-up isn't available for this programme on $name", style = RedSurfType.rowSecondary, color = TextPrimary)
             }
         }
 

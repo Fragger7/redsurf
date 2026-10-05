@@ -1,5 +1,11 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
 import androidx.compose.runtime.withFrameNanos
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
@@ -100,6 +106,10 @@ private val NoListings = TextSecondary.copy(alpha = 0.45f)
 
 private data class CursorKey(val playlistId: String, val streamId: String, val slotStart: Long)
 
+/** A pending time-preserving UP/DOWN (2026-10-05): move to row [index], to the cell covering
+ * [time]. [nonce] makes a repeat of the same target a new request. */
+private data class RowJump(val index: Int, val time: Long, val nonce: Long)
+
 /**
  * EPG_GRID_REDESIGN.md - "The Lattice." The Guide's timeline grid, rebuilt around one idea from
  * the Opus consultation: **draw the grid, and let the cells be content on it.** The previous
@@ -142,6 +152,8 @@ fun EpgGridColumn(
     onLongPressChannel: (ChannelEntity) -> Unit = {},
     // Catch-up (EPG_WRAPUP.md 1.5): OK on a past programme still inside the channel's archive.
     onPlayCatchup: (ChannelEntity, EpgProgramEntity) -> Unit = { _, _ -> },
+    // LEFT with nothing earlier worth visiting (2026-10-05) - LiveTvScreen lands on Categories.
+    onLeftEdge: () -> Unit = {},
     // Bumped by LiveTvScreen's claimGridFocus: bring the focus-target row into view if it isn't
     // already (a lazy row that isn't composed can't take focus - the reason a deep target, e.g.
     // Teleport's Now Playing on channel 80 of a category, never landed).
@@ -284,6 +296,26 @@ fun EpgGridColumn(
                     val visible = rowsState.layoutInfo.visibleItemsInfo.any { it.index == targetIndex }
                     if (!visible) runCatching { rowsState.scrollToItem(targetIndex) }
                 }
+                // Time-preserving UP/DOWN (TiviMate; logged deferred since the Lattice pass, made
+                // essential by the past window - found live 2026-10-05: UP landed on a past cell
+                // and scrolled the timeline back). The key is handled explicitly and the target
+                // row focuses its own cell for that time - never a focusProperties link to a row
+                // that may not be composed (an unattached FocusRequester throws).
+                var rowJump by remember { mutableStateOf<RowJump?>(null) }
+                // A new category starts at its top row unless focus is returning to a specific
+                // channel (found 2026-10-05: the previous category's vertical scroll carried over,
+                // leaving the focused first row off-screen).
+                LaunchedEffect(channels) {
+                    if (targetIndex < 0) runCatching { rowsState.scrollToItem(0) }
+                }
+                LaunchedEffect(rowJump) {
+                    val jump = rowJump ?: return@LaunchedEffect
+                    val visible = rowsState.layoutInfo.visibleItemsInfo
+                    val first = visible.firstOrNull()?.index ?: 0
+                    val last = visible.lastOrNull()?.index ?: 0
+                    if (jump.index < first) runCatching { rowsState.scrollToItem(jump.index) }
+                    else if (jump.index >= last) runCatching { rowsState.scrollToItem((first + (jump.index - last) + 1).coerceAtLeast(0)) }
+                }
                 TvLazyColumn(state = rowsState, modifier = Modifier.fillMaxSize()) {
                     items(count = channels.size, key = { channels[it].streamId }) { index ->
                         val channel = channels[index]
@@ -311,10 +343,21 @@ fun EpgGridColumn(
                             onTune = onTuneChannel,
                             onLongPress = onLongPressChannel,
                             onPlayCatchup = onPlayCatchup,
+                            onLeftEdge = onLeftEdge,
                             onShowInfo = { infoCardProgramme = it },
                             firstCellFocusRequester = if (isFocusTarget) firstCellFocusRequester else null,
                             expandOnFocus = doubleHeightRow,
                             isPlaying = channel.streamId == playingStreamId,
+                            jump = rowJump?.takeIf { it.index == index },
+                            onVerticalMove = { goingDown, time ->
+                                val target = if (goingDown) index + 1 else index - 1
+                                if (target in channels.indices) {
+                                    rowJump = RowJump(target, time, System.nanoTime())
+                                    true
+                                } else {
+                                    false // past either end: let default search escape (e.g. UP to the nav strip)
+                                }
+                            },
                         )
                     }
                 }
@@ -352,7 +395,9 @@ private fun GridTimeHeader(
         verticalAlignment = Alignment.Bottom,
     ) {
         Text(
-            headerDateFormat.format(Date(windowStart)),
+            // The date at "now", not at the window's start - the window reaches 6h into the past,
+            // so shortly after midnight the start was still yesterday (found 2026-10-05).
+            headerDateFormat.format(Date(windowStart + PAST_MINUTES * MINUTE_MS)),
             style = RedSurfType.gridMeta,
             color = TextSecondary,
             maxLines = 1,
@@ -414,10 +459,26 @@ private fun EpgChannelRow(
     onPlayCatchup: (ChannelEntity, EpgProgramEntity) -> Unit,
     onShowInfo: (EpgProgramEntity) -> Unit,
     firstCellFocusRequester: FocusRequester?,
+    onLeftEdge: () -> Unit = {},
     expandOnFocus: Boolean = false,
     isPlaying: Boolean = false,
+    jump: RowJump? = null,
+    onVerticalMove: (goingDown: Boolean, time: Long) -> Boolean = { _, _ -> false },
 ) {
     var rowHasFocus by remember { mutableStateOf(false) }
+    // The cell covering the jump's time gets this row's own requester (see RowJump).
+    val timeFocus = remember { FocusRequester() }
+    val jumpIndex = remember(jump, slots) {
+        jump?.let { j -> slots.indexOfFirst { j.time >= it.start && j.time < it.end }.takeIf { it >= 0 } ?: slots.lastIndex }
+    }
+    LaunchedEffect(jump?.nonce) {
+        if (jump == null) return@LaunchedEffect
+        repeat(15) {
+            withFrameNanos { }
+            runCatching { timeFocus.requestFocus() }
+            if (rowHasFocus) return@LaunchedEffect
+        }
+    }
     val expanded = expandOnFocus && rowHasFocus
     val density = LocalDensity.current
     val hairlinePx = with(density) { RedSurfDensity.Hairline.toPx() }
@@ -462,8 +523,16 @@ private fun EpgChannelRow(
                     },
             ) {
                 val nowIndex = remember(slots, now) { nowSlotIndex(slots, now) }
+                // Is there anything before "now" worth walking LEFT into? Past listings, or an
+                // archive to catch up from. If not, LEFT from the now-cell leaves for Categories
+                // instead of stepping through hours of empty half-hours (2026-10-05).
+                val hasPast = remember(slots, now, channel.tvArchiveDays) {
+                    channel.tvArchiveDays > 0 || slots.any { it is AiredSlot && it.start < now && it.end <= now }
+                }
                 slots.forEachIndexed { index, slot ->
                     SlotCell(
+                        rowWindowStart = slots.first().start,
+                        sharedScroll = sharedScroll,
                         slot = slot,
                         isFirstInRow = index == 0,
                         channel = channel,
@@ -481,6 +550,10 @@ private fun EpgChannelRow(
                         focusRequester = if (index == nowIndex) firstCellFocusRequester else null,
                         isNowCell = index == nowIndex,
                         expanded = expanded,
+                        timeFocusRequester = if (index == jumpIndex) timeFocus else null,
+                        onVerticalMove = onVerticalMove,
+                        leftLeavesGrid = index == 0 || (index == nowIndex && !hasPast) || (index < nowIndex && !hasPast),
+                        onLeftEdge = onLeftEdge,
                     )
                 }
             }
@@ -548,6 +621,8 @@ private fun ChannelLabelBlock(
  */
 @Composable
 private fun SlotCell(
+    rowWindowStart: Long,
+    sharedScroll: ScrollState,
     slot: EpgSlot,
     isFirstInRow: Boolean,
     channel: ChannelEntity,
@@ -563,6 +638,10 @@ private fun SlotCell(
     focusRequester: FocusRequester?,
     isNowCell: Boolean = false,
     expanded: Boolean = false,
+    leftLeavesGrid: Boolean = false,
+    onLeftEdge: () -> Unit = {},
+    timeFocusRequester: FocusRequester? = null,
+    onVerticalMove: (goingDown: Boolean, time: Long) -> Boolean = { _, _ -> false },
 ) {
     val minutes = (slot.end - slot.start) / MINUTE_MS.toFloat()
     val width = pxPerMinute * minutes
@@ -597,6 +676,23 @@ private fun SlotCell(
             .width(width)
             .fillMaxHeight()
             .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+            .then(timeFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+            .onPreviewKeyEvent { event ->
+                when {
+                    leftLeavesGrid && event.key == Key.DirectionLeft -> {
+                        if (event.type == KeyEventType.KeyDown) onLeftEdge()
+                        true
+                    }
+                    (event.key == Key.DirectionUp || event.key == Key.DirectionDown) && event.type == KeyEventType.KeyDown -> {
+                        // Anchor on the visible part of this cell, so a long programme that began
+                        // hours ago doesn't drag the target back to its start.
+                        val viewportLeftTime = rowWindowStart + (sharedScroll.value / with(density) { pxPerMinute.toPx() }).toLong() * MINUTE_MS
+                        val anchor = maxOf(slot.start, viewportLeftTime) + MINUTE_MS
+                        onVerticalMove(event.key == Key.DirectionDown, anchor)
+                    }
+                    else -> false
+                }
+            }
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused) onCursor(key, slot)
@@ -661,8 +757,20 @@ private fun SlotCell(
         border = style.border,
         glow = style.glow,
     ) {
+        // TiviMate's sticky titles (2026-10-05): a programme that started before the visible edge
+        // keeps its title pinned to that edge instead of cut off mid-word. Read in the layout
+        // phase via the offset lambda, so scrolling re-places the text without recomposing.
+        val cellLeftPx = ((slot.start - rowWindowStart) / MINUTE_MS.toFloat()) * with(density) { pxPerMinute.toPx() }
+        val cellWidthPx = with(density) { width.toPx() }
+        val minTextPx = with(density) { 90.dp.toPx() }
         Box(
-            modifier = Modifier.fillMaxSize().padding(start = RedSurfDensity.CellPadH + 3.dp, end = RedSurfDensity.CellPadH),
+            modifier = Modifier
+                .fillMaxSize()
+                .offset {
+                    val shift = (sharedScroll.value - cellLeftPx).coerceIn(0f, (cellWidthPx - minTextPx).coerceAtLeast(0f))
+                    androidx.compose.ui.unit.IntOffset(shift.toInt(), 0)
+                }
+                .padding(start = RedSurfDensity.CellPadH + 3.dp, end = RedSurfDensity.CellPadH),
             contentAlignment = Alignment.CenterStart,
         ) {
             when (slot) {

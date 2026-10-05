@@ -44,7 +44,7 @@ Failures fixed in batch, then re-swept. Ends with the user's short feel-check li
 |---|---|
 | Dev 1 | built 2026-09-30 (v0.39.0): all 7 items, 35/35 unit tests; device smoke only - real checks in Integration |
 | Dev 2 | built 2026-09-30 (v0.40.0): 2.1-2.4; unit-tested; device smoke only |
-| Integration | **partial** (2026-09-30) - see below; resume when the TV accepts adb again |
+| Integration | **done 2026-10-05 (v0.41.1)** except the items listed under "Still unverified" |
 
 ## Dev sprint 1 - as built (2026-09-30)
 
@@ -105,3 +105,36 @@ catch-up playback on an archive channel (caprichoso67 / bestlina14 have them); g
 transition; the new Teleport row "Last Channel Group (Current Provider)" (user request,
 2026-10-05); regression battery (Favorites, Teleport rows, Settings nav, crash battery, zapping,
 Back variants); memory/launch timing.
+
+## Integration sprint - completed 2026-10-05 (v0.41.1)
+
+**Verified on device (screenshots + logs):** public supplement now fills real broadcast channels -
+News Network shows CNN, CNBC, CW, Cheddar, 7NEWS, THE FIRST TV (the latter visibly marked: cool tint +
+dashed blue ticks); match counts after fixes: caprichoso67 2,050, bestlina14 1,903 (provider has no
+XMLTV), Random Score 1,614. Catch-up glyph on archive channels. Date label shows today. Sticky titles
+(a programme that began off-screen keeps its title at the visible edge). Time-preserving UP/DOWN.
+Back and LEFT from the grid reach Categories in one press. Vertical list resets to the top on a new
+category. Cold-launch resume. Teleport Nav-Strip and the new "Last Channel Group (Current
+Provider)" row (landed on WORLD LIVE SPORTS, index 2,198). Teleport setting restored to On.
+
+**Found and fixed in this pass:**
+1. LEFT walked back through 12 empty half-hours before reaching Categories; Back never reached them
+   at all (it was a LEFT move). Back is now an explicit Categories landing; LEFT leaves for
+   Categories when the row has nothing earlier (no past listings, no catch-up).
+2. UP/DOWN landed on a spatially-nearest (often past) cell - now time-preserving, crash-safe.
+3. RIGHT pressed while a new category was still loading entered the old rows, which were then
+   replaced - focus lost entirely (dead D-pad). RIGHT is held until the category loads (cancelled by
+   any other key), and a grid that loses its rows while focused reclaims focus.
+4. Public matcher counted *stale* provider rows (ended days ago) as coverage - now only current ones.
+5. All three syncs downloaded the same public files at once - now one at a time.
+6. Header date showed the window start's date (yesterday after midnight).
+7. Previous category's vertical scroll carried over.
+8. Catch-up: the plain `.ts` timeshift URL returned non-video. Playback now probes `.ts`, `.m3u8`,
+   `timeshift.php` × panel/UTC/device time zones and plays the first real media; otherwise shows
+   "Catch-up isn't available for this programme". **On bestlina14 every combination returns HTTP 200
+   with an empty body** - the panel flags 2,193 channels with archive but serves none; catch-up
+   playback is therefore still unverified end to end.
+
+**Still unverified:** catch-up actually playing (needs a provider that serves archive); the
+grow/shrink transition (needs "Preview channel on select" on - it's off on this TV, left as the
+user set it); Favorites/crash battery re-run after this sprint's changes; memory/launch timing.

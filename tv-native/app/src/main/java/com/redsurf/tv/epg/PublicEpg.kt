@@ -6,6 +6,8 @@ import com.redsurf.tv.db.RedSurfDatabase
 import com.redsurf.tv.network.IptvNetworkModule
 import com.redsurf.tv.parser.XmlTvParser
 import com.redsurf.tv.sync.EpgSyncState
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.Request
 import java.util.zip.GZIPInputStream
 
@@ -63,8 +65,13 @@ object PublicEpg {
             FILES[token]
         }.flatten().toSet()
 
+    // Found live 2026-10-05: all three playlists' syncs downloaded and parsed the same public
+    // files at the same moment. One at a time - the second and third then see a fresh
+    // EpgSyncState stamp and skip. Short (~30s per file), so well inside WorkManager's 10 minutes.
+    private val fileLock = Mutex()
+
     /** Downloads and ingests any file not refreshed in the last [REFRESH_MS]. */
-    suspend fun syncFiles(context: Context, db: RedSurfDatabase, files: Set<String>) {
+    suspend fun syncFiles(context: Context, db: RedSurfDatabase, files: Set<String>) = fileLock.withLock {
         val client = IptvNetworkModule.getOkHttpClient(null, readTimeoutSeconds = 120)
         for (file in files) {
             val key = "$PLAYLIST_ID/$file"
@@ -100,7 +107,7 @@ object PublicEpg {
             val stem = id.substringBeforeLast('.') // drop the ".us2" source suffix
             publicIndex.putIfAbsent(normalize(stem.replace('.', ' ')), id)
         }
-        val providerIdsWithData = epgDao.distinctChannelIdsBlocking(playlistId).toHashSet()
+        val providerIdsWithData = epgDao.currentChannelIdsBlocking(playlistId, System.currentTimeMillis()).toHashSet()
         var candidates = 0
         var matched = 0
         db.runInTransaction { channelDao.clearFallbackIds(playlistId) }

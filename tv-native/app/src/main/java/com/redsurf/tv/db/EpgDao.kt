@@ -38,6 +38,12 @@ interface EpgDao {
     @Query("SELECT DISTINCT channelEpgId FROM epg_programs WHERE playlistId = :playlistId")
     fun distinctChannelIdsBlocking(playlistId: String): List<String>
 
+    /** Only ids with listings that haven't ended before [since] - stale rows from a provider whose
+     * feed has since stopped (found live 2026-10-05: bestlina14's Sep 30 rows, then 404s) must not
+     * count as "the provider covers this channel". */
+    @Query("SELECT DISTINCT channelEpgId FROM epg_programs WHERE playlistId = :playlistId AND endTime > :since")
+    fun currentChannelIdsBlocking(playlistId: String, since: Long): List<String>
+
     @Query("SELECT COUNT(*) FROM epg_programs WHERE playlistId = :playlistId")
     suspend fun countForPlaylist(playlistId: String): Int
 

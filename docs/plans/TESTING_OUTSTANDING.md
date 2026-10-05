@@ -30,6 +30,23 @@ Categories UP escaping to the nav strip early (fixed Sprint 2 #24). Section D fe
 true top), #25 (focus lands on "now"), overall sluggishness after Sprint 1, and the 2026-09-28
 Settings crash fix.
 
+## L. EPG wrap-up - real-remote feel check (v0.41.1, 2026-10-05) - `EPG_WRAPUP.md`
+
+K1/K2/K3 below are fixed (K1 was the "Preview channel on select" setting being off; hints now say
+"Press OK to watch"). Feel-check with the remote:
+1. Guide opens on "now"; RIGHT walks forward, LEFT walks back into the past on rows that have a
+   past, and goes straight to Categories on rows that don't. Back goes to Categories.
+2. UP/DOWN keeps your time column.
+3. US News/Sports categories now show listings filled from public guides (tinted, dashed lines,
+   "Guide: EPGSHARE01 (public)" in the top panel). Are there channels you'd expect filled that aren't?
+4. Focused row doubles in height; top menu hides after 5s (Settings → Appearance to change).
+5. Catch-up glyph shows on archive channels - but your bestlina14 provider serves no archive, so OK
+   on a past show says "not available". If you have a provider whose catch-up works in TiviMate,
+   try it here.
+6. Teleport: new "Last Channel Group (Current Provider)" row.
+7. To see the preview ↔ fullscreen grow/shrink, turn on Settings → Playback → "Preview channel on
+   select".
+
 ## K. User-reported EPG bugs (2026-09-30) - test and fix FIRST next session
 
 1. **"One OK goes straight to fullscreen, no preview."** Likely cause (code read, not yet
