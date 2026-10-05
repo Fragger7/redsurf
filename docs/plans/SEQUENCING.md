@@ -1,11 +1,10 @@
 # Execution sequencing — post-Lattice, 2026-09-22
 
-**⏸ RESUME HERE (updated 2026-10-05).** All EPG work (old Sprints 3-6) is done per
-`EPG_WRAPUP.md` - two dev sprints + an integration pass, v0.41.1. Next: the user's feel-check
-(`TESTING_OUTSTANDING.md` section L), the remaining unverified items listed at the end of
-`EPG_WRAPUP.md`, then the roadmap's next module (Cloud Sync, then VOD/Series - `AGENTS.md`).
-Known follow-ups: true single-player grow/shrink; public EPG Phase B (per-playlist toggle, Manage
-Sources, custom XMLTV); the 56MB US-locals public file; T.5 Teleport tips.
+**⏸ RESUME HERE (updated 2026-10-05, end of session) - STOP: performance salvage first.**
+Read `docs/plans/PERFORMANCE_SALVAGE.md` before anything else. The user called the app's
+choppiness "a fatal point" - no new features until it's fixed. That file has the process (Opus
+architecture review → measured baseline → ranked fixes), three code-confirmed leads, and the user's
+bug list in execution order. EPG wrap-up (v0.41.1) is otherwise complete per `EPG_WRAPUP.md`.
 
 **What this is:** every open item from `docs/plans/TESTING_OUTSTANDING.md` plus the 2026-09-21/22
 feedback round, grouped into an actual build order with reasoning. Nothing here is built yet -

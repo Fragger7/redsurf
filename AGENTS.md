@@ -21,6 +21,12 @@ a Next.js web portal at the repo root.
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which
 were false. It is kept for provenance only.
 
+## ⚠ Current priority (2026-10-05): performance salvage — `docs/plans/PERFORMANCE_SALVAGE.md`
+
+The user judged the app's performance "a fatal point" (choppy menus, erratic focus, rough
+preview↔fullscreen, a possible crash) versus TiviMate on the same device. **No new features until
+that plan is done.** Start there; it supersedes the roadmap order below for now.
+
 ## Current phase: Phase 2 — the Player — `docs/plans/PHASE_2.md`
 
 **Brief written by Opus 2026-09-12, execution is Sonnet-lane.** Every decision is made in the
