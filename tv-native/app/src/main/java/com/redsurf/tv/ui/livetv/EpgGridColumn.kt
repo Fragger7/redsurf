@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.runtime.withFrameNanos
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -169,6 +170,8 @@ fun EpgGridColumn(
     LaunchedEffect(Unit) { entrance.animateTo(1f, tween(220, easing = FastOutSlowInEasing)) }
 
     val sharedScroll = rememberScrollState()
+    var gridHadFocus by remember { mutableStateOf(false) }
+    var gridEntryCount by remember { mutableStateOf(0) }
     // Sprint 2, 2026-09-23 (Finding 2) - this grid stays permanently composed (LiveTvScreen's own
     // `visible` param, Sprint 1), so `sharedScroll` was never reset between categories: scrolling
     // right in one category and switching to another left the axis exactly where it was, so the
@@ -199,7 +202,11 @@ fun EpgGridColumn(
                 alpha = entrance.value
                 translationY = (1f - entrance.value) * 24.dp.toPx()
             }
-            .onFocusChanged { state -> onFocusStateChanged(state.hasFocus) },
+            .onFocusChanged { state ->
+                if (state.hasFocus && !gridHadFocus) gridEntryCount++
+                gridHadFocus = state.hasFocus
+                onFocusStateChanged(state.hasFocus)
+            },
     ) {
         val labelWidth = RedSurfDensity.GridLabelWidth
         val timelineViewport = (maxWidth - labelWidth).coerceAtLeast(1.dp)
@@ -213,9 +220,17 @@ fun EpgGridColumn(
         val wakePx = with(density) { 28.dp.toPx() }
         val hasRows = channels.isNotEmpty()
         val nowOffsetPx = ((floorToHalfHour(now) - windowStart) / MINUTE_MS) * pxPerMinutePx
-        LaunchedEffect(channels, groupName, windowStart, pxPerMinutePx) {
+        // Found live 2026-09-30: a single scrollTo here could run before the rows had measured,
+        // and the now-cell's focus then scrolled only far enough to show it - "now" ended up at
+        // the right edge. Wait for layout, and re-apply whenever focus enters the grid from
+        // outside (TiviMate re-centres on now on entry too).
+        suspend fun scrollToNow() {
+            withFrameNanos { }
+            withFrameNanos { }
             sharedScroll.scrollTo(nowOffsetPx.toInt())
         }
+        LaunchedEffect(channels, groupName, windowStart, pxPerMinutePx) { scrollToNow() }
+        LaunchedEffect(gridEntryCount) { if (gridEntryCount > 0) scrollToNow() }
 
         Column(
             modifier = Modifier

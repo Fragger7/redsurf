@@ -53,3 +53,16 @@ class TeleportMenuTest {
         assertNull(resolveRootCategoryTarget(groups, GroupKey("a", FAVORITES_GROUP)))
     }
 }
+
+class LastGroupTargetTest {
+    @org.junit.Test fun lastCategoryOfCurrentPlaylist() {
+        val groups = listOf(
+            GroupCount("a", "A", "AF | AFRICA", 1),
+            GroupCount("a", "A", "US| CBS", 1),
+            GroupCount("b", "B", "UK| BBC", 1),
+        )
+        org.junit.Assert.assertEquals(GroupKey("a", "US| CBS"), resolveLastGroupTarget(groups, "a"))
+        org.junit.Assert.assertEquals(GroupKey("b", "UK| BBC"), resolveLastGroupTarget(groups, "b"))
+        org.junit.Assert.assertNull(resolveLastGroupTarget(groups, null))
+    }
+}

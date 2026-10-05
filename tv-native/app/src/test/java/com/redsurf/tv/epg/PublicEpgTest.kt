@@ -22,4 +22,7 @@ class PublicEpgTest {
         val files = PublicEpg.filesFor(listOf("US| NEWS", "UK • SPORT", "AF | AFRICA", "24/7 | CARTOON"))
         assertEquals(setOf("epg_ripper_US2.xml.gz", "epg_ripper_US_SPORTS1.xml.gz", "epg_ripper_UK1.xml.gz"), files)
     }
+
+    @Test fun filesFor_skipsDecorationBeforeCountry() =
+        assertEquals(setOf("epg_ripper_US2.xml.gz", "epg_ripper_US_SPORTS1.xml.gz"), PublicEpg.filesFor(listOf("✯USA✯ NFL EVENTS")))
 }

@@ -375,6 +375,10 @@ queued third sync and push it into exponential backoff.
 **Not done / deferred:** T.5 tips (needs the user's threshold); Favorites sub-groups/reorder
 (TiviMate "Manage favorites"); a Settings row for Favorites (nothing to configure yet).
 
+**Added 2026-10-05 (user request):** "Last Channel Group (Current Provider)" - lands on the last
+category row of the current playlist (the mirror of Playlist Root). Built, unit-tested, not yet
+device-checked. Rows shrank 44→40dp so the 9-row panel fits the 540dp screen.
+
 ## Acceptance - machine-verifiable
 
 1. Teleport Menu off (default): long-press Back behaves exactly as today's build, everywhere.

@@ -118,6 +118,18 @@ class EpgSyncWorker(
                 val body = runCatching { response.body?.string()?.take(200) }.getOrNull()
                 Log.e(TAG, "epgSync -> http ${response.code} for playlist $playlistId body=${body?.replace('\n', ' ')}")
                 EpgSyncState.markAttempt(applicationContext, playlistId, "HTTP ${response.code}")
+                response.close()
+                // Found live 2026-09-30: a panel with no XMLTV endpoint at all answers 404 on
+                // every attempt - retrying forever is pointless, and the public supplement (which
+                // used to run only after a provider success) is the *only* guide such a playlist
+                // can have. 404 = "no provider guide": supplement, mark done, stop retrying.
+                runCatching { supplementFromPublic(db, playlistId) }
+                    .onFailure { Log.w(TAG, "public EPG supplement failed for playlist $playlistId", it) }
+                if (response.code == 404) {
+                    Log.d(TAG, "epgSync -> provider has no XMLTV (404), public supplement only, playlist=$playlistId")
+                    EpgSyncState.markCompleted(applicationContext, playlistId)
+                    return@withContext Result.success()
+                }
                 return@withContext Result.retry()
             }
 
@@ -161,6 +173,9 @@ class EpgSyncWorker(
         } catch (e: Exception) {
             Log.e(TAG, "epgSync -> failed playlist=$playlistId", e)
             EpgSyncState.markAttempt(applicationContext, playlistId, e.message ?: e.javaClass.simpleName)
+            // Whatever provider data exists still gets supplemented (e.g. a mid-download reset).
+            runCatching { supplementFromPublic(db, playlistId) }
+                .onFailure { Log.w(TAG, "public EPG supplement failed for playlist $playlistId", it) }
             Result.retry()
         }
     }

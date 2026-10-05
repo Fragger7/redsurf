@@ -337,6 +337,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         ?.let { GroupKey(it, FAVORITES_GROUP) }
         ?.takeIf { key -> groups.any { it.key() == key } }
     val rootCategoryTarget = resolveRootCategoryTarget(groups, liveTvSelectedGroup)
+    val lastGroupTarget = resolveLastGroupTarget(groups, teleportPlaylistId)
     val teleportRows = buildList {
         add(TeleportRow.Live("Nav-Strip") { teleportToNavStrip() })
         add(
@@ -364,6 +365,17 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 }
             } else {
                 TeleportRow.Grey("Root Category")
+            },
+        )
+        // User request, 2026-10-05 - the bottom of the current provider's category list, the
+        // mirror of Playlist Root (which lands on the top). Same Categories-row landing.
+        add(
+            if (lastGroupTarget != null) {
+                TeleportRow.Live("Last Channel Group (Current Provider)") {
+                    teleportToCategoryRow(GroupsFocusRequest.Group(lastGroupTarget, System.nanoTime()), select = lastGroupTarget)
+                }
+            } else {
+                TeleportRow.Grey("Last Channel Group (Current Provider)")
             },
         )
         // "Root Channel Group" renamed (user, 2026-09-29) - "take me back to what I'm watching."

@@ -57,7 +57,9 @@ object PublicEpg {
     /** Files to fetch for a playlist, from its category names' leading country token. */
     fun filesFor(groupNames: Collection<String>): Set<String> =
         groupNames.mapNotNull { name ->
-            val token = name.trim().takeWhile { it.isLetter() }.uppercase()
+            // Skip decoration before the country token - real provider names like "✯USA✯ NFL"
+            // (found live 2026-09-30: those US categories fetched no US file at all).
+            val token = name.dropWhile { !it.isLetterOrDigit() }.takeWhile { it.isLetter() }.uppercase()
             FILES[token]
         }.flatten().toSet()
 

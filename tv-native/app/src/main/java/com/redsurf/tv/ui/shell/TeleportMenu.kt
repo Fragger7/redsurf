@@ -70,6 +70,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 private val PanelWidth = 560.dp
+// 10 rows since 2026-10-05 - rows are 40dp (was 44) so the panel still fits a 540dp-tall screen.
 private val PanelHeight = 500.dp
 // Slowed "a fraction" per the user's 2026-09-19 feedback (was 260/180) - close stays faster than
 // open, the asymmetry that keeps repeated use snappy.
@@ -122,6 +123,13 @@ internal fun categoryPrefix(groupName: String): String? {
 /** Decision 4 - the first category (existing list order) sharing [selectedGroup]'s own prefix,
  * scoped to the same playlist. Null when nothing's selected, or the current category's name has
  * no separator to derive a family from (Favorites never has one). */
+/** The last category (existing list order) of [playlistId]'s own list - the provider the user is
+ * in. Null when there's no current playlist. */
+internal fun resolveLastGroupTarget(groups: List<GroupCount>, playlistId: String?): GroupKey? {
+    val id = playlistId ?: return null
+    return groups.lastOrNull { it.playlistId == id }?.key()
+}
+
 internal fun resolveRootCategoryTarget(groups: List<GroupCount>, selectedGroup: GroupKey?): GroupKey? {
     val current = selectedGroup ?: return null
     val currentInfo = groups.firstOrNull { it.key() == current } ?: return null
@@ -309,14 +317,14 @@ fun TeleportMenu(
                     .width(PanelWidth)
                     .height(PanelHeight)
                     .graphicsLayer { alpha = pSettle; translationY = (1f - pSettle) * 8.dp.toPx() }
-                    .padding(24.dp),
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
                     Image(painter = painterResource(R.drawable.ic_mark), contentDescription = null, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Text("Teleport to…", style = RedSurfType.sectionTitle, color = TextPrimary)
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     rows.forEachIndexed { index, row ->
                         TeleportRowView(row = row, selected = index == selectedIndex && row is TeleportRow.Live)
                     }
@@ -335,7 +343,7 @@ private fun TeleportRowView(row: TeleportRow, selected: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(40.dp)
             .clip(shape)
             .then(if (selected) Modifier.background(Accent.copy(alpha = 0.18f)).border(1.5.dp, Accent, shape) else Modifier)
             .padding(horizontal = 10.dp),

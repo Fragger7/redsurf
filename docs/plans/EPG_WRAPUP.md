@@ -44,7 +44,7 @@ Failures fixed in batch, then re-swept. Ends with the user's short feel-check li
 |---|---|
 | Dev 1 | built 2026-09-30 (v0.39.0): all 7 items, 35/35 unit tests; device smoke only - real checks in Integration |
 | Dev 2 | built 2026-09-30 (v0.40.0): 2.1-2.4; unit-tested; device smoke only |
-| Integration | next |
+| Integration | **partial** (2026-09-30) - see below; resume when the TV accepts adb again |
 
 ## Dev sprint 1 - as built (2026-09-30)
 
@@ -82,3 +82,26 @@ Failures fixed in batch, then re-swept. Ends with the user's short feel-check li
   full screen (320ms) while the other player starts; skipped when animations are off or a frame
   can't be grabbed. Not the true single-persistent-player version - that's an architecture reversal
   of the two-player design, logged as follow-up (needs its own design pass).
+
+## Integration sprint - results so far (2026-09-30, v0.40.0 → v0.41.0)
+
+**Verified on device:** Room v12/v13 migrations kept all playlists; catch-up data is real - 978
+(caprichoso67) and 2,193 (bestlina14) channels carry archive; public supplement filled **2,058**
+empty channels on the US playlist (US2 65,546 + US_SPORTS1 19,579 programmes) and **699** on Random
+Score from the UK file; nav-strip auto-hide; double-height focused row; RIGHT walks forward through
+half-hour cells and LEFT into the past on no-listings rows; "Press OK to watch" hint (confirmed
+the device's preview-on-select is **off** - the user's one-OK report).
+
+**Found and fixed during the sweep:**
+1. Guide opened with "now" at the right edge - scroll-to-now ran before rows measured; now waits
+   for layout and re-applies on grid entry. Verified.
+2. "✯USA✯ …" categories never fetched US public files (prefix reader stopped at "✯"). Unit-tested.
+3. A provider with no XMLTV endpoint (bestlina14, HTTP 404) retried forever and never got the
+   public supplement (which only ran after provider success). 404 now = supplement + done; other
+   failures supplement then retry. Built, not yet observed on device.
+
+**Not yet checked on device (resume here):** a supplemented channel's tint/dashed tick/hero label;
+catch-up playback on an archive channel (caprichoso67 / bestlina14 have them); grow/shrink
+transition; the new Teleport row "Last Channel Group (Current Provider)" (user request,
+2026-10-05); regression battery (Favorites, Teleport rows, Settings nav, crash battery, zapping,
+Back variants); memory/launch timing.
