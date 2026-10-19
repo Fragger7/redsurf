@@ -26,6 +26,12 @@ were false. It is kept for provenance only.
 The user judged the app's performance "a fatal point" (choppy menus, erratic focus, rough
 preview↔fullscreen, a possible crash) versus TiviMate on the same device. **No new features until
 that plan is done.** Start there; it supersedes the roadmap order below for now.
+`docs/plans/TIVIMATE_LEARNINGS.md` (2026-10-18) feeds it: what TiviMate 5.3.3's APK revealed
+(Media3 1.10.1 vs our 1.2.1, Leanback lists, FFmpeg audio), the Compose-stays decision, and the
+parity items S1-S5 folded into the salvage. **Standing rule (user, 2026-10-18): for any
+non-trivial design, architecture, performance or logic decision from here on, check how TiviMate
+does it first (that file's "Standing rule" section says how, cheapest first) and log the finding
+there** - not just for the scenarios listed in it.
 
 ## Current phase: Phase 2 — the Player — `docs/plans/PHASE_2.md`
 
