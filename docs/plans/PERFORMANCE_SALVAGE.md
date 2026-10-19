@@ -38,6 +38,37 @@ it, and to question whether foundational architecture decisions are wrong.
   RedSurf's footprint.
 - Seen in passing, to check: several adjacent guide rows show the same channel number (`3205`).
 
+## Batch 1 - shipped v0.41.2 (2026-10-19), measured on device
+
+Done: R8 on (`-dontobfuscate`, line numbers kept), Compose strong skipping, persistent crash log
+(`RedSurfApp` + `diag/CrashLog.kt`, read with `adb shell cat
+/sdcard/Android/data/com.redsurf.tv/files/crash.log`), L6 (sync writes only changed channel rows,
+in 500-row transactions, on background-priority threads - catch-up re-sync measured `changed=2`
+instead of ~28K rows), L2 (key presses no longer recompose AppShell), L1 (focused category held
+mid-list, TiviMate F8), Categories UP now focuses exactly the row above (the old 30ms
+`moveFocus` retry overshot - two UPs went three rows, sometimes out into the grid), L3 (grid-entry
+claim on the next frame instead of after 300ms). 40/40 unit tests pass.
+
+| Move (same script as the baseline) | v0.41.1 | v0.41.2 | TiviMate |
+|---|---|---|---|
+| Categories 20×DOWN, 20×UP | 69% janky, p50 200ms | 58%, **p50 53ms** | 7.5%, 18ms |
+| Guide 20×DOWN, 20×UP | 98%, p50 250ms, p90 500 | 59%, **p50 69ms**, p90 150 | 7.6%, 29ms |
+| Guide 10×RIGHT, 10×LEFT | 36%, p90 200ms | 27%, **p90 53ms** | 1%, p90 36ms |
+
+**Still open - batch 2, in this order (one root under most of it):**
+1. **Grid row composition cost (L4) - the root.** Trace of 12 DOWN presses: `lazylist:prefetch:compose`
+   ~48ms per new row, layout ~12ms/frame, draw recording ~9ms/frame, and `Recomposer:animation`
+   712ms (an animated value read in composition rather than only at draw - the wash and/or the
+   double-height row). Entering a category composes all its rows: 41 rows ≈ 2s of main thread.
+2. **Quick RIGHT after moving through categories leaves no focused node** (3/3 repro): the held-RIGHT
+   path waits for the rows, but they take ~2-3s to compose and the claim doesn't land. Settled RIGHT
+   lands correctly on the now cell. Should largely fall out of (1); re-test after.
+3. **Focus flapping inside the grid while scrolling** - `claimGridFocus` fired 6× with focus already
+   in the grid (focus left and came back). Suspect: the focused cell is replaced when the
+   programme list arrives after the channel rows (gap slot → programme slots).
+4. Fast 20×DOWN/20×UP in Categories still ends one row off (was two).
+5. Cold launch: which column takes focus (Categories vs the resumed grid row) varies run to run.
+
 ## Leads already confirmed by reading code (2026-10-05) - verify, then fix
 
 - **L1 - Categories "selection always at the top" (user bug 2).** `GroupsColumn.kt:274`:

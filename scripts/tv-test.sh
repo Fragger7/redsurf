@@ -28,8 +28,14 @@ ADB() { adb -s "$D" "$@"; }
 LOG_TAGS="${REDSURF_LOG_TAGS:-SettingsScreen|PlayerScreen|LiveTvScreen|MainViewModel|PlayerHost}"
 
 focused_info() {
+  # Never read a previous run's dump: a failed `uiautomator dump` used to leave the last file in
+  # place and report its focus as current (2026-10-19 - reported TiviMate's layout during a
+  # RedSurf run).
+  rm -f /tmp/wd_now.xml
+  ADB shell rm -f /sdcard/window_dump.xml
   ADB shell uiautomator dump /sdcard/window_dump.xml >/dev/null 2>&1
   ADB pull /sdcard/window_dump.xml /tmp/wd_now.xml >/dev/null 2>&1
+  [ -s /tmp/wd_now.xml ] || { echo 'focused_info: uiautomator dump failed (no fresh dump)'; return 1; }
   python3 - <<'PY'
 import re
 data = open('/tmp/wd_now.xml').read()

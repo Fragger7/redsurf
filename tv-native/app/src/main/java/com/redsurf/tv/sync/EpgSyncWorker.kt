@@ -11,14 +11,27 @@ import com.redsurf.tv.settings.AppPreferences
 import com.redsurf.tv.network.IptvNetworkModule
 import com.redsurf.tv.parser.XmlTvParser
 import com.redsurf.tv.vod.XtreamApi
-import kotlinx.coroutines.Dispatchers
+import android.os.Process
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import okhttp3.Request
+import java.util.concurrent.Executors
 
 private const val TAG = "EpgSyncWorker"
 const val EPG_SYNC_INPUT_PLAYLIST_ID = "PLAYLIST_ID"
 private const val EPG_READ_TIMEOUT_SECONDS = 120L
 private const val PRUNE_ENDED_BEFORE_MS = 6 * 60 * 60 * 1000L
+
+/** Performance salvage L6 (2026-10-19): sync work - a 67MB XML parse, public matching, their
+ * blocking `runInTransaction` writes - runs on background-priority threads, so on this 4-core
+ * device it yields to the UI thread instead of competing with it at default priority as it did
+ * on `Dispatchers.IO`. Cached pool: playlists still sync independently, never serialized. */
+internal val syncDispatcher = Executors.newCachedThreadPool { runnable ->
+    Thread({
+        Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+        runnable.run()
+    }, "epg-sync")
+}.asCoroutineDispatcher()
 
 /**
  * PHASE_3.md decision 2 - one worker instance per playlist, scheduled by [EpgSyncScheduler].
@@ -50,20 +63,21 @@ class EpgSyncWorker(
             Catchup.setServerTimezone(applicationContext, playlistId, it)
         }
         val dao = db.channelDao()
-        db.runInTransaction { dao.clearArchiveDays(playlistId) }
-        var withArchive = 0
+        // Collect, then write only the differences (ChannelDao's L6 note) - the old
+        // clear-then-set rewrote every channel row of the playlist on every sync.
+        val desired = HashMap<String, Int>()
         XtreamApi.getLiveStreams(server, user, pass, userAgent) { batch ->
-            val archived = batch.filter { it.archiveDays > 0 }
-            if (archived.isEmpty()) return@getLiveStreams
-            withArchive += archived.size
-            db.runInTransaction {
-                archived.forEach { dao.setArchiveDays(playlistId, "$server/live/$user/$pass/${it.streamId}.ts", it.archiveDays) }
-            }
+            batch.filter { it.archiveDays > 0 }
+                .forEach { desired["$server/live/$user/$pass/${it.streamId}.ts"] = it.archiveDays }
         }
-        Log.d(TAG, "catchup -> playlist=$playlistId channelsWithArchive=$withArchive")
+        val current = dao.currentArchiveDays(playlistId).associate { it.streamId to it.value.toInt() }
+        val changes = desired.filter { (streamId, days) -> current[streamId] != days }.map { it.key to it.value } +
+            current.keys.filter { it !in desired }.map { it to 0 }
+        PublicEpg.writeInChunks(db, changes) { (streamId, days) -> dao.setArchiveDays(playlistId, streamId, days) }
+        Log.d(TAG, "catchup -> playlist=$playlistId channelsWithArchive=${desired.size} changed=${changes.size}")
     }
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    override suspend fun doWork(): Result = withContext(syncDispatcher) {
         val playlistId = inputData.getString(EPG_SYNC_INPUT_PLAYLIST_ID)
             ?: return@withContext Result.failure()
         val db = RedSurfDatabase.getDatabase(applicationContext)

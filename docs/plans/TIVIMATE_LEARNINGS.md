@@ -55,6 +55,7 @@ TiviMate is on the TV, re-pull and re-decompile (steps in the memory note / `rea
 | F8 | **Focused category stays at a fixed mid-list position** while the list scrolls under it (Leanback window alignment), observed on the TV 2026-10-19 | The model for fixing L1 (RedSurf pins the focused row to the *top*). |
 | F9 | **20×DOWN then 20×UP returns to exactly the same row and screen position**, in both the guide and the category list, while each category move reloads the guide | RedSurf lost presses in the same test (ended 2 rows off in Categories, escaped to the nav strip from the grid). Input must never be dropped, however busy the frame. |
 | F10 | Measured frame timing, same TV, same script - see S2 results below | RedSurf's browsing is roughly 10× worse; TiviMate's own player transitions are not jank-free either. |
+| F11 | TiviMate ships **R8-optimized** (that's why its names are scrambled); RedSurf had R8 **off** in release | Turned on 2026-10-19 with `-dontobfuscate` (readable traces) - Compose is built to be R8-optimized. APK 3.6 MB after. |
 | F7 | Screen map from the manifest: settings edits are **separate small full-screen steps** (playlist name, delete playlist, guide URL, guide source name, logos folder, recordings folder, reset positions, reset watch time, create channel group, copy channels, a playlist wizard) | Structural reference for the per-playlist detail page and EPG Sources work (`AGENTS.md` backlog). The settings *contents* are built in hidden code. |
 
 ## Compose vs Leanback - decided 2026-10-18: stay on Compose

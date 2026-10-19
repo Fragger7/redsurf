@@ -4,7 +4,7 @@ import android.util.Log
 import android.util.Xml
 import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.db.RedSurfDatabase
-import kotlinx.coroutines.Dispatchers
+import com.redsurf.tv.sync.syncDispatcher
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
 import java.io.InputStream
@@ -52,7 +52,7 @@ object XmlTvParser {
         db: RedSurfDatabase,
         playlistId: String,
         skipEndedBefore: Long = 0L,
-    ): Int = withContext(Dispatchers.IO) {
+    ): Int = withContext(syncDispatcher) {
         val epgDao = db.epgDao()
         val programsBatch = mutableListOf<EpgProgramEntity>()
         val pendingTransactionBatches = mutableListOf<List<EpgProgramEntity>>()

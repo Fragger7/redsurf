@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
  */
 /** Public EPG matching row - see ChannelDao.matchPage. */
 data class MatchRow(val streamId: String, val name: String, val epgChannelId: String?)
+data class StreamValue(val streamId: String, val value: String)
 
 data class GroupCount(val playlistId: String, val playlistName: String, val groupName: String, val count: Int)
 
@@ -155,17 +156,26 @@ interface ChannelDao {
     @Query("SELECT DISTINCT groupName FROM channels WHERE playlistId = :playlistId AND streamType = 'live'")
     suspend fun distinctGroupNames(playlistId: String): List<String>
 
-    @Query("UPDATE channels SET epgFallbackId = NULL WHERE playlistId = :playlistId")
+    // Performance salvage L6 (2026-10-19): every sync write to `channels` below touches only rows
+    // whose value actually changes. An UPDATE that matches a row fires Room's invalidation
+    // trigger even when the value is the same, and an invalidated `channels` table reloads the
+    // visible channel page and the category counts mid-browse. The old clear-everything-then-set
+    // pattern rewrote every row of a ~28K-channel playlist on every sync - measured live as a
+    // 14s COMMIT with a UI connection request stuck 60s behind it. Steady state is now zero rows.
+    @Query("UPDATE channels SET epgFallbackId = NULL WHERE playlistId = :playlistId AND epgFallbackId IS NOT NULL")
     fun clearFallbackIds(playlistId: String)
 
-    @Query("UPDATE channels SET epgFallbackId = :id WHERE playlistId = :playlistId AND streamId = :streamId")
-    fun setFallbackId(playlistId: String, streamId: String, id: String)
+    @Query("SELECT streamId, epgFallbackId AS value FROM channels WHERE playlistId = :playlistId AND epgFallbackId IS NOT NULL")
+    fun currentFallbackIds(playlistId: String): List<StreamValue>
+
+    @Query("UPDATE channels SET epgFallbackId = :id WHERE playlistId = :playlistId AND streamId = :streamId AND epgFallbackId IS NOT :id")
+    fun setFallbackId(playlistId: String, streamId: String, id: String?)
 
     /** Catch-up flags (EPG_WRAPUP.md 1.4) - see EpgSyncWorker's refresh. */
-    @Query("UPDATE channels SET tvArchiveDays = 0 WHERE playlistId = :playlistId")
-    fun clearArchiveDays(playlistId: String)
+    @Query("SELECT streamId, CAST(tvArchiveDays AS TEXT) AS value FROM channels WHERE playlistId = :playlistId AND tvArchiveDays > 0")
+    fun currentArchiveDays(playlistId: String): List<StreamValue>
 
-    @Query("UPDATE channels SET tvArchiveDays = :days WHERE playlistId = :playlistId AND streamId = :streamId")
+    @Query("UPDATE channels SET tvArchiveDays = :days WHERE playlistId = :playlistId AND streamId = :streamId AND tvArchiveDays != :days")
     fun setArchiveDays(playlistId: String, streamId: String, days: Int)
 
     @Query("UPDATE channels SET isHidden = :isHidden WHERE playlistId = :playlistId AND streamId = :streamId")

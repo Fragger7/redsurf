@@ -535,8 +535,14 @@ fun LiveTvScreen(
         // one attempt "succeeded" while focus landed nowhere. Now: wait until the grid holds the
         // selected category's own rows, ask the grid to bring the target row into view, then only
         // stop once focus is really inside the grid.
-        repeat(20) {
-            delay(300)
+        //
+        // Performance salvage L3 (2026-10-19): the first attempt runs on the next frame, not after
+        // 300ms. RIGHT from Categories lands (by default search) on the row's earliest cell, hours
+        // in the past; for those 300ms that's where focus sat, and a quick next press acted from
+        // there - the user's "RIGHT lands on the first cell". Only retries wait.
+        Log.d("LiveTvScreen", "claimGridFocus <- ${Throwable().stackTrace.getOrNull(1)?.let { "${it.methodName}:${it.lineNumber}" }} gridHasFocus=$channelsHasFocus")
+        repeat(20) { attempt ->
+            delay(if (attempt == 0) 16 else 300)
             if (selectedGroup != null && gridLoadedFor != selectedGroup) return@repeat
             gridScrollNonce++
             delay(50)

@@ -40,7 +40,11 @@ import com.redsurf.tv.ui.livetv.GroupsFocusRequest
 import com.redsurf.tv.ui.livetv.key
 import com.redsurf.tv.ui.livetv.LiveTvScreen
 import com.redsurf.tv.ui.theme.tvSafeArea
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 
 /**
@@ -177,7 +181,11 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // focus reaches the strip itself (UP from a screen's top, Back to Home, long-press Back, the
     // Teleport row) - never on any key, or it would pop back on every cursor move. The strip is
     // only collapsed, never removed, so every one of those jumps can still land on a pill.
-    var lastKeyAt by remember { mutableStateOf(0L) }
+    // Performance salvage L2 (2026-10-19): a key press restarts the timer through this flow, never
+    // through a state value. It used to be a `lastKeyAt` state used as a LaunchedEffect key - read
+    // during composition, so every single D-pad press recomposed this whole shell, the root of
+    // the app (measured: 98% janky frames scrolling the guide).
+    val keyPresses = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST) }
     var navHidden by remember { mutableStateOf(false) }
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     // "Now Playing" / "Return to fullscreen" mean the last channel actually *played* (user,
@@ -198,14 +206,16 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val doubleHeightRow by appPreferences.doubleHeightRow.collectAsState()
     val publicEpgEnabled by appPreferences.publicEpgEnabled.collectAsState()
     val navAutoHideSeconds by appPreferences.navAutoHideSeconds.collectAsState()
-    LaunchedEffect(navHasFocus, navAutoHideSeconds, lastKeyAt) {
+    LaunchedEffect(navHasFocus, navAutoHideSeconds) {
         if (navHasFocus || navAutoHideSeconds == 0) {
             navHidden = false
             return@LaunchedEffect
         }
-        if (!navHidden) {
-            delay(navAutoHideSeconds * 1000L)
-            navHidden = true
+        keyPresses.onStart { emit(Unit) }.collectLatest {
+            if (!navHidden) {
+                delay(navAutoHideSeconds * 1000L)
+                navHidden = true
+            }
         }
     }
     val navReveal by animateFloatAsState(if (navHidden) 0f else 1f, tween(240), label = "navReveal")
@@ -429,7 +439,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             val isDown = event.type == KeyEventType.KeyDown
             if (isDown) {
                 lastKeyWasUp = event.key == Key.DirectionUp
-                lastKeyAt = System.currentTimeMillis()
+                keyPresses.tryEmit(Unit)
             }
             if (event.key == Key.Back) {
                 if (isDown && event.nativeKeyEvent.repeatCount == 0) backHeldLong = false

@@ -27,9 +27,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -38,11 +38,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
+import androidx.tv.foundation.lazy.list.TvLazyListState
 import androidx.tv.foundation.lazy.list.itemsIndexed
 import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.Surface
@@ -271,8 +271,12 @@ fun GroupsColumn(
     // rapid repeat the scroll position never finishes catching up until the key stops. This tracks
     // the focused row's index explicitly and jumps to it with `scrollToItem` (immediate, no
     // animation to outrun) on every single focus change, independent of Compose's own mechanism.
+    //
+    // Performance salvage L1 (2026-10-19): still immediate, but to a fixed *mid-list* position
+    // instead of the top - TiviMate's own behavior (TIVIMATE_LEARNINGS.md F8): the focused category
+    // holds its place on screen and the list moves under it. Pinning to the top was user bug #2.
     LaunchedEffect(focusedIndex) {
-        focusedIndex?.let { runCatching { listState.scrollToItem(it) } }
+        focusedIndex?.let { runCatching { listState.holdMidList(it) } }
     }
 
     // Sprint 2, 2026-09-23 (FOCUS_MODEL.md rule 7) - real boundary guard for UP, where there was
@@ -282,11 +286,11 @@ fun GroupsColumn(
     // just above the current one that hasn't been composed yet isn't a candidate the search can
     // find, so it looks further afield and finds the NavStrip instead). Fix: intercept UP
     // ourselves whenever the focused row isn't genuinely the first one - explicitly scroll the
-    // target row into view first (so it's guaranteed composed), then retry the *default* move
-    // (not a manual per-row FocusRequester map, which would mean maintaining one per row) now
-    // that the target actually exists. Only a real index-0 UP is left to escape naturally.
+    // target row into view first (so it's guaranteed composed), then focus exactly that row
+    // through the column's single movable `targetFocus` requester (since 2026-10-19 - the
+    // retried default move it replaced could overshoot, see the handler). Only a real index-0 UP
+    // is left to escape naturally.
     val scope = rememberCoroutineScope()
-    val focusManager = LocalFocusManager.current
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -305,16 +309,21 @@ fun GroupsColumn(
                     onEscapeUp()
                     return@onPreviewKeyEvent true
                 }
+                if (landingRequest) return@onPreviewKeyEvent true
+                // Performance salvage, 2026-10-19 (FOCUS_MODEL.md "deterministic, never spatial"):
+                // focus goes to exactly the row above, by its own requester. The previous
+                // version re-issued moveFocus(Up) every 30ms until focusedIndex changed - on a
+                // slow frame the first move hadn't reported yet, so it moved again: two UPs
+                // landed three rows up, and the overshoot could leave the column for the guide
+                // (measured live; user report #6, "erratic focus between Categories and the grid").
+                val target = startIndex - 1
                 scope.launch {
-                    runCatching { listState.scrollToItem((startIndex - 1).coerceAtLeast(0)) }
-                    // Retry the *default* move, not a manual per-row target - stop the moment
-                    // focusedIndex actually changes (the move succeeded), bounded so a genuinely
-                    // stuck case doesn't loop forever.
-                    repeat(5) {
-                        if (focusedIndex != startIndex) return@launch
-                        delay(30)
-                        focusManager.moveFocus(FocusDirection.Up)
-                    }
+                    targetRowKey = rowKey(rows[target])
+                    runCatching { listState.holdMidList(target) }
+                    withFrameNanos { }
+                    runCatching { targetFocus.requestFocus() }
+                    Log.d(TAG, "up -> $target landed=${focusedIndex == target}")
+                    if (!landingRequest) targetRowKey = null
                 }
                 true
             },
@@ -363,6 +372,13 @@ fun GroupsColumn(
             }
         }
     }
+}
+
+/** Scroll so row [index] sits about mid-viewport (L1 above); near either end of the list the
+ * scroll clamps, so the first/last rows land wherever they naturally are, like TiviMate's. */
+private suspend fun TvLazyListState.holdMidList(index: Int) {
+    val rowsAbove = (layoutInfo.visibleItemsInfo.size - 1) / 2
+    scrollToItem((index - rowsAbove).coerceAtLeast(0))
 }
 
 /**

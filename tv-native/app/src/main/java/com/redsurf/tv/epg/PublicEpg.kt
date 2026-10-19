@@ -109,28 +109,36 @@ object PublicEpg {
         }
         val providerIdsWithData = epgDao.currentChannelIdsBlocking(playlistId, System.currentTimeMillis()).toHashSet()
         var candidates = 0
-        var matched = 0
-        db.runInTransaction { channelDao.clearFallbackIds(playlistId) }
+        val desired = HashMap<String, String>()
         var offset = 0
         while (true) {
             val page = channelDao.matchPage(playlistId, 2000, offset)
             if (page.isEmpty()) break
             offset += page.size
-            val updates = mutableListOf<Pair<String, String>>()
             for (c in page) {
                 val providerId = c.epgChannelId?.takeIf { it.isNotBlank() }
                 if (providerId != null && providerId in providerIdsWithData) continue
                 candidates++
                 val byId = providerId?.let { publicIndex[normalize(it.substringBeforeLast('.').replace('.', ' '))] }
                 val hit = byId ?: publicIndex[normalize(c.name)]
-                if (hit != null) updates += c.streamId to hit
-            }
-            if (updates.isNotEmpty()) {
-                matched += updates.size
-                db.runInTransaction { updates.forEach { (streamId, id) -> channelDao.setFallbackId(playlistId, streamId, id) } }
+                if (hit != null) desired[c.streamId] = hit
             }
         }
-        Log.d(TAG, "publicEpg match -> playlist=$playlistId candidates=$candidates matched=$matched publicChannels=${publicIndex.size}")
-        return candidates to matched
+        // Write only the differences (see ChannelDao.setFallbackId) - a re-sync that matches the
+        // same channels as last time touches no rows at all.
+        val current = channelDao.currentFallbackIds(playlistId).associate { it.streamId to it.value }
+        val changes = desired.filter { (streamId, id) -> current[streamId] != id }.map { it.key to it.value } +
+            current.keys.filter { it !in desired }.map { it to null }
+        writeInChunks(db, changes) { (streamId, id) -> channelDao.setFallbackId(playlistId, streamId, id) }
+        Log.d(TAG, "publicEpg match -> playlist=$playlistId candidates=$candidates matched=${desired.size} changed=${changes.size} publicChannels=${publicIndex.size}")
+        return candidates to desired.size
     }
+
+    /** Short transactions, so a UI write or Room's invalidation check never waits behind one long
+     * commit on this device's slow storage (PERFORMANCE_SALVAGE.md L6). */
+    fun <T> writeInChunks(db: RedSurfDatabase, items: List<T>, write: (T) -> Unit) {
+        items.chunked(WRITE_CHUNK).forEach { chunk -> db.runInTransaction { chunk.forEach(write) } }
+    }
+
+    private const val WRITE_CHUNK = 500
 }

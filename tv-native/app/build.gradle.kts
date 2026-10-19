@@ -55,9 +55,12 @@ android {
 
     buildTypes {
         release {
-            // R8 stays off for now. Turn it on as its own isolated change, so a shrinking
-            // bug is never mistaken for a feature bug.
-            isMinifyEnabled = false
+            // R8 on (performance salvage, 2026-10-19): Compose is built to be optimized by R8 and
+            // runs measurably slower without it; TiviMate ships R8-optimized
+            // (TIVIMATE_LEARNINGS.md F11). Names are kept (`-dontobfuscate` in
+            // proguard-rules.pro) so crash logs and stack traces stay readable as-is.
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
@@ -128,7 +131,13 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
             "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api",
             "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
             "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
-            "-opt-in=androidx.media3.common.util.UnstableApi"
+            "-opt-in=androidx.media3.common.util.UnstableApi",
+            // Performance salvage L2 (2026-10-19): with strong skipping, a composable whose
+            // arguments are the same instances as last time skips, and lambdas are remembered
+            // automatically - so a recomposition at AppShell (on every channel-focus move)
+            // stops re-running every screen beneath it. Default in Compose compiler 2.0+.
+            "-P",
+            "plugin:androidx.compose.compiler.plugins.kotlin:experimentalStrongSkipping=true",
         )
     }
 }
