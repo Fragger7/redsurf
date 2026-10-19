@@ -23,6 +23,21 @@ it, and to question whether foundational architecture decisions are wrong.
 3. Fix in ranked order, re-measure after each batch; one real release per batch (sprint rules).
 4. Re-sweep focus behavior against `FOCUS_MODEL.md` (the user's #6 "erratic" report) at the end.
 
+## Baseline measured 2026-10-19 (v0.41.1) - numbers in `TIVIMATE_LEARNINGS.md` S2
+
+- **Browsing is the emergency, not playback.** Guide DOWN/UP 98% janky (p50 250ms), Categories 69%
+  (p50 200ms, p99 1.5s), fullscreen→guide 100% janky (12 frames). TiviMate on the same TV: 1-8%.
+- **Presses are lost** under load (Categories ended 2 rows off; the grid escaped to the nav strip).
+- **L6 confirmed live:** `SQLiteConnectionPool` - a connection request waited **60s** behind a
+  `COMMIT` that had been running **14s**, during ordinary browsing ~1 min after launch. Background
+  DB writes are long single transactions that starve everything else.
+- **The crash is real:** `dumpsys activity exit-info` - `APP CRASH(EXCEPTION)`, foreground,
+  2026-10-05 01:47:25, PSS 143 MB, ~10 min after the v0.41.1 install. Stack trace already rotated
+  out of the crash buffer; we have no persistent crash log, so the next one would be lost too.
+- Device was under heavy memory pressure (swap full) - affects both apps, but raises the stakes on
+  RedSurf's footprint.
+- Seen in passing, to check: several adjacent guide rows show the same channel number (`3205`).
+
 ## Leads already confirmed by reading code (2026-10-05) - verify, then fix
 
 - **L1 - Categories "selection always at the top" (user bug 2).** `GroupsColumn.kt:274`:
