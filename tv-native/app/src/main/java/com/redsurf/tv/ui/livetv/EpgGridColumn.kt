@@ -1,5 +1,13 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -213,6 +221,12 @@ fun EpgGridColumn(
     }
 
     val density = LocalDensity.current
+    // One measurer for the whole grid: titles are measured while drawing, and its cache keeps a
+    // steady screen from measuring the same title twice.
+    val textMeasurer = rememberTextMeasurer(cacheSize = 256)
+    val cellStyle = RedSurfType.gridCell
+    val metaStyle = RedSurfType.gridMeta
+    val slotMetrics = remember(density, cellStyle, metaStyle) { SlotMetrics(density, cellStyle, metaStyle) }
     val gapDash = remember(density) {
         with(density) { PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 5.dp.toPx())) }
     }
@@ -366,6 +380,8 @@ fun EpgGridColumn(
                             isPlaying = channel.streamId == playingStreamId,
                             jump = rowJump?.takeIf { it.index == index && it.streamId == channel.streamId },
                             onJumpConsumed = { nonce -> if (rowJump?.nonce == nonce) rowJump = null },
+                            textMeasurer = textMeasurer,
+                            metrics = slotMetrics,
                             onVerticalMove = { goingDown, time ->
                                 // From the row the last press was headed to (cursorRow), not this
                                 // one: on fast presses focus hasn't landed there yet, and moving
@@ -490,6 +506,8 @@ private fun EpgChannelRow(
     jump: RowJump? = null,
     onVerticalMove: (goingDown: Boolean, time: Long) -> Boolean = { _, _ -> false },
     onJumpConsumed: (nonce: Long) -> Unit = {},
+    textMeasurer: TextMeasurer,
+    metrics: SlotMetrics,
 ) {
     var rowHasFocus by remember { mutableStateOf(false) }
     // TiviMate F14 (2026-10-20): the row is the one focus target, as in TiviMate's guide, and
@@ -669,52 +687,51 @@ private fun EpgChannelRow(
                     drawLine(Spine, Offset(size.width - hairlinePx / 2f, 0f), Offset(size.width - hairlinePx / 2f, size.height), hairlinePx)
                 },
         )
-        Box(modifier = Modifier.weight(1f).fillMaxHeight().horizontalScroll(sharedScroll)) {
-            Row(
-                modifier = Modifier
-                    .width(timelineContentWidth)
-                    .fillMaxHeight()
-                    .drawBehind {
-                        // i = 0 is the spine's own position; the timeline starts right after it.
-                        for (i in 1..columns) {
-                            val x = i * halfHourPx
-                            drawLine(if (i % 2 == 0) TickHour else TickHalf, Offset(x, 0f), Offset(x, size.height), hairlinePx)
-                        }
-                    },
-            ) {
-                // Performance salvage batch 2 (2026-10-19): compose only the slots near the
-                // viewport. The window is 24 half-hour columns and 6 are visible. Columns are
-                // derived from the shared scroll, so a row recomposes only when the view crosses
-                // a column, not per scrolled pixel. The now-cell and the selected one are always
-                // kept, plus one neighbour on each side.
-                val firstVisibleColumn by remember(halfHourPx) {
-                    derivedStateOf { (sharedScroll.value / halfHourPx).toInt() }
-                }
-                val composed = remember(slots, firstVisibleColumn, nowIndex, selected) {
-                    composedSlotRange(slots, firstVisibleColumn, nowIndex, selected.takeIf { it >= 0 })
-                }
-                if (!composed.isEmpty() && composed.first > 0) {
-                    Spacer(modifier = Modifier.width(pxPerMinute * ((slots[composed.first].start - slots.first().start) / MINUTE_MS.toFloat())))
-                }
-                for (index in composed) {
-                    val slot = slots[index]
-                    key(slot.start) {
-                        SlotCell(
-                            rowWindowStart = slots.first().start,
-                            sharedScroll = sharedScroll,
-                            slot = slot,
-                            now = now,
-                            pxPerMinute = pxPerMinute,
-                            gapDash = gapDash,
-                            wash = wash,
-                            selected = rowHasFocus && index == selected,
-                            isNowCell = index == nowIndex,
-                            expanded = expanded,
-                        )
+        // The timeline is painted, not composed (TiviMate F14): one draw pass over the slots in
+        // view, translated by the shared scroll - scrolling and selection changes only redraw
+        // this row's layer, and a new row costs a label and this Box instead of ~10 cells.
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .clipToBounds()
+                .drawBehind {
+                    if (slots.isEmpty()) return@drawBehind
+                    val scroll = sharedScroll.value.toFloat()
+                    // The lattice's half-hour verticals; i = 0 is the spine's own position.
+                    for (i in 1..columns) {
+                        val x = i * halfHourPx - scroll
+                        if (x < 0f || x > size.width) continue
+                        drawLine(if (i % 2 == 0) TickHour else TickHalf, Offset(x, 0f), Offset(x, size.height), hairlinePx)
                     }
-                }
-            }
-        }
+                    val origin = slots.first().start
+                    val sel = if (rowHasFocus) selected else -1
+                    val sweep = wash.value
+                    for (index in slots.indices) {
+                        val slot = slots[index]
+                        val left = (slot.start - origin) / MINUTE_MS.toFloat() * pxPerMinutePx - scroll
+                        val width = (slot.end - slot.start) / MINUTE_MS.toFloat() * pxPerMinutePx
+                        if (left + width <= 0f || left >= size.width) continue
+                        translate(left = left) {
+                            clipRect(left = 0f, top = 0f, right = width, bottom = size.height) {
+                                drawSlot(
+                                    slot = slot,
+                                    w = width,
+                                    now = now,
+                                    selected = index == sel,
+                                    isNowCell = index == nowIndex,
+                                    expanded = expanded,
+                                    stickyShift = (-left).coerceIn(0f, (width - metrics.minText).coerceAtLeast(0f)),
+                                    sweep = if (index == sel) sweep else 1f,
+                                    gapDash = gapDash,
+                                    textMeasurer = textMeasurer,
+                                    m = metrics,
+                                )
+                            }
+                        }
+                    }
+                },
+        )
     }
 }
 
@@ -771,152 +788,133 @@ private fun ChannelLabelBlock(
     }
 }
 
+/** Pixel sizes and text styles for [drawSlot], resolved once (styles are read in composition). */
+private class SlotMetrics(density: Density, val cellStyle: TextStyle, val metaStyle: TextStyle) {
+    val tickInset = with(density) { 7.dp.toPx() }
+    val tickStroke = with(density) { 2.dp.toPx() }
+    val bar = with(density) { 3.dp.toPx() }
+    val inset = with(density) { 1.dp.toPx() }
+    val radius = with(density) { RedSurfDensity.CellRadius.toPx() }
+    val outline = with(density) { 1.5.dp.toPx() }
+    val hairline = with(density) { RedSurfDensity.Hairline.toPx() }
+    val labelClearance = with(density) { 74.dp.toPx() }
+    val minText = with(density) { 90.dp.toPx() }
+    val padStart = with(density) { (RedSurfDensity.CellPadH + 3.dp).toPx() }
+    val padEnd = with(density) { RedSurfDensity.CellPadH.toPx() }
+}
+
 /**
- * One slot on the lattice (G.4/G.5/G.6). A plain focusable `Box` (a neutralized tv `Surface` until 2026-10-19)
- * supplies TV focus and D-pad OK → onClick; everything visible is drawn here behind the text:
+ * One slot on the lattice (G.4/G.5/G.6), drawn at the current translation with width [w] - since
+ * 2026-10-20 the timeline is painted, not composed (TiviMate F14: a new category built ~10
+ * composed cells per row, ~350ms of main thread per category move):
  * - Aired: a 2dp start-edge tick inset 7dp top and bottom (the whole "ribbon, not boxes" trick);
  *   the currently-airing slot alone is filled, with the same 3dp leading bar `GroupsColumn`'s
  *   selected row already uses; titles of slots wholly in the past dim to half.
  * - Gap: nothing but a dashed centre line across the span (the lattice ticks show through, so the
- *   30-minute columns are visibly present *inside* the gap), and a quiet "No listings" only when
- *   it's the row's first slot and at least 45 minutes long.
- * - Cursor: the row band (drawn by the row), a soft fill, a 1.5dp outline, the 3dp leading bar,
- *   and The Wash - one horizontal gradient sweep for 180ms after focus arrives, then nothing.
+ *   30-minute columns are visibly present *inside* the gap), and a quiet "No listings" on the slot
+ *   airing now - where the cursor lands.
+ * - Selected: a soft fill, a 1.5dp outline, the 3dp leading bar, and The Wash - one horizontal
+ *   gradient sweep for 180ms after the selection arrives, then nothing.
+ * - Text: TiviMate's sticky titles (2026-10-05) - a programme that started before the visible
+ *   edge keeps its title pinned to that edge ([stickyShift]) instead of cut off mid-word.
  */
-@Composable
-private fun SlotCell(
-    rowWindowStart: Long,
-    sharedScroll: ScrollState,
+private fun DrawScope.drawSlot(
     slot: EpgSlot,
+    w: Float,
     now: Long,
-    pxPerMinute: Dp,
-    gapDash: PathEffect,
-    wash: Animatable<Float, *>,
     selected: Boolean,
-    isNowCell: Boolean = false,
-    expanded: Boolean = false,
+    isNowCell: Boolean,
+    expanded: Boolean,
+    stickyShift: Float,
+    sweep: Float,
+    gapDash: PathEffect,
+    textMeasurer: TextMeasurer,
+    m: SlotMetrics,
 ) {
-    val minutes = (slot.end - slot.start) / MINUTE_MS.toFloat()
-    val width = pxPerMinute * minutes
+    val h = size.height
     val isCurrent = slot is AiredSlot && now >= slot.start && now < slot.end
-    val isPast = slot.end <= now
-    val density = LocalDensity.current
-    val tickInsetPx = with(density) { 7.dp.toPx() }
-    val tickStrokePx = with(density) { 2.dp.toPx() }
-    val barPx = with(density) { 3.dp.toPx() }
-    val insetPx = with(density) { 1.dp.toPx() }
-    val radiusPx = with(density) { RedSurfDensity.CellRadius.toPx() }
-    val outlinePx = with(density) { 1.5.dp.toPx() }
-    val hairlinePx = with(density) { RedSurfDensity.Hairline.toPx() }
-    val labelClearancePx = with(density) { 74.dp.toPx() }
-
-    // Since 2026-10-20 (TiviMate F14) a cell is drawn only - no focus, keys or semantics. The row
-    // owns focus and moves a selected programme; this cell just paints itself selected or not.
-    Box(
-        modifier = Modifier
-            .width(width)
-            .fillMaxHeight()
-            .clipToBounds()
-            .drawBehind {
-                val w = size.width
-                val h = size.height
-                when (slot) {
-                    is AiredSlot -> {
-                        // Public-supplement listings (EPG_WRAPUP.md 2.2; AGENTS.md's indicator
-                        // decision, 2026-09-15): a cool tint *and* a dashed start tick - never colour
-                        // alone, and never another red, which already means "focus/now".
-                        val supplemented = slot.programme.playlistId == PublicEpg.PLAYLIST_ID
-                        if (supplemented) {
-                            drawRoundRect(SupplementFill, Offset(0f, insetPx), Size(w, h - 2 * insetPx), CornerRadius(radiusPx))
-                        }
-                        if (isCurrent) {
-                            drawRoundRect(CurrentFill, Offset(0f, insetPx), Size(w, h - 2 * insetPx), CornerRadius(radiusPx))
-                            drawRect(Accent, Offset.Zero, Size(barPx, h))
-                        } else if (supplemented) {
-                            drawLine(SupplementTick, Offset(tickStrokePx / 2f, tickInsetPx), Offset(tickStrokePx / 2f, h - tickInsetPx), tickStrokePx, pathEffect = gapDash)
-                        } else {
-                            drawLine(SlotTick, Offset(tickStrokePx / 2f, tickInsetPx), Offset(tickStrokePx / 2f, h - tickInsetPx), tickStrokePx)
-                        }
-                    }
-                    is GapSlot -> {
-                        // Leave room for the "No listings" caption on the now-cell, which is
-                        // where it's drawn since gaps became half-hour cells.
-                        val dashStart = if (isNowCell) labelClearancePx else 0f
-                        if (w > dashStart) drawLine(GapLine, Offset(dashStart, h / 2f), Offset(w, h / 2f), hairlinePx, pathEffect = gapDash)
-                    }
-                }
-                if (selected) {
-                    drawRoundRect(CursorFill, Offset(0f, insetPx), Size(w, h - 2 * insetPx), CornerRadius(radiusPx))
-                    drawRoundRect(
-                        Accent,
-                        Offset(outlinePx / 2f, insetPx + outlinePx / 2f),
-                        Size(w - outlinePx, h - 2 * insetPx - outlinePx),
-                        CornerRadius(radiusPx),
-                        style = Stroke(outlinePx),
-                    )
-                    drawRect(Accent, Offset.Zero, Size(barPx, h))
-                    val sweep = wash.value
-                    if (sweep < 1f) {
-                        drawRect(
-                            brush = Brush.horizontalGradient(
-                                0f to Color.Transparent,
-                                0.5f to Accent.copy(alpha = 0.30f * (1f - sweep)),
-                                1f to Color.Transparent,
-                                startX = -w + 2f * w * sweep,
-                                endX = 2f * w * sweep,
-                            ),
-                            topLeft = Offset(0f, insetPx),
-                            size = Size(w, h - 2 * insetPx),
-                        )
-                    }
-                }
-            },
-    ) {
-        // TiviMate's sticky titles (2026-10-05): a programme that started before the visible edge
-        // keeps its title pinned to that edge instead of cut off mid-word. Read in the layout
-        // phase via the offset lambda, so scrolling re-places the text without recomposing.
-        val cellLeftPx = ((slot.start - rowWindowStart) / MINUTE_MS.toFloat()) * with(density) { pxPerMinute.toPx() }
-        val cellWidthPx = with(density) { width.toPx() }
-        val minTextPx = with(density) { 90.dp.toPx() }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .offset {
-                    val shift = (sharedScroll.value - cellLeftPx).coerceIn(0f, (cellWidthPx - minTextPx).coerceAtLeast(0f))
-                    androidx.compose.ui.unit.IntOffset(shift.toInt(), 0)
-                }
-                .padding(start = RedSurfDensity.CellPadH + 3.dp, end = RedSurfDensity.CellPadH),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            when (slot) {
-                is AiredSlot -> Column {
-                    Text(
-                        slot.programme.title.ifBlank { "Untitled" },
-                        style = RedSurfType.gridCell,
-                        color = when {
-                            selected || isCurrent -> TextPrimary
-                            isPast -> PastTitle
-                            else -> RestingTitle
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    // Double-height row: the second line carries the times (TiviMate).
-                    if (expanded) {
-                        Text(
-                            "${cellTimeFormat.format(Date(slot.start))} – ${cellTimeFormat.format(Date(slot.end))}",
-                            style = RedSurfType.gridMeta,
-                            color = NoListings,
-                            maxLines = 1,
-                        )
-                    }
-                }
-                // Gaps are half-hour cells now (EPG_WRAPUP.md 1.2), so the label sits on the
-                // one airing now - where the cursor lands - instead of the row's first cell.
-                is GapSlot -> if (isNowCell) {
-                    Text("No listings", style = RedSurfType.gridMeta, color = NoListings, maxLines = 1)
-                }
+    when (slot) {
+        is AiredSlot -> {
+            // Public-supplement listings (EPG_WRAPUP.md 2.2; AGENTS.md's indicator decision,
+            // 2026-09-15): a cool tint *and* a dashed start tick - never colour alone, and never
+            // another red, which already means "focus/now".
+            val supplemented = slot.programme.playlistId == PublicEpg.PLAYLIST_ID
+            if (supplemented) {
+                drawRoundRect(SupplementFill, Offset(0f, m.inset), Size(w, h - 2 * m.inset), CornerRadius(m.radius))
             }
+            if (isCurrent) {
+                drawRoundRect(CurrentFill, Offset(0f, m.inset), Size(w, h - 2 * m.inset), CornerRadius(m.radius))
+                drawRect(Accent, Offset.Zero, Size(m.bar, h))
+            } else if (supplemented) {
+                drawLine(SupplementTick, Offset(m.tickStroke / 2f, m.tickInset), Offset(m.tickStroke / 2f, h - m.tickInset), m.tickStroke, pathEffect = gapDash)
+            } else {
+                drawLine(SlotTick, Offset(m.tickStroke / 2f, m.tickInset), Offset(m.tickStroke / 2f, h - m.tickInset), m.tickStroke)
+            }
+        }
+        is GapSlot -> {
+            val dashStart = if (isNowCell) m.labelClearance else 0f
+            if (w > dashStart) drawLine(GapLine, Offset(dashStart, h / 2f), Offset(w, h / 2f), m.hairline, pathEffect = gapDash)
+        }
+    }
+    if (selected) {
+        drawRoundRect(CursorFill, Offset(0f, m.inset), Size(w, h - 2 * m.inset), CornerRadius(m.radius))
+        drawRoundRect(
+            Accent,
+            Offset(m.outline / 2f, m.inset + m.outline / 2f),
+            Size(w - m.outline, h - 2 * m.inset - m.outline),
+            CornerRadius(m.radius),
+            style = Stroke(m.outline),
+        )
+        drawRect(Accent, Offset.Zero, Size(m.bar, h))
+        if (sweep < 1f) {
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    0f to Color.Transparent,
+                    0.5f to Accent.copy(alpha = 0.30f * (1f - sweep)),
+                    1f to Color.Transparent,
+                    startX = -w + 2f * w * sweep,
+                    endX = 2f * w * sweep,
+                ),
+                topLeft = Offset(0f, m.inset),
+                size = Size(w, h - 2 * m.inset),
+            )
+        }
+    }
+    val textLeft = stickyShift + m.padStart
+    val maxWidth = (w - textLeft - m.padEnd).toInt()
+    if (maxWidth <= 0) return
+    val constraints = Constraints(maxWidth = maxWidth)
+    when (slot) {
+        is AiredSlot -> {
+            val title = textMeasurer.measure(
+                slot.programme.title.ifBlank { "Untitled" },
+                style = m.cellStyle,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                constraints = constraints,
+            )
+            // Double-height row: the second line carries the times (TiviMate).
+            val times = if (expanded) {
+                textMeasurer.measure(
+                    "${cellTimeFormat.format(Date(slot.start))} – ${cellTimeFormat.format(Date(slot.end))}",
+                    style = m.metaStyle,
+                    overflow = TextOverflow.Clip,
+                    maxLines = 1,
+                    constraints = constraints,
+                )
+            } else null
+            val top = (h - title.size.height - (times?.size?.height ?: 0)) / 2f
+            val titleColor = when {
+                selected || isCurrent -> TextPrimary
+                slot.end <= now -> PastTitle
+                else -> RestingTitle
+            }
+            drawText(title, color = titleColor, topLeft = Offset(textLeft, top))
+            times?.let { drawText(it, color = NoListings, topLeft = Offset(textLeft, top + title.size.height)) }
+        }
+        is GapSlot -> if (isNowCell) {
+            val label = textMeasurer.measure("No listings", style = m.metaStyle, maxLines = 1, constraints = constraints)
+            drawText(label, color = NoListings, topLeft = Offset(textLeft, (h - label.size.height) / 2f))
         }
     }
 }

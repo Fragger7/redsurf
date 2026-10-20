@@ -311,6 +311,28 @@ off; `redsurf_in_front` retries a transient null focus; `focused_info` reads the
 label first. Note: `adb install` of RedSurf brings the *next* task to the front (e.g. a TiviMate left
 open) - relaunch after every install.
 
+## Categories focus + painted timeline - v0.41.9 / v0.41.10 (2026-10-20 03:00)
+
+- v0.41.9: category rows switch their focus style instantly (same 1.04 scale / accent border /
+  glow / raised fill) instead of tv-material's animated Surface; one accessibility node per row.
+- v0.41.10: the guide's timeline is **painted** - one `drawBehind` per row draws the slots in view
+  (ticks, gap dashes, supplement tint, now/selected fills, the Wash, sticky titles, the times line)
+  with a grid-wide `TextMeasurer` (cache 256), translated by the shared scroll. No composed cells:
+  a category move used to build ~10 composed cells per row (trace: ~350ms frames inside
+  `measureAndLayout`); selection and horizontal scroll now only redraw the row's layer.
+  Screenshot-checked: identical look.
+
+A/B, both compiled, alternated twice (CW category with listings), janky frames as counts too -
+removing animation frames shrinks the denominator, so the % alone misleads:
+
+| | A: composed cells (v0.41.9) | B: painted (v0.41.10) |
+|---|---|---|
+| Guide 20×DOWN+20×UP | 22.2% (118) / 21.6% (117), p90 69 / 65ms, p95 125 / 121 | **13.8% (83) / 14.6% (87), p90 44 / 46ms, p95 65 / 69** |
+| Categories 20×DOWN+20×UP | 67.9% (126) / 65.1% (113), p90 300 / 350ms, p95 450 / 550 | 61.2% (127) / 59.1% (127), **p90 200 / 200ms, p95 300 / 250** |
+
+Categories are now the gap (TiviMate 7.5%, 18ms): each move still rebuilds the guide's rows for
+the new category (~8 rows, label + logo + painted Box) after the 200ms debounce.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees
