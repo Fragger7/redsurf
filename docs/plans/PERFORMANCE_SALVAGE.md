@@ -557,6 +557,12 @@ Root Category ("US| 24/7 ACTION/ADVENTURE", first of the US| family), Last Chann
 WORLD CRICKET"), Now Playing (the played channel's row), Return to fullscreen - all land correctly.
 No new crash since 00:54 (the paging crash fixed in v0.41.7).
 
+**Tried and reverted (2026-10-20 07:40):** passing Live TV's selected group / focused channel as
+providers (so a category commit would recompose Live TV but not all of AppShell), plus observing
+the last-watched effect via `snapshotFlow`. Interleaved A/B, both compiled, twice: categories got
+*worse* (22-24% → 32-33% janky, p90 48-53 → 101-105ms); guide unchanged. Cause not found - not
+worth keeping blind. TV back on the CI v0.44.4 artifact.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees
