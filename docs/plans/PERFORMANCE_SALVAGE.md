@@ -333,7 +333,7 @@ removing animation frames shrinks the denominator, so the % alone misleads:
 Categories are now the gap (TiviMate 7.5%, 18ms): each move still rebuilds the guide's rows for
 the new category (~8 rows, label + logo + painted Box) after the 200ms debounce.
 
-## Categories: commit after settling, synchronous moves, held-RIGHT fix - v0.41.11 (2026-10-20 03:40)
+## Categories: commit after settling, synchronous moves, held-RIGHT fix - v0.41.11 (2026-10-20 03:10)
 
 Frame-by-frame trace of category moves: each move = a ~90ms recomposition frame (the browsed
 group was written to AppShell state on every row, re-running the whole Live TV screen) plus a
@@ -353,6 +353,20 @@ group was written to AppShell state on every row, re-running the whole Live TV s
 A/B vs v0.41.10, compiled, alternated twice: guide janky 14.2% (85) → **11.3-11.6% (69-71)**;
 categories p50 81 → **57ms**, janky 60% → **52-53%** (count ~equal; p90 200ms unchanged - the
 row-rebuild frame is the remaining categories cost).
+
+## Painted channel label + trace markers - v0.41.12 (2026-10-20 03:45)
+
+Trace markers (`diag/Traced.kt`, `traced("name") { ... }` - free when not tracing) around
+LiveTvScreen, LiveHero, GroupsColumn, EpgGridColumn, each guide row (`EpgRow`, `EpgRow:label`,
+`EpgRow:measure`). Frame trees (scratchpad `frametree.py`) of a category move's rebuild frame:
+row composition ~50ms of which the label 37ms (its Coil logo 25ms), label text measuring ~31ms.
+The label is now painted too: number, logo chip (bitmap from `ChannelLogos`, an LruCache filled
+through Coil's own loader), name (1-2 lines), ▶ / catch-up glyphs - only the focused single-height
+row's name is still a composed marquee Text. Screenshot-checked (the full channel number now
+shows; the composed Text used to clip it to 4 digits).
+
+A/B vs v0.41.11, compiled, alternated twice: guide janky 14.0% (84) / 12.9% (79) → **11.5% (71) /
+10.6% (64)**; categories p90 200 / 200ms → **133 / 150ms**, p95 300 / 250 → **200 / 200**.
 
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`

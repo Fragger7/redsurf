@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.shell
 
+import com.redsurf.tv.diag.traced
 import android.app.Activity
 import kotlin.math.roundToInt
 import androidx.compose.ui.layout.layout
@@ -560,29 +561,31 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             // zero-size anyway, so ordering only matters for the brief instant a transition is
             // still animating, if one's ever added here.
             if (activePlaylistId != null) {
-                LiveTvScreen(
-                    viewModel = viewModel,
-                    visible = destination == NavDestination.LiveTv,
-                    onFullscreenChanged = { liveTvFullscreen = it },
-                    onChannelsFocusChanged = { liveTvChannelsFocused = it },
-                    blackScreenBetweenZaps = blackScreenBetweenZaps,
-                    previewOnSelect = previewOnSelect,
-                    showRawResolution = showRawResolution,
-                    doubleHeightRow = doubleHeightRow,
-                    selectedGroup = liveTvSelectedGroup,
-                    onSelectedGroupChanged = { liveTvSelectedGroup = it },
-                    focusedChannel = liveTvFocusedChannel,
-                    onFocusedChannelChanged = { liveTvFocusedChannel = it },
-                    autoPlayTrigger = liveTvAutoPlayTrigger,
-                    onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
-                    claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,
-                    groupsFocusRequest = liveTvGroupsFocusRequest,
-                    onGroupsFocusRequestConsumed = { liveTvGroupsFocusRequest = null },
-                    exitFullscreenRequest = liveTvExitFullscreenRequest,
-                    exitFullscreenStoppedRequest = liveTvExitFullscreenStoppedRequest,
-                    onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
-                    onEscapeUp = { runCatching { navPillFocusRequesters[NavDestination.LiveTv]?.requestFocus() } },
-                )
+                traced("LiveTvScreen") {
+                    LiveTvScreen(
+                        viewModel = viewModel,
+                        visible = destination == NavDestination.LiveTv,
+                        onFullscreenChanged = { liveTvFullscreen = it },
+                        onChannelsFocusChanged = { liveTvChannelsFocused = it },
+                        blackScreenBetweenZaps = blackScreenBetweenZaps,
+                        previewOnSelect = previewOnSelect,
+                        showRawResolution = showRawResolution,
+                        doubleHeightRow = doubleHeightRow,
+                        selectedGroup = liveTvSelectedGroup,
+                        onSelectedGroupChanged = { liveTvSelectedGroup = it },
+                        focusedChannel = liveTvFocusedChannel,
+                        onFocusedChannelChanged = { liveTvFocusedChannel = it },
+                        autoPlayTrigger = liveTvAutoPlayTrigger,
+                        onAutoPlayTriggerConsumed = { liveTvAutoPlayTrigger = false },
+                        claimInitialFocusTrigger = liveTvClaimInitialFocusTrigger,
+                        groupsFocusRequest = liveTvGroupsFocusRequest,
+                        onGroupsFocusRequestConsumed = { liveTvGroupsFocusRequest = null },
+                        exitFullscreenRequest = liveTvExitFullscreenRequest,
+                        exitFullscreenStoppedRequest = liveTvExitFullscreenStoppedRequest,
+                        onClaimInitialFocusTriggerConsumed = { liveTvClaimInitialFocusTrigger = false },
+                        onEscapeUp = { runCatching { navPillFocusRequesters[NavDestination.LiveTv]?.requestFocus() } },
+                    )
+                }
             }
 
             // Sprint 2, 2026-09-23 (Finding 9) - permanently composed once reached, same `visible`

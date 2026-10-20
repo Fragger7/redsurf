@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import com.redsurf.tv.diag.traced
 import androidx.compose.runtime.SideEffect
 import kotlinx.coroutines.Job
 import android.util.Log
@@ -756,83 +757,89 @@ fun LiveTvScreen(
             // RedSurf's nav-strip lives at the top instead, so the hero band sits directly below
             // it - same prominence, same position relative to everything else.
             val selectedGroupInfo = remember(groups, selectedGroup) { groups.firstOrNull { it.key() == selectedGroup } }
-            LiveHero(
-                cursor = cursor,
-                focusedChannel = focusedChannel,
-                previewingChannel = previewingChannel,
-                heroProgrammes = heroProgrammes,
-                gridPrograms = gridPrograms,
-                now = now,
-                groupLabel = selectedGroupInfo?.let { formatGroupName(it.groupName) },
-                groupCount = selectedGroupInfo?.count,
-                playlistUserAgent = remember(previewingChannel?.playlistId, playlists) {
-                    playlists.firstOrNull { it.id == previewingChannel?.playlistId }?.userAgent
-                },
-                isFavorite = { isFavorite(it) },
-                previewOnSelect = previewOnSelect,
-                onThumbBounds = { heroThumbBounds = it },
-                modifier = Modifier.fillMaxWidth().padding(bottom = RedSurfDensity.ColumnGap),
-            )
+            traced("LiveHero") {
+                LiveHero(
+                    cursor = cursor,
+                    focusedChannel = focusedChannel,
+                    previewingChannel = previewingChannel,
+                    heroProgrammes = heroProgrammes,
+                    gridPrograms = gridPrograms,
+                    now = now,
+                    groupLabel = selectedGroupInfo?.let { formatGroupName(it.groupName) },
+                    groupCount = selectedGroupInfo?.count,
+                    playlistUserAgent = remember(previewingChannel?.playlistId, playlists) {
+                        playlists.firstOrNull { it.id == previewingChannel?.playlistId }?.userAgent
+                    },
+                    isFavorite = { isFavorite(it) },
+                    previewOnSelect = previewOnSelect,
+                    onThumbBounds = { heroThumbBounds = it },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = RedSurfDensity.ColumnGap),
+                )
+            }
 
             // EPG_GRID_REDESIGN.md G.2 - a fixed categories column and a tighter gutter, so the
             // grid's timeline viewport (and therefore its minute scale) is as wide as the canvas
             // allows rather than a proportional share.
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(RedSurfDensity.ColumnGap)) {
-                GroupsColumn(
-                    groups = groups,
-                    selectedGroup = selectedGroup,
-                    onGroupFocused = { group ->
-                        groupCommitJob[0]?.cancel()
-                        if (group != latestGroup[0]) {
-                            pendingGroup[0] = group
-                            groupCommitJob[0] = groupScope.launch {
-                                delay(GROUP_COMMIT_MS)
+                traced("GroupsColumn") {
+                    GroupsColumn(
+                        groups = groups,
+                        selectedGroup = selectedGroup,
+                        onGroupFocused = { group ->
+                            groupCommitJob[0]?.cancel()
+                            if (group != latestGroup[0]) {
+                                pendingGroup[0] = group
+                                groupCommitJob[0] = groupScope.launch {
+                                    delay(GROUP_COMMIT_MS)
+                                    pendingGroup[0] = null
+                                    commitGroup(group)
+                                }
+                            } else {
                                 pendingGroup[0] = null
-                                commitGroup(group)
                             }
-                        } else {
-                            pendingGroup[0] = null
-                        }
-                    },
-                    modifier = Modifier.width(RedSurfDensity.CategoriesWidth).onFocusChanged {
-                        categoriesHaveFocus = it.hasFocus
-                        if (!it.hasFocus) flushPendingGroup()
-                    },
-                    onEscapeUp = onEscapeUp,
-                    focusRequest = groupsFocusRequest ?: localGroupsFocusRequest,
-                    onFocusRequestConsumed = {
-                        if (groupsFocusRequest != null) onGroupsFocusRequestConsumed() else localGroupsFocusRequest = null
-                    },
-                )
+                        },
+                        modifier = Modifier.width(RedSurfDensity.CategoriesWidth).onFocusChanged {
+                            categoriesHaveFocus = it.hasFocus
+                            if (!it.hasFocus) flushPendingGroup()
+                        },
+                        onEscapeUp = onEscapeUp,
+                        focusRequest = groupsFocusRequest ?: localGroupsFocusRequest,
+                        onFocusRequestConsumed = {
+                            if (groupsFocusRequest != null) onGroupsFocusRequestConsumed() else localGroupsFocusRequest = null
+                        },
+                    )
+                }
 
-                EpgGridColumn(
-                    channels = gridChannels,
-                    programsByChannel = gridPrograms,
-                    groupName = selectedGroup?.groupName,
-                    now = now,
-                    windowStart = windowStart,
-                    onTuneChannel = { channel -> openChannel(channel) },
-                    onPlayCatchup = { channel, programme -> playCatchup(channel, programme) },
-                    onLeftEdge = { goToCategories() },
-                    onLongPressChannel = { channel ->
-                        contextMenuArmed = false
-                        contextMenuChannel = channel
-                    },
-                    scrollToTargetNonce = gridScrollNonce,
-                    doubleHeightRow = doubleHeightRow,
-                    playingStreamId = previewingChannel?.streamId,
-                    firstCellFocusRequester = gridFocus,
-                    targetChannelStreamId = focusedChannel?.streamId,
-                    onCursorChanged = { channel, slot -> onCursorChanged(channel, slot) },
-                    onFocusStateChanged = { hasFocus ->
-                        channelsHasFocus = hasFocus
-                        if (!hasFocus) {
-                            cursor.channel = null
-                            cursor.slot = null
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                )
+                traced("EpgGridColumn") {
+                    EpgGridColumn(
+                        channels = gridChannels,
+                        programsByChannel = gridPrograms,
+                        groupName = selectedGroup?.groupName,
+                        now = now,
+                        windowStart = windowStart,
+                        onTuneChannel = { channel -> openChannel(channel) },
+                        onPlayCatchup = { channel, programme -> playCatchup(channel, programme) },
+                        onLeftEdge = { goToCategories() },
+                        onLongPressChannel = { channel ->
+                            contextMenuArmed = false
+                            contextMenuChannel = channel
+                        },
+                        scrollToTargetNonce = gridScrollNonce,
+                        doubleHeightRow = doubleHeightRow,
+                        playingStreamId = previewingChannel?.streamId,
+                        firstCellFocusRequester = gridFocus,
+                        targetChannelStreamId = focusedChannel?.streamId,
+                        onCursorChanged = { channel, slot -> onCursorChanged(channel, slot) },
+                        onFocusStateChanged = { hasFocus ->
+                            channelsHasFocus = hasFocus
+                            if (!hasFocus) {
+                                cursor.channel = null
+                                cursor.slot = null
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
 

@@ -1,7 +1,11 @@
 package com.redsurf.tv.ui.livetv
 
-import coil.compose.AsyncImagePainter
-import coil.compose.AsyncImage
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.layout
+import com.redsurf.tv.diag.traced
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -227,7 +231,8 @@ fun EpgGridColumn(
     val textMeasurer = rememberTextMeasurer(cacheSize = 256)
     val cellStyle = RedSurfType.gridCell
     val metaStyle = RedSurfType.gridMeta
-    val slotMetrics = remember(density, cellStyle, metaStyle) { SlotMetrics(density, cellStyle, metaStyle) }
+    val channelStyle = RedSurfType.gridChannel
+    val slotMetrics = remember(density, cellStyle, metaStyle, channelStyle) { SlotMetrics(density, cellStyle, metaStyle, channelStyle) }
     val gapDash = remember(density) {
         with(density) { PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 5.dp.toPx())) }
     }
@@ -356,50 +361,52 @@ fun EpgGridColumn(
                         val slots = remember(programmes, windowStart) {
                             slotsFor(programmes, windowStart, windowStart + WINDOW_MINUTES * MINUTE_MS)
                         }
-                        EpgChannelRow(
-                            channel = channel,
-                            displayName = remember(channel.name, groupName) { stripCategoryPrefix(channel.name, groupName) },
-                            slots = slots,
-                            now = now,
-                            pxPerMinute = pxPerMinute,
-                            timelineContentWidth = timelineContentWidth,
-                            sharedScroll = sharedScroll,
-                            gapDash = gapDash,
-                            wash = wash,
-                            onCursor = { key, slot ->
-                                if (key != cursorKey) {
-                                    cursorKey = key
-                                    onCursorChanged(channel, slot)
-                                }
-                            },
-                            onTune = onTuneChannel,
-                            onLongPress = onLongPressChannel,
-                            onPlayCatchup = onPlayCatchup,
-                            onLeftEdge = onLeftEdge,
-                            onShowInfo = { infoCardProgramme = it },
-                            firstCellFocusRequester = if (isFocusTarget) firstCellFocusRequester else null,
-                            expanded = doubleHeightRow && gridHadFocus && index == cursorRow,
-                            onRowFocused = { cursorRow = index },
-                            isPlaying = channel.streamId == playingStreamId,
-                            jump = rowJump?.takeIf { it.index == index && it.streamId == channel.streamId },
-                            onJumpConsumed = { nonce -> if (rowJump?.nonce == nonce) rowJump = null },
-                            textMeasurer = textMeasurer,
-                            metrics = slotMetrics,
-                            onVerticalMove = { goingDown, time ->
-                                // From the row the last press was headed to (cursorRow), not this
-                                // one: on fast presses focus hasn't landed there yet, and moving
-                                // from here again would lose a press (as GroupsColumn did).
-                                val from = if (cursorRow in channels.indices) cursorRow else index
-                                val target = if (goingDown) from + 1 else from - 1
-                                if (target in channels.indices) {
-                                    cursorRow = target
-                                    rowJump = RowJump(target, time, System.nanoTime(), channels[target].streamId)
-                                    true
-                                } else {
-                                    false // past either end: let default search escape (e.g. UP to the nav strip)
-                                }
-                            },
-                        )
+                        traced("EpgRow") {
+                            EpgChannelRow(
+                                channel = channel,
+                                displayName = remember(channel.name, groupName) { stripCategoryPrefix(channel.name, groupName) },
+                                slots = slots,
+                                now = now,
+                                pxPerMinute = pxPerMinute,
+                                timelineContentWidth = timelineContentWidth,
+                                sharedScroll = sharedScroll,
+                                gapDash = gapDash,
+                                wash = wash,
+                                onCursor = { key, slot ->
+                                    if (key != cursorKey) {
+                                        cursorKey = key
+                                        onCursorChanged(channel, slot)
+                                    }
+                                },
+                                onTune = onTuneChannel,
+                                onLongPress = onLongPressChannel,
+                                onPlayCatchup = onPlayCatchup,
+                                onLeftEdge = onLeftEdge,
+                                onShowInfo = { infoCardProgramme = it },
+                                firstCellFocusRequester = if (isFocusTarget) firstCellFocusRequester else null,
+                                expanded = doubleHeightRow && gridHadFocus && index == cursorRow,
+                                onRowFocused = { cursorRow = index },
+                                isPlaying = channel.streamId == playingStreamId,
+                                jump = rowJump?.takeIf { it.index == index && it.streamId == channel.streamId },
+                                onJumpConsumed = { nonce -> if (rowJump?.nonce == nonce) rowJump = null },
+                                textMeasurer = textMeasurer,
+                                metrics = slotMetrics,
+                                onVerticalMove = { goingDown, time ->
+                                    // From the row the last press was headed to (cursorRow), not this
+                                    // one: on fast presses focus hasn't landed there yet, and moving
+                                    // from here again would lose a press (as GroupsColumn did).
+                                    val from = if (cursorRow in channels.indices) cursorRow else index
+                                    val target = if (goingDown) from + 1 else from - 1
+                                    if (target in channels.indices) {
+                                        cursorRow = target
+                                        rowJump = RowJump(target, time, System.nanoTime(), channels[target].streamId)
+                                        true
+                                    } else {
+                                        false // past either end: let default search escape (e.g. UP to the nav strip)
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -595,6 +602,10 @@ private fun EpgChannelRow(
             .fillMaxWidth()
             .height(if (expanded) RedSurfDensity.GridRowHeight * 2 else RedSurfDensity.GridRowHeight)
             .onPlaced { placed[0] = true }
+            .layout { measurable, constraints ->
+                val placeable = traced("EpgRow:measure") { measurable.measure(constraints) }
+                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+            }
             .then(firstCellFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
             .focusRequester(rowFocus)
             .onFocusChanged {
@@ -677,19 +688,23 @@ private fun EpgChannelRow(
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ChannelLabelBlock(
-            channel = channel,
-            displayName = displayName,
-            marquee = rowHasFocus && !expanded,
-            expanded = expanded,
-            isPlaying = isPlaying,
-            modifier = Modifier
-                .width(RedSurfDensity.GridLabelWidth)
-                .fillMaxHeight()
-                .drawBehind {
-                    drawLine(Spine, Offset(size.width - hairlinePx / 2f, 0f), Offset(size.width - hairlinePx / 2f, size.height), hairlinePx)
-                },
-        )
+        traced("EpgRow:label") {
+            ChannelLabelBlock(
+                channel = channel,
+                displayName = displayName,
+                marquee = rowHasFocus && !expanded,
+                textMeasurer = textMeasurer,
+                m = metrics,
+                expanded = expanded,
+                isPlaying = isPlaying,
+                modifier = Modifier
+                    .width(RedSurfDensity.GridLabelWidth)
+                    .fillMaxHeight()
+                    .drawBehind {
+                        drawLine(Spine, Offset(size.width - hairlinePx / 2f, 0f), Offset(size.width - hairlinePx / 2f, size.height), hairlinePx)
+                    },
+            )
+        }
         // The timeline is painted, not composed (TiviMate F14): one draw pass over the slots in
         // view, translated by the shared scroll - scrolling and selection changes only redraw
         // this row's layer, and a new row costs a label and this Box instead of ~10 cells.
@@ -745,54 +760,120 @@ private fun slotIndexAt(slots: List<EpgSlot>, time: Long): Int {
     return if (i >= 0) i else if (time < slots.first().start) 0 else slots.lastIndex
 }
 
-/** Part 7.4's layout at the 180dp width: 4 | 26 (number, right-aligned) | 6 | 26 (logo) | 8 | 106 (name) | 4. */
+/**
+ * Part 7.4's layout at the 180dp width: 4 | 26 (number, right-aligned) | 6 | 26 (logo) | 8 | name |
+ * glyphs | 4 - painted, not composed (performance salvage, 2026-10-20: the composed label, and its
+ * logo `AsyncImage` above all, was ~75% of building a row). The one composed exception is the
+ * focused single-height row's name, which marquees (AGENTS.md, 2026-09-15).
+ */
 @Composable
 private fun ChannelLabelBlock(
     channel: ChannelEntity,
     displayName: String,
     marquee: Boolean,
+    textMeasurer: TextMeasurer,
+    m: SlotMetrics,
     modifier: Modifier = Modifier,
     expanded: Boolean = false,
     isPlaying: Boolean = false,
 ) {
-    Row(modifier = modifier.padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            channel.num.toString(),
-            style = RedSurfType.gridMeta,
-            color = ChannelNumber,
-            maxLines = 1,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(26.dp),
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        ChannelLogoChip(channel, size = RedSurfDensity.GridLogo)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            displayName,
-            style = RedSurfType.gridChannel,
-            color = ChannelName,
-            maxLines = if (expanded) 2 else 1,
-            overflow = TextOverflow.Ellipsis,
-            // The app's established focused-row marquee convention (AGENTS.md, 2026-09-15) - the
-            // row holding the cursor, not the cell, since the name belongs to the whole row.
-            // A double-height row shows two lines instead of scrolling.
-            modifier = Modifier.weight(1f).let { if (marquee) it.graphicsLayer().basicMarquee() else it },
-        )
-        // TiviMate's own order (EPG_WRAPUP.md 1.6, the user's reference screenshots): name, then
-        // the blue ▶ when this channel is the one playing, then the catch-up glyph.
-        if (isPlaying) {
-            Spacer(modifier = Modifier.width(4.dp))
-            PlayingGlyph()
+    val context = LocalContext.current
+    val icon = channel.streamIcon?.takeIf { it.isNotBlank() }
+    var logo by remember(icon) { mutableStateOf(icon?.let { ChannelLogos.peek(it) }) }
+    var logoFailed by remember(icon) { mutableStateOf(icon == null) }
+    if (icon != null && logo == null && !logoFailed) {
+        LaunchedEffect(icon) {
+            val loaded = ChannelLogos.load(context, icon, (m.logo * 2).toInt())
+            if (loaded == null) logoFailed = true else logo = loaded
         }
-        if (channel.tvArchiveDays > 0) {
-            Spacer(modifier = Modifier.width(4.dp))
-            CatchupGlyph()
+    }
+    val hasCatchup = channel.tvArchiveDays > 0
+    // Glyphs sit at the end, after the name's full width (the composed Row gave the name weight 1).
+    val glyphsWidth = (if (isPlaying) m.glyphGap + m.playingGlyph else 0f) + (if (hasCatchup) m.glyphGap + m.catchupGlyph else 0f)
+    Box(
+        modifier = modifier.drawBehind {
+            val h = size.height
+            // Number, right-aligned in its 26dp.
+            val number = textMeasurer.measure(channel.num.toString(), style = m.metaStyle, maxLines = 1)
+            drawText(number, color = ChannelNumber, topLeft = Offset(m.labelPad + m.numberWidth - number.size.width, (h - number.size.height) / 2f))
+            // Logo chip.
+            val chipLeft = m.labelPad + m.numberWidth + m.numberGap
+            val chipTop = (h - m.logo) / 2f
+            drawRoundRect(SurfaceRaised, Offset(chipLeft, chipTop), Size(m.logo, m.logo), CornerRadius(m.chipRadius))
+            val bitmap = logo
+            if (bitmap != null) {
+                val box = m.logo - 2 * m.chipPad
+                val scale = minOf(box / bitmap.width, box / bitmap.height)
+                val w = bitmap.width * scale
+                val hh = bitmap.height * scale
+                drawImage(
+                    bitmap,
+                    dstOffset = IntOffset((chipLeft + (m.logo - w) / 2f).toInt(), (chipTop + (m.logo - hh) / 2f).toInt()),
+                    dstSize = IntSize(w.toInt(), hh.toInt()),
+                    filterQuality = FilterQuality.Low,
+                )
+            } else if (logoFailed) {
+                val letter = textMeasurer.measure(channel.name.take(1).uppercase(), style = m.metaStyle, maxLines = 1)
+                drawText(letter, color = TextPrimary, topLeft = Offset(chipLeft + (m.logo - letter.size.width) / 2f, chipTop + (m.logo - letter.size.height) / 2f))
+            }
+            // Name.
+            val nameLeft = chipLeft + m.logo + m.logoGap
+            val nameWidth = (size.width - nameLeft - m.labelPad - glyphsWidth).toInt()
+            if (!marquee && nameWidth > 0) {
+                val name = textMeasurer.measure(
+                    displayName,
+                    style = m.channelStyle,
+                    overflow = TextOverflow.Ellipsis,
+                    maxLines = if (expanded) 2 else 1,
+                    constraints = Constraints(maxWidth = nameWidth),
+                )
+                drawText(name, color = ChannelName, topLeft = Offset(nameLeft, (h - name.size.height) / 2f))
+            }
+            // TiviMate's own order (EPG_WRAPUP.md 1.6): name, then the blue ▶ when this channel is
+            // the one playing, then the catch-up glyph.
+            var x = size.width - m.labelPad - glyphsWidth
+            if (isPlaying) {
+                x += m.glyphGap
+                translate(x, (h - m.playingGlyph) / 2f) { drawPlayingGlyph(m.playingGlyph) }
+                x += m.playingGlyph
+            }
+            if (hasCatchup) {
+                x += m.glyphGap
+                translate(x, (h - m.catchupGlyph) / 2f) { drawCatchupGlyph(m.catchupGlyph) }
+            }
+        },
+    ) {
+        if (marquee) {
+            Text(
+                displayName,
+                style = m.channelStyle,
+                color = ChannelName,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = with(LocalDensity.current) { (m.labelPad + m.numberWidth + m.numberGap + m.logo + m.logoGap).toDp() })
+                    .padding(end = with(LocalDensity.current) { (m.labelPad + glyphsWidth).toDp() })
+                    .graphicsLayer()
+                    .basicMarquee(),
+            )
         }
     }
 }
 
 /** Pixel sizes and text styles for [drawSlot], resolved once (styles are read in composition). */
-private class SlotMetrics(density: Density, val cellStyle: TextStyle, val metaStyle: TextStyle) {
+private class SlotMetrics(density: Density, val cellStyle: TextStyle, val metaStyle: TextStyle, val channelStyle: TextStyle) {
+    // Channel label (ChannelLabelBlock)
+    val labelPad = with(density) { 4.dp.toPx() }
+    val numberWidth = with(density) { 26.dp.toPx() }
+    val numberGap = with(density) { 6.dp.toPx() }
+    val logo = with(density) { RedSurfDensity.GridLogo.toPx() }
+    val logoGap = with(density) { 8.dp.toPx() }
+    val chipRadius = with(density) { 5.dp.toPx() }
+    val chipPad = with(density) { 2.dp.toPx() }
+    val glyphGap = with(density) { 4.dp.toPx() }
+    val playingGlyph = with(density) { 10.dp.toPx() }
+    val catchupGlyph = with(density) { 12.dp.toPx() }
+    // Slots (drawSlot)
     val tickInset = with(density) { 7.dp.toPx() }
     val tickStroke = with(density) { 2.dp.toPx() }
     val bar = with(density) { 3.dp.toPx() }
@@ -922,32 +1003,6 @@ private fun DrawScope.drawSlot(
     }
 }
 
-/** Logo chip, same initial-letter fallback as `ChannelsColumn.kt`'s own `ChannelLogo`. */
-@Composable
-internal fun ChannelLogoChip(channel: ChannelEntity, size: Dp, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.size(size).clip(RoundedCornerShape(5.dp)).background(SurfaceRaised),
-        contentAlignment = Alignment.Center,
-    ) {
-        val icon = channel.streamIcon
-        // A plain AsyncImage, not SubcomposeAsyncImage - Coil's own docs warn the subcomposing one
-        // is slower and not for lazy lists, and this chip is in every guide row (performance
-        // salvage, 2026-10-20). Blank while loading (no flicker on a fast-scrolling grid); the
-        // initial letter only once the logo has actually failed.
-        var failed by remember(icon) { mutableStateOf(icon.isNullOrBlank()) }
-        if (failed) {
-            Text(channel.name.take(1).uppercase(), style = RedSurfType.gridMeta, color = TextPrimary)
-        } else {
-            AsyncImage(
-                model = icon,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().padding(2.dp),
-                onState = { if (it is AsyncImagePainter.State.Error) failed = true },
-            )
-        }
-    }
-}
-
 /** The "on now" glyph - exact same brush/arc geometry as `WaveSpinner`, held static. Lives beside
  * the playing channel's name in the hero band now (EPG_GRID_REDESIGN.md G.3) - the one size where
  * it's legible; a 40dp grid cell has no room for it and the fill + bar already say "live." */
@@ -1021,40 +1076,34 @@ private val SupplementFill = Color(0xFF38BDF8).copy(alpha = 0.07f)
 private val SupplementTick = Color(0xFF7DD3FC).copy(alpha = 0.8f)
 
 /** TiviMate's "this channel is playing" mark - a small blue play triangle (EPG_WRAPUP.md 1.6). */
-@Composable
-private fun PlayingGlyph() {
-    Canvas(modifier = Modifier.size(10.dp)) {
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(size.width * 0.15f, 0f)
-            lineTo(size.width, size.height / 2f)
-            lineTo(size.width * 0.15f, size.height)
-            close()
-        }
-        drawPath(path, PlayingBlue)
+private fun DrawScope.drawPlayingGlyph(side: Float) {
+    val path = androidx.compose.ui.graphics.Path().apply {
+        moveTo(side * 0.15f, 0f)
+        lineTo(side, side / 2f)
+        lineTo(side * 0.15f, side)
+        close()
     }
+    drawPath(path, PlayingBlue)
 }
 
 /** Catch-up available - a history glyph (open arc + arrowhead + clock hands), drawn rather than
  * pulled from an icon pack the app doesn't depend on (EPG_WRAPUP.md 1.6). */
-@Composable
-private fun CatchupGlyph() {
-    Canvas(modifier = Modifier.size(12.dp)) {
-        val stroke = 1.4.dp.toPx()
-        val r = size.minDimension / 2f - stroke
-        val c = center
-        drawArc(
-            color = TextPrimary,
-            startAngle = -200f,
-            sweepAngle = 300f,
-            useCenter = false,
-            topLeft = Offset(c.x - r, c.y - r),
-            size = Size(r * 2, r * 2),
-            style = Stroke(stroke, cap = StrokeCap.Round),
-        )
-        val tip = Offset(c.x - r, c.y - r * 0.35f)
-        drawLine(TextPrimary, tip, Offset(tip.x - r * 0.35f, tip.y - r * 0.35f), stroke, StrokeCap.Round)
-        drawLine(TextPrimary, tip, Offset(tip.x + r * 0.35f, tip.y - r * 0.35f), stroke, StrokeCap.Round)
-        drawLine(TextPrimary, c, Offset(c.x, c.y - r * 0.55f), stroke, StrokeCap.Round)
-        drawLine(TextPrimary, c, Offset(c.x + r * 0.4f, c.y + r * 0.2f), stroke, StrokeCap.Round)
-    }
+private fun DrawScope.drawCatchupGlyph(side: Float) {
+    val stroke = side * (1.4f / 12f)
+    val r = side / 2f - stroke
+    val c = Offset(side / 2f, side / 2f)
+    drawArc(
+        color = TextPrimary,
+        startAngle = -200f,
+        sweepAngle = 300f,
+        useCenter = false,
+        topLeft = Offset(c.x - r, c.y - r),
+        size = Size(r * 2, r * 2),
+        style = Stroke(stroke, cap = StrokeCap.Round),
+    )
+    val tip = Offset(c.x - r, c.y - r * 0.35f)
+    drawLine(TextPrimary, tip, Offset(tip.x - r * 0.35f, tip.y - r * 0.35f), stroke, StrokeCap.Round)
+    drawLine(TextPrimary, tip, Offset(tip.x + r * 0.35f, tip.y - r * 0.35f), stroke, StrokeCap.Round)
+    drawLine(TextPrimary, c, Offset(c.x, c.y - r * 0.55f), stroke, StrokeCap.Round)
+    drawLine(TextPrimary, c, Offset(c.x + r * 0.4f, c.y + r * 0.2f), stroke, StrokeCap.Round)
 }
