@@ -117,4 +117,46 @@ class EpgSlotsTest {
         assertEquals("US - ", stripCategoryPrefix("US - ", "US | X"))
         assertEquals("X - Y", stripCategoryPrefix("X - Y", null))
     }
+
+    // Performance salvage batch 2 (2026-10-19): rows compose only the slots near the viewport.
+
+    @Test
+    fun composedRange_emptyGuide_isViewportPlusMargins() {
+        val slots = slotsFor(emptyList(), windowStart, windowEnd) // 24 half-hour gaps
+        val nowColumn = PAST_MINUTES / 30
+        val range = composedSlotRange(slots, firstVisibleColumn = nowColumn, nowIndex = nowColumn, jumpIndex = null)
+        val visible = VISIBLE_MINUTES / 30
+        assertEquals(nowColumn - COLUMN_MARGIN - 1, range.first)
+        assertEquals(nowColumn + visible + COLUMN_MARGIN, range.last)
+        assertTrue("fewer than the whole window", range.count() < slots.size)
+    }
+
+    @Test
+    fun composedRange_alwaysKeepsNowAndJumpTargets() {
+        val slots = slotsFor(emptyList(), windowStart, windowEnd)
+        val farRight = composedSlotRange(slots, firstVisibleColumn = 17, nowIndex = 12, jumpIndex = null)
+        assertTrue(12 in farRight)
+        val withJump = composedSlotRange(slots, firstVisibleColumn = 12, nowIndex = 12, jumpIndex = 1)
+        assertTrue(1 in withJump)
+    }
+
+    @Test
+    fun composedRange_includesLongProgrammeStartingBeforeTheView() {
+        // One programme covering the first 5.5 hours, then gaps.
+        val slots = slotsFor(listOf(programme(0, 330)), windowStart, windowEnd)
+        val range = composedSlotRange(slots, firstVisibleColumn = 12, nowIndex = null, jumpIndex = null)
+        assertEquals(0, range.first)
+    }
+
+    @Test
+    fun composedRange_clampsAtWindowEnd() {
+        val slots = slotsFor(emptyList(), windowStart, windowEnd)
+        val range = composedSlotRange(slots, firstVisibleColumn = slots.size - 1, nowIndex = null, jumpIndex = null)
+        assertEquals(slots.lastIndex, range.last)
+    }
+
+    @Test
+    fun composedRange_noSlots_isEmpty() {
+        assertTrue(composedSlotRange(emptyList(), 0, null, null).isEmpty())
+    }
 }

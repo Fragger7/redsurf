@@ -8,7 +8,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -32,9 +31,9 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -429,14 +428,31 @@ fun LiveTvScreen(
         val queryStart = System.currentTimeMillis()
         val channelsInGroup = viewModel.repository.channelsInGroup(group.playlistId, group.groupName)
         Log.d("LiveTvScreen", "gridQuery group=$group channels=${channelsInGroup.size} tookMs=${System.currentTimeMillis() - queryStart}")
+        // Keyed by streamId now - provider listings, else the public supplement (EPG_WRAPUP.md 2.1).
+        // Fetched *before* anything is published (performance salvage batch 2, 2026-10-19): rows
+        // and their programmes land in one recomposition. Publishing the rows first built every
+        // row twice (all-gap cells, then the real listings) and replaced the cell holding focus
+        // a moment after it got it - one source of focus jumping out of the grid.
+        //
+        // Only the rows that can be on screen first, though: the first [FIRST_PROGRAMME_ROWS] plus
+        // the neighbourhood of the channel focus will return to. Some categories hold 500-1,001
+        // channels; waiting for all of their listings held the whole grid back. The rest follow
+        // in chunks, off-screen rows only, so no focused cell is replaced.
+        val targetIndex = focusedChannel?.let { f -> channelsInGroup.indexOfFirst { it.streamId == f.streamId } } ?: -1
+        val firstRows = channelsInGroup.indices.filter {
+            it < FIRST_PROGRAMME_ROWS || (targetIndex >= 0 && it in (targetIndex - FIRST_PROGRAMME_ROWS / 2)..(targetIndex + FIRST_PROGRAMME_ROWS / 2))
+        }.toSet()
+        val programmes = viewModel.repository.programmesFor(channelsInGroup.filterIndexed { i, _ -> i in firstRows }, windowStart, windowEnd)
         // Safety net for the same race: if real focus was inside the grid when its rows are about
         // to be replaced, it will be orphaned - reclaim it onto the new rows.
         val hadGridFocus = channelsHasFocus
         gridChannels = channelsInGroup
+        gridPrograms = programmes
         gridLoadedFor = group
         if (hadGridFocus) gridReclaimNonce++
-        // Keyed by streamId now - provider listings, else the public supplement (EPG_WRAPUP.md 2.1).
-        gridPrograms = viewModel.repository.programmesFor(channelsInGroup, windowStart, windowEnd)
+        channelsInGroup.filterIndexed { i, _ -> i !in firstRows }.chunked(REMAINING_PROGRAMME_CHUNK).forEach { chunk ->
+            gridPrograms = gridPrograms + viewModel.repository.programmesFor(chunk, windowStart, windowEnd)
+        }
     }
 
     // LIVE_TV_GUIDE_MERGE.md M.3 - the hero band's own programme lookup for the *previewing*
@@ -453,49 +469,19 @@ fun LiveTvScreen(
             viewModel.repository.programmesFor(listOf(channel), windowStart, windowEnd)[channel.streamId].orEmpty()
         }
     }
-    // G.3 - "browsing" detection for the hero band's collapsed state: a burst of cursor moves
-    // closer than 700ms apart that has lasted 1.2s means the user is scanning, not reading - the
-    // band collapses to its 56dp bar and the grid gains rows; 800ms after the last move it comes
-    // back with the channel they landed on. Previewing always keeps it expanded (video's in it).
-    var isBrowsing by remember { mutableStateOf(false) }
-    var browseStartedAt by remember { mutableLongStateOf(0L) }
-    var lastCursorMoveAt by remember { mutableLongStateOf(0L) }
     // TiviMate parity: the hero band's text follows the D-pad cursor - the channel and the
     // specific slot under it - not just the OK'd channel. Kept separate from [focusedChannel],
     // which carries restore/resume semantics (set on OK, zap, cold-launch) that a mere cursor
     // pass-over must never overwrite. Cleared when focus leaves the grid so the band falls back
     // to the category bar while browsing Categories.
-    var cursorChannel by remember { mutableStateOf<ChannelEntity?>(null) }
-    var cursorSlot by remember { mutableStateOf<EpgSlot?>(null) }
+    //
+    // Performance salvage batch 2 (2026-10-19): held in [GridCursor] and read only inside
+    // [LiveHero], so a cursor move recomposes the band alone. As plain state read here, every
+    // single D-pad move in the grid re-ran this whole screen.
+    val cursor = remember { GridCursor() }
     fun onCursorChanged(channel: ChannelEntity, slot: EpgSlot) {
-        cursorChannel = channel
-        cursorSlot = slot
-        val t = System.currentTimeMillis()
-        if (t - lastCursorMoveAt > 700L) browseStartedAt = t
-        lastCursorMoveAt = t
-        if (t - browseStartedAt >= 1_200L) isBrowsing = true
-    }
-    LaunchedEffect(lastCursorMoveAt) {
-        if (lastCursorMoveAt == 0L) return@LaunchedEffect
-        delay(800)
-        isBrowsing = false
-    }
-    val heroChannel = cursorChannel ?: focusedChannel
-    val heroExpanded = previewingChannel != null || (heroChannel != null && !isBrowsing)
-
-    // What the hero band's text shows (see [cursorChannel] below): the programme under the
-    // cursor when the cursor is on a real listing; else the cursor channel's on-now programme
-    // from the grid's own data; else, with focus off the grid, the previewing channel's on-now.
-    val heroProgramme = remember(previewingChannel, cursorChannel, cursorSlot, focusedChannel, heroProgrammes, gridPrograms, now) {
-        val slot = cursorSlot
-        when {
-            cursorChannel != null && slot is AiredSlot -> slot.programme
-            cursorChannel != null -> gridPrograms[cursorChannel?.streamId].orEmpty()
-                .firstOrNull { now >= it.startTime && now < it.endTime }
-            previewingChannel != null -> heroProgrammes.firstOrNull { now >= it.startTime && now < it.endTime }
-            else -> gridPrograms[focusedChannel?.streamId].orEmpty()
-                .firstOrNull { now >= it.startTime && now < it.endTime }
-        }
+        cursor.channel = channel
+        cursor.slot = slot
     }
 
 
@@ -746,18 +732,19 @@ fun LiveTvScreen(
             // RedSurf's nav-strip lives at the top instead, so the hero band sits directly below
             // it - same prominence, same position relative to everything else.
             val selectedGroupInfo = remember(groups, selectedGroup) { groups.firstOrNull { it.key() == selectedGroup } }
-            HeroPreviewBand(
-                focusedChannel = heroChannel,
+            LiveHero(
+                cursor = cursor,
+                focusedChannel = focusedChannel,
                 previewingChannel = previewingChannel,
-                programme = heroProgramme,
+                heroProgrammes = heroProgrammes,
+                gridPrograms = gridPrograms,
                 now = now,
-                expanded = heroExpanded,
                 groupLabel = selectedGroupInfo?.let { formatGroupName(it.groupName) },
                 groupCount = selectedGroupInfo?.count,
                 playlistUserAgent = remember(previewingChannel?.playlistId, playlists) {
                     playlists.firstOrNull { it.id == previewingChannel?.playlistId }?.userAgent
                 },
-                isFavorite = isFavorite(heroChannel ?: previewingChannel),
+                isFavorite = { isFavorite(it) },
                 previewOnSelect = previewOnSelect,
                 onThumbBounds = { heroThumbBounds = it },
                 modifier = Modifier.fillMaxWidth().padding(bottom = RedSurfDensity.ColumnGap),
@@ -806,8 +793,8 @@ fun LiveTvScreen(
                     onFocusStateChanged = { hasFocus ->
                         channelsHasFocus = hasFocus
                         if (!hasFocus) {
-                            cursorChannel = null
-                            cursorSlot = null
+                            cursor.channel = null
+                            cursor.slot = null
                         }
                     },
                     modifier = Modifier.weight(1f),
@@ -931,13 +918,82 @@ fun LiveTvScreen(
 private fun isSameChannel(a: ChannelEntity?, b: ChannelEntity?): Boolean =
     a != null && b != null && a.playlistId == b.playlistId && a.streamId == b.streamId
 
+/** Where the grid's D-pad cursor is (see LiveTvScreen's `cursor`). */
+@Stable
+private class GridCursor {
+    var channel by mutableStateOf<ChannelEntity?>(null)
+    var slot by mutableStateOf<EpgSlot?>(null)
+}
+
+/**
+ * The hero band's inputs, resolved here so cursor moves recompose only this (see `GridCursor`).
+ * The band never collapses while the user scans (batch 2, 2026-10-19): that collapse animated its
+ * height for 200ms at every scan start and stop, re-laying out the whole grid beneath it each
+ * frame. TiviMate's preview area is one fixed size; so is this band.
+ */
+@Composable
+private fun LiveHero(
+    cursor: GridCursor,
+    focusedChannel: ChannelEntity?,
+    previewingChannel: ChannelEntity?,
+    heroProgrammes: List<EpgProgramEntity>,
+    gridPrograms: Map<String, List<EpgProgramEntity>>,
+    now: Long,
+    groupLabel: String?,
+    groupCount: Int?,
+    playlistUserAgent: String?,
+    isFavorite: (ChannelEntity?) -> Boolean,
+    previewOnSelect: Boolean,
+    onThumbBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cursorChannel = cursor.channel
+    val cursorSlot = cursor.slot
+    val heroChannel = cursorChannel ?: focusedChannel
+    // What the band shows: the programme under the cursor when it's on a real listing; else the
+    // cursor channel's on-now programme from the grid's own data; else, with focus off the grid,
+    // the previewing channel's on-now.
+    val programme = remember(previewingChannel, cursorChannel, cursorSlot, focusedChannel, heroProgrammes, gridPrograms, now) {
+        when {
+            cursorChannel != null && cursorSlot is AiredSlot -> cursorSlot.programme
+            cursorChannel != null -> gridPrograms[cursorChannel.streamId].orEmpty()
+                .firstOrNull { now >= it.startTime && now < it.endTime }
+            previewingChannel != null -> heroProgrammes.firstOrNull { now >= it.startTime && now < it.endTime }
+            else -> gridPrograms[focusedChannel?.streamId].orEmpty()
+                .firstOrNull { now >= it.startTime && now < it.endTime }
+        }
+    }
+    HeroPreviewBand(
+        focusedChannel = heroChannel,
+        previewingChannel = previewingChannel,
+        programme = programme,
+        now = now,
+        expanded = previewingChannel != null || heroChannel != null,
+        groupLabel = groupLabel,
+        groupCount = groupCount,
+        playlistUserAgent = playlistUserAgent,
+        isFavorite = isFavorite(heroChannel ?: previewingChannel),
+        previewOnSelect = previewOnSelect,
+        onThumbBounds = onThumbBounds,
+        modifier = modifier,
+    )
+}
+
+/** Grid rows whose listings are fetched before a category is shown (the grid's publish effect) -
+ * more than a screen of rows plus the lazy list's prefetch. */
+private const val FIRST_PROGRAMME_ROWS = 40
+
+/** Listings for the rest of a big category arrive in chunks of this many channels. */
+private const val REMAINING_PROGRAMME_CHUNK = 200
+
 private val heroTimeFormat = SimpleDateFormat("h:mm a", Locale.US)
 private val heroDateFormat = SimpleDateFormat("EEE, MMM d", Locale.US)
 
 /**
  * EPG_GRID_REDESIGN.md G.3 (consultation Part 6, "The Ledge") - the hero band, rebuilt from the
  * 190dp version whose empty state was a grey rectangle and a grey play triangle occupying ~29% of
- * the screen. Two heights, one `animateDpAsState`:
+ * the screen. Two layouts in one fixed height (since 2026-10-19 - it used to animate between two
+ * heights; see `LiveHero`):
  *
  * - **Expanded (136dp)** while a channel is previewing (video's in it, always) or merely focused
  *   and the user isn't mid-scan: the channel's real logo fills the thumbnail slot until a
@@ -968,14 +1024,11 @@ private fun HeroPreviewBand(
     onThumbBounds: (androidx.compose.ui.geometry.Rect) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val height by animateDpAsState(
-        targetValue = if (expanded) RedSurfDensity.HeroExpanded else RedSurfDensity.HeroCollapsed,
-        animationSpec = tween(200, easing = FastOutSlowInEasing),
-        label = "heroHeight",
-    )
+    // One fixed height (performance salvage batch 2, see `LiveHero`): the compact content
+    // shows inside the same space when nothing is under the cursor, so the grid never moves.
     Box(
         modifier = modifier
-            .height(height)
+            .height(RedSurfDensity.HeroExpanded)
             .clip(RoundedCornerShape(RedSurfDensity.PanelRadius))
             .background(Surface),
     ) {

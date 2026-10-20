@@ -121,3 +121,23 @@ fun stripCategoryPrefix(channelName: String, groupName: String?): String {
     val remainder = channelName.substring(separatorIndex + 1).trim()
     return remainder.ifEmpty { channelName }
 }
+
+/** Extra half-hour columns composed beyond each side of the viewport (see EpgChannelRow). */
+internal const val COLUMN_MARGIN = 2
+
+/** Indices of [slots] to compose for a view starting at [firstVisibleColumn] (see EpgChannelRow). */
+internal fun composedSlotRange(slots: List<EpgSlot>, firstVisibleColumn: Int, nowIndex: Int?, jumpIndex: Int?): IntRange {
+    if (slots.isEmpty()) return IntRange.EMPTY
+    val origin = slots.first().start
+    val from = origin + (firstVisibleColumn - COLUMN_MARGIN) * HALF_HOUR_MS
+    val to = origin + (firstVisibleColumn + VISIBLE_MINUTES / 30 + COLUMN_MARGIN) * HALF_HOUR_MS
+    var first = slots.indexOfFirst { it.end > from }.let { if (it < 0) slots.lastIndex else it }
+    var last = slots.indexOfLast { it.start < to }.let { if (it < 0) 0 else it }
+    first = (first - 1).coerceAtLeast(0)
+    last = (last + 1).coerceAtMost(slots.lastIndex)
+    listOfNotNull(nowIndex, jumpIndex).filter { it in slots.indices }.forEach {
+        first = minOf(first, it)
+        last = maxOf(last, it)
+    }
+    return first..last
+}

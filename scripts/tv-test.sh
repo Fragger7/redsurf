@@ -119,3 +119,82 @@ seed_playlist() {
       http://127.0.0.1:8080/submit
   fi
 }
+
+# --- Fail-fast guards (2026-10-19). An unattended run looped ~10 minutes searching the launcher
+# for a category after RedSurf failed to come back to the front; every step now checks where it is.
+
+# 0 = someone is using the TV (another app in front, or media playing) - stop device work.
+tv_in_use() {
+  local f; f=$(ADB shell dumpsys window | grep mCurrentFocus)
+  case "$f" in *com.redsurf.tv*|*com.spocky.projengmenu*) ;; *) echo "TV in use: $f"; return 0;; esac
+  if ADB shell dumpsys media_session | grep -q "state=3"; then echo "TV in use: media playing"; return 0; fi
+  return 1
+}
+
+# Real remote presses arrive through the kernel (/dev/input) and show in getevent; keys this
+# script injects with `input keyevent` don't. watch_human starts a device-side recorder;
+# human_pressed returns 0 (and stops it) once anyone has touched the remote since.
+HUMAN_LOG=/data/local/tmp/redsurf-human.log
+watch_human() {
+  ADB shell "pkill -x getevent ; : > $HUMAN_LOG; nohup getevent -q > $HUMAN_LOG 2>/dev/null &" >/dev/null 2>&1
+}
+human_pressed() {
+  local n; n=$(ADB shell "wc -c < $HUMAN_LOG 2>/dev/null" | tr -dc 0-9)
+  [ "${n:-0}" -gt 0 ] || return 1
+  echo "TV in use: someone pressed the remote - stopping"; ADB shell "pkill -x getevent"; return 0
+}
+unwatch_human() { ADB shell "pkill -x getevent; rm -f $HUMAN_LOG" >/dev/null 2>&1; }
+
+# 0 = RedSurf is the focused window. Otherwise says what is, and returns 1.
+redsurf_in_front() {
+  local f; f=$(ADB shell dumpsys window | grep mCurrentFocus)
+  case "$f" in *com.redsurf.tv*) return 0;; esac
+  echo "RedSurf not in front: $f"; return 1
+}
+
+# Fresh launch, then step to the category whose row text contains $1 ($2 = DOWN|UP), at most
+# $3 steps (default 30). Fails - never loops - if RedSurf isn't in front or focus stops moving.
+start_at_category() {
+  local name="$1" dir="$2" max="${3:-30}" s prev="" same=0
+  relaunch 9
+  redsurf_in_front || return 1
+  case "$(focused_info)" in *"[120,"*) ;; *) key KEYCODE_BACK 2;; esac
+  for _ in $(seq "$max"); do
+    redsurf_in_front || return 1
+    s=$(focused_info)
+    case "$s" in *"$name"*) echo "at $name"; return 0;; esac
+    if [ "$s" = "$prev" ]; then same=$((same + 1)); else same=0; fi
+    [ "$same" -ge 2 ] && { echo "focus stuck at: $s"; return 1; }
+    prev="$s"
+    key "KEYCODE_DPAD_$dir" 0.6
+  done
+  echo "never reached $name in $max steps"; return 1
+}
+
+# Move Categories focus to row index $1 (the combined list across playlists, as GroupsColumn logs
+# it: "up -> N" / "down -> N"). Reads where it is from that log instead of screen dumps, so it is
+# fast and independent of where cold launch resumed. Categories must already have focus.
+goto_category_row() {
+  local target="$1" now diff dir n
+  for _ in 1 2 3 4 5 6; do
+    ADB logcat -c
+    key KEYCODE_DPAD_DOWN 1
+    now=$(ADB logcat -d | grep -oE 'GroupsColumn: (up|down) -> [0-9]+' | tail -1 | grep -oE '[0-9]+$')
+    [ -z "$now" ] && { echo "goto_category_row: no position logged (is Categories focused?)"; return 1; }
+    diff=$((target - now))
+    [ "$diff" -eq 0 ] && { echo "at row $target"; return 0; }
+    if [ "$diff" -gt 0 ]; then dir=DOWN; n=$diff; else dir=UP; n=$((-diff)); fi
+    # Chunks of 25 so a person picking up the remote stops the walk within ~10s, not 650 presses later.
+    while [ "$n" -gt 0 ]; do
+      local c=$(( n > 25 ? 25 : n ))
+      ADB shell "for i in \$(seq $c); do input keyevent KEYCODE_DPAD_$dir; sleep 0.35; done"
+      n=$((n - c))
+      human_pressed && return 3
+      redsurf_in_front || return 1
+    done
+    sleep 1.5
+    now=$(ADB logcat -d | grep -oE 'GroupsColumn: (up|down) -> [0-9]+' | tail -1 | grep -oE '[0-9]+$')
+    [ "$now" = "$target" ] && { echo "at row $target"; return 0; }
+  done
+  echo "goto_category_row: gave up at row ${now:-?} (target $target)"; return 1
+}

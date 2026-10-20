@@ -38,6 +38,114 @@ it, and to question whether foundational architecture decisions are wrong.
   RedSurf's footprint.
 - Seen in passing, to check: several adjacent guide rows show the same channel number (`3205`).
 
+## ⏸ OVERNIGHT RESUME HERE (written 2026-10-19 01:45 CDT, user asleep - autonomous until noon)
+
+**Permission (user, 2026-10-19 ~01:45):** keep working through the salvage sprints on your own from
+the 2 AM window, then 7 AM, until noon. Commit/push per the normal rules. **If someone is using
+the TV, pause and let them watch** - check before every device step: `adb shell dumpsys window |
+grep mCurrentFocus` and `dumpsys power | grep mWakefulness`. Awake + any app other than
+`com.redsurf.tv` or the launcher (`com.spocky.projengmenu`, Google TV home) in front = in use →
+stop device work, do code-only work, re-check later. **Asleep: do NOT send KEYCODE_WAKEUP or
+POWER** - HDMI-CEC would switch the real TV on in the night. Do code + compile + unit tests then,
+and leave device verification for when it's awake and idle.
+
+**State at handoff:** v0.41.2 (CI run 146) released. On the TV: a local **v0.41.3 / versionCode
+147** release build with the **uncommitted** batch 2 changes below (next CI run is 147 - one push
+makes CI's v0.41.3 match). Uncommitted, compile-clean, partly device-checked:
+1. `EpgGridColumn` - rows compose only the slots near the viewport (`composedSlotRange`, ±2
+   columns + now-cell + jump target, keyed by `slot.start`).
+2. `LiveTvScreen` - grid rows and their programmes are published together (no double build).
+3. `EpgGridColumn` - UP/DOWN from the live cell anchors on *now* (user report: landing on an ended
+   programme where OK only shows info). **Device-verified**: 8 DOWN steps stayed in the live column.
+4. `GroupsColumn` - DOWN is deterministic like UP (targets exactly the next row; stays at the
+   last row) - DOWN used to fall into the grid at the viewport edge.
+5. `LiveTvScreen` - hero band fixed height, no scan-collapse animation, no per-move timestamp state.
+6. `EpgGridColumn` - **`RowJump` pinned to the target channel's `streamId` and cleared once
+   spent.** Prime suspect for "focus jumps into the guide while browsing Categories": a jump left
+   from guide navigation was handed to the same row *index* in the next category, whose effect
+   called requestFocus(). **Not yet device-verified** - first thing to test: start in Categories on
+   US| KIDS NETWORK, guide 20×DOWN/20×UP, Back, Categories 20×DOWN/20×UP → must end on KIDS, and
+   logcat must show no `claimGridFocus ... gridHasFocus=true` during the Categories run.
+
+**Test discipline learned the hard way tonight:** always start measurements from the same category
+(US| KIDS NETWORK - real listings, 32 channels; categories near ENTERTAINMENT/ESPN/FLO hold
+500-1001 channels and skew everything). Cold launch resumes into the grid sometimes and
+Categories other times - check `focused_info` before every run. `focused_info` was fixed to never
+reuse a stale dump. Run test scripts with `bash -c` (the shell is zsh). Never put a heredoc and a
+long device run in one command (a `cat <<EOF` hung once and blocked the run).
+
+**Update 2026-10-19 15:00 (user):** autonomy extended, open-ended - one wake-up per 5-hour usage window (not hourly, user correction), through
+Oct 20. **Superseded 22:35:** usage windows reset at 1:10, 6:10, 11:10, 16:10, 21:10 CDT; one-shot
+wake-ups at :12 after each (precise - recurring jobs drift up to 30 min). Each wake-up first runs
+`caffeinate -is -t 18900` (5h15m - overlaps into the next wake-up, which needs the Mac awake to
+fire). **Root cause of every stall so far: the Mac idle-sleeps after 1 min** (`pmset -g log`).
+The 21:12 wake-up is the last: it restores the Chromecast settings. Same TV-in-use rule. The overnight
+stall: the Chromecast's own `sleep_timeout` is 20 min (screensaver at 10) - it slept mid-test.
+User asked to set Settings → System → Power & Energy → "When inactive" → Never (or via adb:
+`settings put secure sleep_timeout -1`; the original value was 1200000 - restore it when done).
+Only one overnight wake-up did visible work; the others left no trace (cause unknown) - keep each
+wake-up's log entry short but present so gaps are visible.
+
+**Overnight progress log (append as you go):**
+- 02:10 TV was in screensaver; started the item-6 verification, then the Chromecast went to full
+  sleep mid-run (screensaver timeout) - run aborted, numbers discarded, TV left asleep (rule).
+- Code-only while asleep (all compile-clean, **45/45 unit tests**, none device-verified yet):
+  7. `SlotCell` is a plain focusable `Box` with its own OK / hold-OK handling instead of a
+     neutralized tv-material `Surface` (which built animated scale/border/glow state per cell).
+     **Device-check:** OK on live cell tunes, OK on a past archived cell plays catch-up, OK on a
+     future cell shows info, hold-OK opens the favorites context menu, focus ring still draws.
+  8. Grid publish fetches listings for the first 40 rows (+ the focus target's neighbourhood)
+     before showing a category, the rest in 200-channel chunks after - big categories (500-1,001
+     channels) no longer wait for every listing.
+  9. `composedSlotRange` moved to `EpgSlots.kt` with 5 unit tests.
+  10. Cursor channel/slot live in a `GridCursor` holder read only inside a new `LiveHero`
+      composable - a grid cursor move recomposes the hero band, not the whole LiveTvScreen.
+
+- 15:02-15:15 installed v0.41.3 (items 1-10), verification run produced nothing: after its force-stop
+  + `monkey` relaunch RedSurf never came to the front and the script looped on the launcher ~10 min.
+- **Crash captured by the new crash log**: 2026-10-19 01:54:59, v0.41.3, `IllegalStateException:
+  Expected BringIntoViewRequester to not be used before parents are placed` (during the late-night
+  category/grid tests). Theory: the stale RowJump (item 6) reached a row the lazy list had only
+  *pre-built*, and its requestFocus() hit an unplaced node. Item 6 removes the trigger; item 11
+  guards it.
+- 17:59-18:00 someone browsed RedSurf on the TV (another playlist) - device work paused per rule.
+- Unattended-run fixes (user-approved 18:00): `.claude/settings.json` allow rules added (pkill, ps,
+  cat/head/tail/date, sips, apksigner, `bash scripts/*`, `bash <scratchpad>/*`) - a pending
+  permission prompt is the prime suspect for the overnight stall; `autoContinueAtUsageLimit: true`
+  in `.claude/settings.local.json`; Chromecast `sleep_timeout` set to -1 via adb (**restore
+  1200000 when done**).
+  11. `EpgChannelRow` only requests focus for a row jump once the row has been placed
+      (`onPlaced`) - never on a pre-built row.
+  12. `scripts/tv-test.sh`: `tv_in_use`, `redsurf_in_front`, and a fail-fast `start_at_category`
+      (uses `relaunch` = `am start`, a step cap, and a stuck-focus check).
+
+- 20:16 the 18:08 verification failed twice over: resume now lands in another playlist (the
+  DOWN search never met KIDS NETWORK) and the 10-min screensaver took the screen. Disabling the
+  screensaver then put the device to sleep (its screen-off timeout had long expired).
+  13. `scripts/tv-test.sh` `goto_category_row N`: jumps to an exact Categories row using the
+      `GroupsColumn: up/down -> N` log line, independent of where launch resumed (KIDS = 2152).
+
+**⚠ CHROMECAST SETTINGS CHANGED FOR UNATTENDED WORK - RESTORE WHEN DONE (exact commands):**
+```
+adb shell settings put secure sleep_timeout 1200000        # was 1200000 (20 min)
+adb shell settings put secure screensaver_enabled 1        # was 1
+adb shell svc power stayon false                           # was 0 (off)
+adb shell settings delete global hdmi_control_enabled      # was unset (= CEC on); set to 0 so a
+                                                           # wake can't switch the real TV on
+```
+With CEC off the Chromecast remote won't power the TV or change its volume - restore before
+the family needs it, and tell the user.
+
+**When the autonomous run ends (user, 2026-10-19 22:40) - clean up everything it started:** `CronList`,
+then `CronDelete` every remaining wake-up job (one-shots that already fired are gone; ones not
+yet fired are not); `pkill caffeinate`; the Chromecast restore commands above. Report all three.
+
+**Next, in order:** verify 6 (and 4) → measure Kids guide + Kids categories (compare with the
+table below and TiviMate) → commit + push batch 2 (`perf:`) → then the remaining cost: the
+double-height focused row relayout, draw-recording per frame, row composition (~58ms/row with real
+listings; try a lighter cell than tv `Surface`) → then L5 (one shared player) and Media3 upgrade.
+Record every result in this file and `TIVIMATE_LEARNINGS.md`.
+
 ## Batch 1 - shipped v0.41.2 (2026-10-19), measured on device
 
 Done: R8 on (`-dontobfuscate`, line numbers kept), Compose strong skipping, persistent crash log
@@ -68,6 +176,37 @@ claim on the next frame instead of after 300ms). 40/40 unit tests pass.
    programme list arrives after the channel rows (gap slot → programme slots).
 4. Fast 20×DOWN/20×UP in Categories still ends one row off (was two).
 5. Cold launch: which column takes focus (Categories vs the resumed grid row) varies run to run.
+
+## Batch 2 - v0.41.3 (2026-10-19), measured on device
+
+Done: horizontal cell virtualization (`composedSlotRange`, cells keyed by start time); rows published
+together with their programmes (first 40 + the focus target first, then 200-channel chunks);
+UP/DOWN from the live cell stays on "now"; Categories DOWN deterministic, stays put on the last row;
+fixed-height hero (no animated height); `GridCursor` + `LiveHero` so cursor moves recompose only the
+hero; `RowJump` carries the streamId and is consumed once (the stale jump was the suspect for focus
+leaping into the grid while browsing Categories, and for the 01:54 `BringIntoViewRequester` crash);
+rows claim jump focus only after `onPlaced`; `SlotCell` is a plain focusable Box with its own OK /
+hold-OK. 45/45 unit tests.
+
+Device check (relaunch-resume into "US| CBS", row 816; script `verify6.sh` pattern, see below):
+- Categories 20×DOWN + 20×UP: **40 moves for 40 presses, ended on the starting row**; grid focus
+  steals during the run: **0**. No new crash (crash.log still the 01:54 entry).
+- Guide 20×DOWN + 20×UP returned to the same cell.
+
+| Move | v0.41.2 | v0.41.3 | TiviMate |
+|---|---|---|---|
+| Categories 20×DOWN, 20×UP | 58%, p50 53ms | **50%, p50 48ms**, p90 250 | 7.5%, 18ms |
+| Guide 20×DOWN, 20×UP (no-listing group) | 59%, p50 69ms | **51%, p50 48ms**, p90 101 | 7.6%, 29ms |
+
+**Not yet device-checked:** `SlotCell` OK paths (live cell tunes, archived past cell plays catch-up,
+future cell shows info, hold-OK opens favorites); guide timings on a group with real listings
+(CBS shows "No listings"). Still far from TiviMate: next is row composition cost (double-height row
+relayout, draw cost, a lighter row), then L5 (one shared ExoPlayer), then Media3.
+
+**Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
+*played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
+`watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees
+kernel input; `input keyevent` doesn't show there) - verified with a real Home press.
 
 ## Leads already confirmed by reading code (2026-10-05) - verify, then fix
 

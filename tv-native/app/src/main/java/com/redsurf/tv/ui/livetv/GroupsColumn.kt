@@ -303,12 +303,21 @@ fun GroupsColumn(
                 hadFocus = state.hasFocus
             }
             .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown || event.key != Key.DirectionUp) return@onPreviewKeyEvent false
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val goingUp = when (event.key) {
+                    Key.DirectionUp -> true
+                    Key.DirectionDown -> false
+                    else -> return@onPreviewKeyEvent false
+                }
                 val startIndex = focusedIndex ?: return@onPreviewKeyEvent false
-                if (startIndex <= 0) {
+                if (goingUp && startIndex <= 0) {
                     onEscapeUp()
                     return@onPreviewKeyEvent true
                 }
+                // DOWN at the last row stays put. Left to the default search, DOWN at the
+                // viewport's bottom edge (the scroll lagging behind fast presses) found the guide
+                // as "nearest below" and focus fell into it mid-browse (measured live 2026-10-19).
+                if (!goingUp && startIndex >= rows.lastIndex) return@onPreviewKeyEvent true
                 if (landingRequest) return@onPreviewKeyEvent true
                 // Performance salvage, 2026-10-19 (FOCUS_MODEL.md "deterministic, never spatial"):
                 // focus goes to exactly the row above, by its own requester. The previous
@@ -316,13 +325,13 @@ fun GroupsColumn(
                 // slow frame the first move hadn't reported yet, so it moved again: two UPs
                 // landed three rows up, and the overshoot could leave the column for the guide
                 // (measured live; user report #6, "erratic focus between Categories and the grid").
-                val target = startIndex - 1
+                val target = if (goingUp) startIndex - 1 else startIndex + 1
                 scope.launch {
                     targetRowKey = rowKey(rows[target])
                     runCatching { listState.holdMidList(target) }
                     withFrameNanos { }
                     runCatching { targetFocus.requestFocus() }
-                    Log.d(TAG, "up -> $target landed=${focusedIndex == target}")
+                    Log.d(TAG, "${if (goingUp) "up" else "down"} -> $target landed=${focusedIndex == target}")
                     if (!landingRequest) targetRowKey = null
                 }
                 true
