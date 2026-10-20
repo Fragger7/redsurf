@@ -438,7 +438,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         teleportMenuOpen = false
     }
 
-    val rootModifier = (if (liveTvFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxSize().tvSafeArea())
+    // The safe-area padding stays on in fullscreen too: dropping it resized the whole UI on every
+    // entry and exit (a full re-measure of everything); the player escapes it on its own instead
+    // (LiveTvScreen's fillWindow, 2026-10-20).
+    val rootModifier = Modifier.fillMaxSize().tvSafeArea()
         // Long-press Back, intercepted once here rather than in every individual screen's own
         // key router - `onPreviewKeyEvent` on this root sees every key event top-down, before
         // whatever's actually focused (Settings' rail, Live TV's channel list) gets a look at
@@ -538,16 +541,20 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // moves here with it; the Column inside is unchanged otherwise.
     Box(modifier = rootModifier) {
         Column(modifier = Modifier.fillMaxSize()) {
-            if (!liveTvFullscreen) {
-                // Collapse by measured height (children still placed, just clipped off the top),
-                // so pills stay focusable while hidden - see navHidden above.
-                Column(
-                    modifier = Modifier.clipToBounds().layout { measurable, constraints ->
-                        val placeable = measurable.measure(constraints)
-                        val height = (placeable.height * navReveal).roundToInt()
-                        layout(placeable.width, height) { placeable.place(0, height - placeable.height) }
-                    },
-                ) {
+            // Kept composed through fullscreen, collapsed to zero height (performance salvage,
+            // 2026-10-20): it used to be removed and rebuilt, ~75ms of the Back-from-fullscreen
+            // frame (composition, text measure, the mark's bitmap decode). The player's focus trap
+            // keeps focus off its pills meanwhile.
+            // Collapse by measured height (children still placed, just clipped off the top),
+            // so pills stay focusable while hidden - see navHidden above.
+            Column(
+                modifier = Modifier.clipToBounds().layout { measurable, constraints ->
+                    val placeable = measurable.measure(constraints)
+                    val height = if (liveTvFullscreen) 0 else (placeable.height * navReveal).roundToInt()
+                    layout(placeable.width, height) { placeable.place(0, height - placeable.height) }
+                },
+            ) {
+                traced("NavStrip") {
                     NavStrip(
                         current = destination,
                         onSelect = { destination = it },
@@ -565,8 +572,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                             }
                         },
                     )
-                    Spacer(modifier = Modifier.height(20.dp))
                 }
+                Spacer(modifier = Modifier.height(20.dp))
             }
 
             // Performance/state audit, 2026-09-22 (SEQUENCING.md Sprint 1) - LiveTvScreen now
@@ -619,47 +626,49 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 LaunchedEffect(selectedSettingsCategory) {
                     if (selectedSettingsCategory == SettingsCategory.Epg) viewModel.refreshEpgSyncStatus()
                 }
-                SettingsScreen(
-                    onEscapeUp = { runCatching { navPillFocusRequesters[NavDestination.Settings]?.requestFocus() } },
-                    railEntryRequest = settingsRailEntryRequest,
-                    selectedCategory = selectedSettingsCategory,
-                    onCategorySelected = { selectedSettingsCategory = it },
-                    updateStatus = updateStatus,
-                    playlists = playlists,
-                    onCheckForUpdates = { viewModel.checkForUpdates(force = true) },
-                    epgSyncStatus = epgSyncStatus,
-                    onUpdateEpgNow = { viewModel.updateEpgNow() },
-                    onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
-                    onAddPlaylist = { viewModel.beginAddPlaylist(context) },
-                    onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
-                    blackScreenBetweenZaps = blackScreenBetweenZaps,
-                    onToggleBlackScreenBetweenZaps = {
-                        appPreferences.setBlackScreenBetweenZaps(!blackScreenBetweenZaps)
-                    },
-                    previewOnSelect = previewOnSelect,
-                    onTogglePreviewOnSelect = {
-                        appPreferences.setPreviewOnSelect(!previewOnSelect)
-                    },
-                    showRawResolution = showRawResolution,
-                    doubleHeightRow = doubleHeightRow,
-                    onToggleDoubleHeightRow = { appPreferences.setDoubleHeightRow(!doubleHeightRow) },
-                    publicEpgEnabled = publicEpgEnabled,
-                    onTogglePublicEpg = { appPreferences.setPublicEpgEnabled(!publicEpgEnabled) },
-                    navAutoHideSeconds = navAutoHideSeconds,
-                    onCycleNavAutoHide = { appPreferences.cycleNavAutoHide() },
-                    onToggleShowRawResolution = {
-                        appPreferences.setShowRawResolution(!showRawResolution)
-                    },
-                    autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
-                    onToggleAutoPlayLastChannelOnLaunch = {
-                        appPreferences.setAutoPlayLastChannelOnLaunch(!autoPlayLastChannelOnLaunch)
-                    },
-                    teleportMenuEnabled = teleportMenuEnabled,
-                    onToggleTeleportMenuEnabled = {
-                        appPreferences.setTeleportMenuEnabled(!teleportMenuEnabled)
-                    },
-                    visible = destination == NavDestination.Settings,
-                )
+                traced("SettingsScreen") {
+                    SettingsScreen(
+                        onEscapeUp = { runCatching { navPillFocusRequesters[NavDestination.Settings]?.requestFocus() } },
+                        railEntryRequest = settingsRailEntryRequest,
+                        selectedCategory = selectedSettingsCategory,
+                        onCategorySelected = { selectedSettingsCategory = it },
+                        updateStatus = updateStatus,
+                        playlists = playlists,
+                        onCheckForUpdates = { viewModel.checkForUpdates(force = true) },
+                        epgSyncStatus = epgSyncStatus,
+                        onUpdateEpgNow = { viewModel.updateEpgNow() },
+                        onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
+                        onAddPlaylist = { viewModel.beginAddPlaylist(context) },
+                        onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
+                        blackScreenBetweenZaps = blackScreenBetweenZaps,
+                        onToggleBlackScreenBetweenZaps = {
+                            appPreferences.setBlackScreenBetweenZaps(!blackScreenBetweenZaps)
+                        },
+                        previewOnSelect = previewOnSelect,
+                        onTogglePreviewOnSelect = {
+                            appPreferences.setPreviewOnSelect(!previewOnSelect)
+                        },
+                        showRawResolution = showRawResolution,
+                        doubleHeightRow = doubleHeightRow,
+                        onToggleDoubleHeightRow = { appPreferences.setDoubleHeightRow(!doubleHeightRow) },
+                        publicEpgEnabled = publicEpgEnabled,
+                        onTogglePublicEpg = { appPreferences.setPublicEpgEnabled(!publicEpgEnabled) },
+                        navAutoHideSeconds = navAutoHideSeconds,
+                        onCycleNavAutoHide = { appPreferences.cycleNavAutoHide() },
+                        onToggleShowRawResolution = {
+                            appPreferences.setShowRawResolution(!showRawResolution)
+                        },
+                        autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
+                        onToggleAutoPlayLastChannelOnLaunch = {
+                            appPreferences.setAutoPlayLastChannelOnLaunch(!autoPlayLastChannelOnLaunch)
+                        },
+                        teleportMenuEnabled = teleportMenuEnabled,
+                        onToggleTeleportMenuEnabled = {
+                            appPreferences.setTeleportMenuEnabled(!teleportMenuEnabled)
+                        },
+                        visible = destination == NavDestination.Settings,
+                    )
+                }
             }
 
             // One call site, always reached when destination == LiveTv, regardless of
@@ -679,15 +688,17 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             }
         }
 
-        TeleportMenu(
-            visible = teleportMenuOpen,
-            rows = teleportRows,
-            selectedIndex = teleportIndex,
-            onClosed = {
-                val action = pendingTeleportAction
-                pendingTeleportAction = null
-                action?.invoke()
-            },
-        )
+        traced("TeleportMenu") {
+            TeleportMenu(
+                visible = teleportMenuOpen,
+                rows = teleportRows,
+                selectedIndex = teleportIndex,
+                onClosed = {
+                    val action = pendingTeleportAction
+                    pendingTeleportAction = null
+                    action?.invoke()
+                },
+            )
+        }
     }
 }

@@ -526,6 +526,22 @@ better). Honest reading: the heavy reload frames remain (janky *count* 115-120 �
 list now moves smoothly between them, which is TiviMate's pattern. 40/40 presses still land;
 settled and fast moves + RIGHT land on the right category.
 
+## Fullscreen entry/exit no longer re-lay out the whole UI - v0.41.27 (2026-10-20 06:45)
+
+Frame trees of OK → fullscreen and Back (with new `tracedMeasure` markers on every big part)
+showed the *hidden browse screen* re-measuring everything - guide 64-94ms, categories, hero, nav
+strip, all their text. Causes: (1) AppShell dropped the TV safe-area padding while fullscreen, so
+the whole UI changed size on entry and on exit; (2) the nav strip was removed in fullscreen and
+rebuilt on exit (~75ms: composition, text, the mark's bitmap decode). Now the padding is constant
+and only the player steps outside it (`fillWindow`: window-sized, placed at the window origin); the
+nav strip stays composed, collapsed to 0 height. Also retired the unused `PreviewPlayerController`.
+
+First-frame traces (UI thread): OK → fullscreen 190-226ms → **81-84ms**; fullscreen → Back
+421ms (v0.41.25) → 260-303 (nav fix) → **173-175ms**. gfxinfo with 4-23 frames is noisy: OK
+p90 250-350 → 85-89ms; Back 39-61% janky p50 34-65ms (single runs, mixed vs 36-43%/25-27 before).
+Screenshot-checked: the fullscreen overlay sits at the same full-window positions; Back returns to
+the watched row; the nav strip works after exit (UP reaches the Live TV pill).
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

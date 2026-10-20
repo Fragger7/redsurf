@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.ui.layout.layout
 import com.redsurf.tv.diag.tracedMeasure
 import com.redsurf.tv.ui.LogoOrLetter
 import com.redsurf.tv.sync.EpgSyncScheduler
@@ -255,6 +256,7 @@ fun LiveTvScreen(
     // underneath. See player/VideoFrames.kt for why it isn't one continuous video yet.
     var heroThumbBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var screenBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    val windowSize = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
     var transitionFrame by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var transitionGrow by remember { mutableStateOf(true) }
     val transitionProgress = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -968,7 +970,7 @@ fun LiveTvScreen(
                     blackScreenBetweenZaps = blackScreenBetweenZaps,
                     showRawResolution = showRawResolution,
                     controller = livePlayer,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillWindow(windowSize) { screenBounds?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero },
                 )
             }
         }
@@ -1199,15 +1201,10 @@ private fun ExpandedHero(
                 .background(SurfaceRaised),
             contentAlignment = Alignment.Center,
         ) {
-            // Sprint 2, 2026-09-23 (item 3) - the controller must stay composed *through* a
-            // transient error so its own reconnect loop (PreviewPlayerHost.kt) keeps running;
-            // tearing it down on error (the old `showingRealPreview = ... && !previewFailed` gate)
-            // disposed the exact object that was supposed to keep retrying. Now the controller
-            // lives for as long as something is previewing at all, and only the *visual* choice
-            // (video vs. the fallback thumbnail) reacts to `hasError` - recovering automatically
-            // the moment a reconnect reaches STATE_READY again, no separate local flag to resync.
             // The shared Live TV player (L5) - Live TV starts and switches its stream; this pane
-            // only shows it. Null while fullscreen holds the video surface.
+            // only shows it (null while fullscreen holds the video surface). The player outlives
+            // a transient error and keeps reconnecting (Sprint 2, 2026-09-23, item 3); only the
+            // visual choice - video vs. the fallback thumbnail - follows the error state.
             if (previewingChannel != null && player != null) {
                 val error by player.errorPresentation.collectAsState()
                 if (error == null) {
@@ -1398,3 +1395,20 @@ private fun BrowseContextMenu(channelName: String, isFavorite: Boolean, modifier
         )
     }
 }
+
+/**
+ * The fullscreen player fills the whole window although Live TV sits inside AppShell's TV safe
+ * area (performance salvage, 2026-10-20): AppShell used to drop that padding while fullscreen,
+ * which resized the entire UI on entry and exit - everything (guide, categories, hero, nav strip,
+ * every text) re-measured in those frames. Now the padding stays and only the player steps outside
+ * it: sized to [windowSize], placed back at the window's origin ([topLeftInRoot] is Live TV's own
+ * position). Drawing past a parent's bounds is fine - nothing above clips.
+ */
+private fun Modifier.fillWindow(windowSize: androidx.compose.ui.unit.IntSize, topLeftInRoot: () -> androidx.compose.ui.geometry.Offset): Modifier =
+    this.layout { measurable, constraints ->
+        val placeable = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(windowSize.width, windowSize.height))
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            val origin = topLeftInRoot()
+            placeable.place(-origin.x.toInt(), -origin.y.toInt())
+        }
+    }
