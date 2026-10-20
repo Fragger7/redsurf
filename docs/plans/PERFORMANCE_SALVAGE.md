@@ -273,6 +273,15 @@ A/B, both compiled, both built as versionCode 150, alternated twice (BTN+ PPV):
 (A's numbers here are worse than its single run earlier - run-to-run noise is large on this TV, so
 only interleaved A/B runs count.) TiviMate: 7.5%/18ms, 7.6%/29ms.
 
+**v0.41.6 crash, fixed in v0.41.7 (2026-10-20 01:00):** Room 2.7.2 pulled paging-common 3.3.2
+under paging-compose 3.2.1 → `NoClassDefFoundError: androidx.paging.LoggerKt` when the fullscreen
+channel list opened (RIGHT in fullscreen). paging-compose → 3.3.6; verified: the list opens, no crash.
+Lesson: after a toolchain bump, check `:app:dependencies` for libraries we pin older than what a
+dependency pulls in. **Still to do from the OK-path check:** future-cell info / past-cell catch-up /
+hold-OK weren't reached (the crash ended the run) - first OK on the live cell tuned (BUFFERING→READY)
+and went fullscreen. After the crash the script's leftover keys went to the Projectivy launcher's
+settings (LEFT×3, OK on "Utility Apps", Back, hold-OK, Back) - probably nothing changed; tell the user.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

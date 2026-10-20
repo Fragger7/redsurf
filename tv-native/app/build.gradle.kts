@@ -114,7 +114,7 @@ dependencies {
     ksp("androidx.room:room-compiler:$room")
 
     // Paging for per-group channel lists - never load a whole playlist into memory (PHASE_1.md #2).
-    implementation("androidx.paging:paging-compose:3.2.1")
+    implementation("androidx.paging:paging-compose:3.3.6")
 
     // Channel logos, bounded to a 24 MB memory cache (PHASE_1.md #1.5). The phase's one new
     // non-paging dependency.
