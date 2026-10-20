@@ -48,6 +48,9 @@ Everything below was device-verified by script (navigation, logs, screenshots) -
 6. **Public-guide programmes** - a stronger cool tint and a small dot in the corner. Enough, or do
    you still want a legend?
 7. **Settings** - RIGHT from the category rail goes into the pane again (an upgrade had broken it).
+7b. **Teleport** - every row was re-checked by script on v0.44.4 and lands where it should (Playlist
+   Root, Root Category, Last Channel Group, Now Playing, Return to fullscreen). Your remote is the
+   judge of how it *feels*.
 8. One thing to look at on the TV itself: during my test my script's keys briefly went to the
    Projectivy launcher's settings after a crash (OK on "Utility Apps", Back) - probably nothing
    changed, but worth a glance.

@@ -52,7 +52,7 @@ further down is history.
 
 | Move | v0.41.1 (2026-10-19) | v0.41.23 | TiviMate |
 |---|---|---|---|
-| Guide 20×DOWN+20×UP | 98% janky, p50 250ms | **12.2%, p50 36ms**, p90 44 | 7.6%, 29ms |
+| Guide 20×DOWN+20×UP | 98% janky, p50 250ms | **9.2%, p50 34ms**, p90 40 (v0.44.4) | 7.6%, 29ms |
 | Guide 10×RIGHT+10×LEFT | 36%, p90 200ms | **8.4%, p50 30ms, p90 38** | 1%, p50 32, p90 36 |
 | Categories 20×DOWN+20×UP | 69%, p50 200ms | **24-25%, p50 24ms, p90 57** (v0.41.25) | 7.5%, 18ms |
 | Fullscreen → Back | 100%, p50 200ms | **first frame 174ms** (UI trace, v0.41.27; gfxinfo 39-61% / p50 34-65, few frames) | 15%, 7ms |
@@ -546,6 +546,16 @@ First-frame traces (UI thread): OK → fullscreen 190-226ms → **81-84ms**; ful
 p90 250-350 → 85-89ms; Back 39-61% janky p50 34-65ms (single runs, mixed vs 36-43%/25-27 before).
 Screenshot-checked: the fullscreen overlay sits at the same full-window positions; Back returns to
 the watched row; the nav strip works after exit (UP reaches the Live TV pill).
+
+## Regression sweep on the real v0.44.4 release (2026-10-20 07:15)
+
+Installed the CI artifact (not a local build) and re-ran everything: guide 20×DOWN+20×UP **9.2%
+janky, p50 34ms, p90 40** (TiviMate 7.6% / 29ms); categories **24.7%, p50 25ms**, 40/40 presses
+land, 0 focus steals; focus paths (guide ↔ nav strip ↔ categories, fullscreen, controls, channel
+list) clean; Settings RIGHT/LEFT for every category; Teleport - Playlist Root (playlist header),
+Root Category ("US| 24/7 ACTION/ADVENTURE", first of the US| family), Last Channel Group ("WT|
+WORLD CRICKET"), Now Playing (the played channel's row), Return to fullscreen - all land correctly.
+No new crash since 00:54 (the paging crash fixed in v0.41.7).
 
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
