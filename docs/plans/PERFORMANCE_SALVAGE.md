@@ -473,6 +473,14 @@ while any playlist's EPG sync runs (`EpgSyncScheduler.anyRunningFlow` - WorkMana
 flows, no new tags needed). Screenshot-verified during a real sync. Note: "Update EPG now" re-queues
 with the scheduler's 45s initial delay, so the note appears ~30-45s after pressing it.
 
+## User bug #5 addressed - v0.41.23 (2026-10-20 05:50)
+
+Public-guide (EPGSHARE01) programmes were too subtle to notice: the cool tint doubled (7% → 14%)
+and a small sky-blue dot drawn in each such programme's top-right corner - a shape cue alongside the
+dashed start tick, not colour alone (AGENTS.md indicator decision). Screenshot-checked. The hero's
+"Guide: EPGSHARE01 (public)" line remains the per-programme explanation; a separate legend was not
+added (user to judge whether it's still needed).
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

@@ -885,6 +885,9 @@ private class SlotMetrics(density: Density, val cellStyle: TextStyle, val metaSt
     val minText = with(density) { 90.dp.toPx() }
     val padStart = with(density) { (RedSurfDensity.CellPadH + 3.dp).toPx() }
     val padEnd = with(density) { RedSurfDensity.CellPadH.toPx() }
+    val supplementDot = with(density) { 2.5.dp.toPx() }
+    val supplementDotInset = with(density) { 7.dp.toPx() }
+    val supplementDotMinWidth = with(density) { 24.dp.toPx() }
 }
 
 /**
@@ -925,6 +928,9 @@ private fun DrawScope.drawSlot(
             val supplemented = slot.programme.playlistId == PublicEpg.PLAYLIST_ID
             if (supplemented) {
                 drawRoundRect(SupplementFill, Offset(0f, m.inset), Size(w, h - 2 * m.inset), CornerRadius(m.radius))
+                if (w > m.supplementDotMinWidth) {
+                    drawCircle(SupplementTick, radius = m.supplementDot, center = Offset(w - m.supplementDotInset, m.inset + m.supplementDotInset))
+                }
             }
             if (isCurrent) {
                 drawRoundRect(CurrentFill, Offset(0f, m.inset), Size(w, h - 2 * m.inset), CornerRadius(m.radius))
@@ -1072,7 +1078,10 @@ private fun formatTimeRange(start: Long, end: Long): String =
 
 private val cellTimeFormat = java.text.SimpleDateFormat("h:mm", java.util.Locale.US)
 private val PlayingBlue = Color(0xFF3B82F6)
-private val SupplementFill = Color(0xFF38BDF8).copy(alpha = 0.07f)
+// User bug #5 (2026-10-05): the public-guide marking went unnoticed at 7% - doubled, and a corner
+// dot added (a shape, not only a colour, per AGENTS.md's indicator decision). Still a cool tone, so
+// it never reads as the red that means focus/now.
+private val SupplementFill = Color(0xFF38BDF8).copy(alpha = 0.14f)
 private val SupplementTick = Color(0xFF7DD3FC).copy(alpha = 0.8f)
 
 /** TiviMate's "this channel is playing" mark - a small blue play triangle (EPG_WRAPUP.md 1.6). */
