@@ -30,6 +30,27 @@ Categories UP escaping to the nav strip early (fixed Sprint 2 #24). Section D fe
 true top), #25 (focus lands on "now"), overall sluggishness after Sprint 1, and the 2026-09-28
 Settings crash fix.
 
+## M - USER RESULTS RECEIVED 2026-10-20 (morning) - do not re-ask
+1. Overall: the app feels zippier - "actually usable" now.
+2. **Preview ↔ fullscreen (both ways) is the choppiest thing left** - make it performant by code
+   and/or visual tricks (e.g. faster animations).
+3. **Nav bar hiding is a problem** - long-press Back / Teleport can't be the only way back. User's
+   proposal: when Back runs out of screens, the final Back *reveals the nav bar*; the Back after
+   that exits (TiviMate has "Confirm exit by second press Back", F17). Teleport and the nav bar
+   are still not discoverable - brainstorm graceful, professional hints shown when they'd help.
+   Also: a **global, subtle "syncing" indicator** for EPG downloads, playlist updates and (later)
+   cloud sync.
+4. **Settings must be layered like TiviMate's** - today all playlists and their details sit on one
+   page. Needs a Settings restructure sprint plus a playlist-management sprint (rename, Live/VOD
+   choice, the rest of TiviMate's per-playlist options), designed with Cloud Sync in mind.
+5. "Random Score" US sports (e.g. NBC Sports Philadelphia) kept jumping/rewinding during playback -
+   likely the provider; low time budget. Asked what TiviMate does for poor providers (F17: a Buffer
+   size setting) and whether RedSurf could do better (buffer-ahead, resilient reconnects).
+6. Standing: before building features, keep burning down the performance backlog, and learn from
+   TiviMate's code/design wherever it's faster.
+Not separately reported: items 4-8 of the list below (overlay programme, "Updating…", public tint,
+Settings RIGHT, Teleport feel, the Projectivy glance).
+
 ## M. Night 2 of the performance salvage - feel check (v0.44.4, 2026-10-20) - `PERFORMANCE_SALVAGE.md`
 
 Everything below was device-verified by script (navigation, logs, screenshots) - what's left is
