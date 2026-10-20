@@ -1061,7 +1061,7 @@ private const val FIRST_PROGRAMME_ROWS = 40
 /** Listings for the rest of a big category arrive in chunks of this many channels. */
 private const val REMAINING_PROGRAMME_CHUNK = 200
 
-private val heroTimeFormat = SimpleDateFormat("h:mm a", Locale.US)
+internal val heroTimeFormat = SimpleDateFormat("h:mm a", Locale.US)
 private val heroDateFormat = SimpleDateFormat("EEE, MMM d", Locale.US)
 
 /**
@@ -1326,7 +1326,7 @@ private fun ChannelFallbackThumbnail(channel: ChannelEntity) {
  * driven by the screen's ticking clock (G.7) rather than a timestamp captured once at
  * composition, which is how the previous version quietly stopped counting down. */
 @Composable
-private fun ProgrammeProgressRow(programme: EpgProgramEntity, now: Long) {
+internal fun ProgrammeProgressRow(programme: EpgProgramEntity, now: Long) {
     val total = (programme.endTime - programme.startTime).coerceAtLeast(1L)
     val elapsed = (now - programme.startTime).coerceIn(0L, total)
     val fraction = elapsed.toFloat() / total.toFloat()

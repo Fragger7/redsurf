@@ -458,6 +458,14 @@ only part of it. Next candidates if this matters to the user: cache per-category
 memory; stream-parse without staging the feed on disk. Syncs run daily, so lower priority than
 the steady-state numbers.
 
+## User bug #7b done - v0.41.21 (2026-10-20 05:30)
+
+The fullscreen info overlay (zap banner / Controls) said "No schedule information" for every
+channel - hard-coded. It now shows the programme airing now (title, time range, progress bar,
+minutes remaining - the hero's `ProgrammeProgressRow`), looked up through the repository and
+re-checked every 30s. Screenshot-verified ("What Ever Happened to Baby Jane?", 5:10-8:05 AM, 159
+min remaining); falls back to "No schedule information" when there is none.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

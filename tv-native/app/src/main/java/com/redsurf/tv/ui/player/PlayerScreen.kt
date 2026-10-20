@@ -1,5 +1,8 @@
 package com.redsurf.tv.ui.player
 
+import androidx.compose.runtime.produceState
+import com.redsurf.tv.ui.livetv.ProgrammeProgressRow
+import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.player.PlayerController
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -152,13 +155,30 @@ fun PlayerScreen(
     // default false, matching this screen's pre-toggle behavior exactly.
     blackScreenBetweenZaps: Boolean = false,
     showRawResolution: Boolean = false,
-    // PLAYER_ENGINEERING_BRIEF.md §6/§9 - the currently-playing channel's own playlist User-Agent,
-    // resolved reactively by LiveTvScreen (see its own doc comment for why not here).
+    // The one shared Live TV player (L5, 2026-10-20) - owned by LiveTvScreen, which also keys it on
+    // the playing playlist's User-Agent.
     controller: PlayerController,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     var overlay by remember { mutableStateOf<PlayerOverlay>(PlayerOverlay.None) }
+    // User bug #7b (2026-10-05, TiviMate parity): the overlay names the programme airing now, with
+    // its progress - it used to say "No schedule information" whatever was on. Re-checked every
+    // 30s, so it rolls over to the next programme on its own.
+    var clock by remember { mutableStateOf(System.currentTimeMillis()) }
+    val nowProgramme by produceState<EpgProgramEntity?>(null, currentChannel) {
+        val channel = currentChannel ?: return@produceState
+        while (true) {
+            val t = System.currentTimeMillis()
+            clock = t
+            value = runCatching {
+                repository.programmesFor(listOf(channel), t - PROGRAMME_LOOKAROUND_MS, t + PROGRAMME_LOOKAROUND_MS)[channel.streamId]
+                    .orEmpty()
+                    .firstOrNull { t >= it.startTime && t < it.endTime }
+            }.getOrNull()
+            delay(30_000)
+        }
+    }
     val tilesFloorFocus = remember { FocusRequester() }
     val actionsFloorFocus = remember { FocusRequester() }
     var favoriteToast by remember { mutableStateOf<String?>(null) }
@@ -629,6 +649,8 @@ fun PlayerScreen(
                 Column(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
                     PlayerInfoBlock(
                         channel = currentChannel,
+                        programme = nowProgramme,
+                        now = clock,
                         streamInfo = streamInfo,
                         showRawResolution = showRawResolution,
                         providerConnections = providerConnections,
@@ -1346,6 +1368,8 @@ private fun InfoSection(title: String, rows: List<Pair<String, String>>) {
 @Composable
 private fun PlayerInfoBlock(
     channel: ChannelEntity?,
+    programme: EpgProgramEntity?,
+    now: Long,
     streamInfo: StreamInfo,
     showRawResolution: Boolean = false,
     providerConnections: String? = null,
@@ -1375,7 +1399,13 @@ private fun PlayerInfoBlock(
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text("No schedule information", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            if (programme != null) {
+                Text(programme.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(modifier = Modifier.height(4.dp))
+                ProgrammeProgressRow(programme, now)
+            } else {
+                Text("No schedule information", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -1414,3 +1444,6 @@ private fun PlayerInfoBlock(
         }
     }
 }
+
+/** How far either side of now to fetch listings for the overlay's current programme. */
+private const val PROGRAMME_LOOKAROUND_MS = 6 * 60 * 60 * 1000L
