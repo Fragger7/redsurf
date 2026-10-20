@@ -48,6 +48,12 @@ Settings crash fix.
    size setting) and whether RedSurf could do better (buffer-ahead, resilient reconnects).
 6. Standing: before building features, keep burning down the performance backlog, and learn from
    TiviMate's code/design wherever it's faster.
+7. **Visual design (raised last, deliberately - function first):** the EPG/Live TV UI feels
+   "juvenile, inconsistent and unpolished". The dashed/perforated lines in the channel rows read as
+   unfinished/wireframe-y. Real estate is used poorly - rounded corners, extra padding per section,
+   maybe the font; TiviMate fits more without feeling cramped, and auto-hide freed room we don't use
+   well yet. Bigger wish: a **signature RedSurf look**, not "another AI-coded Compose IPTV app" -
+   reference: SluiceBox (`dev.sluice.sluicebox` on Google Play), not necessarily that elaborate.
 Not separately reported: items 4-8 of the list below (overlay programme, "Updating…", public tint,
 Settings RIGHT, Teleport feel, the Projectivy glance).
 
