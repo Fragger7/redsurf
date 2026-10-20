@@ -206,9 +206,10 @@ merging.
     again (the `@tailwindcss/oxide` issue below) before that sprint starts. **Done 2026-10-20:**
     it builds - the lockfile had been generated on Linux and listed only linux-x64 native binaries;
     the macOS ones (`@tailwindcss/oxide-darwin-*` 4.1.11, `lightningcss-darwin-*` 1.30.1, pinned to
-    the versions in use) are now `optionalDependencies`. A real build still needs a `.env.local`
-    with the `NEXT_PUBLIC_FIREBASE_*` values (`lib/firebase.ts` fails loudly without them, by
-    design); with placeholders the full build succeeds.
+    the versions in use) are now `optionalDependencies`. A build also needs `.env.local`
+    (`lib/firebase.ts` fails loudly without the `NEXT_PUBLIC_FIREBASE_*` values, by design):
+    `cp .env.example .env.local` - those are the project's public web-client keys. Real build
+    verified 2026-10-20 (10/10 pages).
   - *Branding before the Player sprint*, not after Cloud Sync: the point is that everything built
     afterwards carries it, so it goes as early as possible. Scope: Android TV launcher banner
     (320x180) + adaptive icon, the mark in the nav strip, the loading screen, About, the
