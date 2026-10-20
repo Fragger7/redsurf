@@ -261,7 +261,10 @@ fun SettingsScreen(
                         if (atTop) onEscapeUp()
                     }
                     Key.DirectionDown -> selectedCategory == SettingsCategory.entries.last()
-                    Key.DirectionRight -> !hasLiveContent
+                    // Deterministic entry (FOCUS_MODEL.md): straight to the pane's first row. Left
+                    // to directional search, RIGHT from the rail landed on the nav strip's Live TV
+                    // pill after the Compose 1.11 upgrade (device-verified 2026-10-20, every row).
+                    Key.DirectionRight -> if (!hasLiveContent) true else runCatching { paneFirstRowFocus.requestFocus() }.isSuccess
                     else -> false
                 }
             },

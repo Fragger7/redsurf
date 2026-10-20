@@ -432,6 +432,21 @@ moves, no reconnect); OK → fullscreen again: no state change at all, position 
 fullscreen starts the next channel; Back previews that zapped channel with no state change. No
 crash. `PreviewPlayerController` is now unused by Live TV (kept for now).
 
+## Settings RIGHT fixed; user bug #3 verified - v0.41.19 (2026-10-20 05:20)
+
+- **Bug (since the Compose 1.11 upgrade):** RIGHT from the Settings rail went to the nav strip's
+  Live TV pill for every category - no way into a pane with RIGHT. The rail now focuses the pane's
+  first row explicitly (FOCUS_MODEL "deterministic, never spatial"). Device-verified for every
+  category with content; LEFT returns to the rail; empty categories keep focus on the rail.
+- **User bug #3 (OK to preview, then OK to fullscreen) - verified working** with "Preview channel on
+  select" turned on for the test (then restored to Off, the user's setting): OK previews and stays in
+  the guide; OK again goes fullscreen on the same stream (position continuous); Back returns to the
+  preview with no state change; OK on another row previews that channel. User bug #4 (fullscreen →
+  preview choppy) is covered by the same shared player + v0.41.16's Back fix.
+- Tooling: `toggle_setting.sh <Category> <row label>` (scratchpad) flips any Settings row via
+  Teleport → Nav-Strip → Settings; note OK on the Settings pill leaves focus on the pill (one DOWN
+  enters the rail) and the rail opens on the last-used category.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees
