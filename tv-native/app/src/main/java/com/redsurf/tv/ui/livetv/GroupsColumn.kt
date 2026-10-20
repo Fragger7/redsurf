@@ -1,5 +1,12 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import android.util.Log
 import com.redsurf.tv.data.isFavoritesGroup
 import androidx.compose.foundation.background
@@ -450,6 +457,9 @@ private fun PlaylistHeaderRow(
     }
 }
 
+private val FocusedScale = 1.04f // RedSurfFocus.scale()
+private val FocusGlow = Accent.copy(alpha = 0.4f) // RedSurfFocus.glow()
+
 @Composable
 private fun GroupRow(
     group: GroupCount,
@@ -462,19 +472,31 @@ private fun GroupRow(
     // SWEEP-adjacent decision, AGENTS.md 2026-09-15: "only the focused row marquees") needs the
     // former.
     var isFocused by remember { mutableStateOf(false) }
-    Surface(
-        onClick = {},
+    // Performance salvage (2026-10-20): a plain focusable Box with RedSurfFocus's look applied
+    // instantly - the tv-material Surface animated scale, border, glow and colour on every move,
+    // in both the row losing focus and the one gaining it (TiviMate's lists switch instantly).
+    // One accessibility node per row (name + count) - an accessibility service is always on here.
+    val shape = RoundedCornerShape(8.dp)
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .onFocusChanged {
                 isFocused = it.isFocused
                 if (it.isFocused) onFocused()
-            },
-        shape = RedSurfFocus.shape(8.dp),
-        colors = RedSurfFocus.rowColors(selected = selected),
-        scale = RedSurfFocus.scale(),
-        border = RedSurfFocus.border(),
-        glow = RedSurfFocus.glow(),
+            }
+            // OK on a category does nothing (RIGHT enters the guide) - consumed, as the Surface's
+            // empty onClick did, so it never reaches a handler further up.
+            .onKeyEvent { it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter }
+            .focusable()
+            .clearAndSetSemantics { contentDescription = "${formatGroupName(group.groupName)} ${group.count}" }
+            .graphicsLayer {
+                val scale = if (isFocused) FocusedScale else 1f
+                scaleX = scale
+                scaleY = scale
+            }
+            .then(if (isFocused) Modifier.shadow(16.dp, shape, ambientColor = FocusGlow, spotColor = FocusGlow) else Modifier)
+            .background(if (isFocused || selected) SurfaceRaised else Color.Transparent, shape)
+            .then(if (isFocused) Modifier.border(2.dp, Accent, shape) else Modifier),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().height(36.dp),
