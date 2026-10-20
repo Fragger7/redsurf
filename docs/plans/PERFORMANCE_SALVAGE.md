@@ -40,7 +40,11 @@ it, and to question whether foundational architecture decisions are wrong.
 
 ## ▶ STATUS 2026-10-20 05:55 CDT - read this first (night 2, autonomous)
 
-**Installed on the TV and released:** v0.41.27 (CI run 171 = same code). Everything below this
+**Installed on the TV:** the real CI release **v0.44.4** (run 171). **Version names:** CI's release
+action bumps the *minor* version on every `feat:` commit, so from run 165 the real names differ from
+the v0.41.x labels used for local builds in this log: v0.41.21 = **v0.42.0**, .22 = **v0.43.0**,
+.23 = **v0.44.0**, .24 = **v0.44.1**, .25 = **v0.44.2**, .27 = **v0.44.3**, then v0.44.4 (refactor).
+Runs 150-164 match (v0.41.6-v0.41.20). Everything below this
 block up to "Test navigation" is the night's log, newest first; the older 2026-10-19 handoff
 further down is history.
 

@@ -30,7 +30,7 @@ Categories UP escaping to the nav strip early (fixed Sprint 2 #24). Section D fe
 true top), #25 (focus lands on "now"), overall sluggishness after Sprint 1, and the 2026-09-28
 Settings crash fix.
 
-## M. Night 2 of the performance salvage - feel check (v0.41.27, 2026-10-20) - `PERFORMANCE_SALVAGE.md`
+## M. Night 2 of the performance salvage - feel check (v0.44.4, 2026-10-20) - `PERFORMANCE_SALVAGE.md`
 
 Everything below was device-verified by script (navigation, logs, screenshots) - what's left is
 *feel*, which only you can judge. Install the latest release first (OTA). Five minutes:
