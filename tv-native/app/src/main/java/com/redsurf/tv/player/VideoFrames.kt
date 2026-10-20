@@ -49,3 +49,8 @@ object VideoFrames {
         }
     }
 }
+
+/** A [PlayerView] without Media3's own control bar (res/layout/redsurf_player_view.xml) - the
+ * plain constructor built it on every fullscreen entry even though RedSurf never shows it. */
+internal fun inflatePlayerView(context: android.content.Context): PlayerView =
+    android.view.LayoutInflater.from(context).inflate(com.redsurf.tv.R.layout.redsurf_player_view, null) as PlayerView

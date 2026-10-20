@@ -405,6 +405,17 @@ find causes.
 
 Next: OK → fullscreen (one very heavy frame), then L5 (one shared player).
 
+## PlayerView without Media3's controller - v0.41.17 (2026-10-20 04:50)
+
+Trace of OK → fullscreen: one 290ms frame; `inflate` 31ms of it was Media3's `PlayerControlView`
+(ImageButtons, a RecyclerView) - built whenever the PlayerView layout has
+`exo_controller_placeholder`, regardless of `useController = false` (read from Media3 1.10.1's
+bytecode). Both hosts now inflate `res/layout/redsurf_player_view.xml` whose `player_layout_id` is a
+trimmed copy of `exo_player_view.xml` (content frame, shutter, subtitles, overlay). Inflate 31 →
+10ms, the OK frame 290 → 229ms (trace). Playback verified (hardware AVC decoder, audio focus, no
+errors). Remaining in that frame: first composition of the player screen (~62ms) and its first
+layout/draw (~200ms incl. text). Fullscreen → Back: 36-41% janky, p50 25-27ms.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

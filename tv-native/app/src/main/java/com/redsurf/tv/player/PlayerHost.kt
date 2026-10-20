@@ -164,7 +164,7 @@ fun PlayerHost(
 
     AndroidView(
         factory = {
-            PlayerView(context).apply {
+            inflatePlayerView(context).apply {
                 player = exoPlayer
                 useController = false
                 // Qualified `this.` - found by the compiler, not guessed: an unqualified

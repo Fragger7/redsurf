@@ -187,7 +187,7 @@ fun PreviewPlayerHost(
     }
     AndroidView(
         factory = {
-            PlayerView(it).apply {
+            inflatePlayerView(it).apply {
                 player = controller.exoPlayer
                 useController = false
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM

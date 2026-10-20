@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The PlayerView's own content (player_layout_id), trimmed from Media3's exo_player_view.xml
+     (performance salvage, 2026-10-20). Without exo_controller_placeholder PlayerView never builds
+     its PlayerControlView - it did on every fullscreen entry even with useController = false
+     (~31ms of inflation on this TV). RedSurf draws its own spinner, errors and controls, so the
+     buffering/error/artwork/ad views are dropped too; PlayerView null-checks each optional id. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+    <androidx.media3.ui.AspectRatioFrameLayout
+        android:id="@id/exo_content_frame"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center">
+        <!-- The video surface is inserted as the first child of the content frame. -->
+        <View
+            android:id="@id/exo_shutter"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@android:color/black" />
+        <androidx.media3.ui.SubtitleView
+            android:id="@id/exo_subtitles"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </androidx.media3.ui.AspectRatioFrameLayout>
+    <FrameLayout
+        android:id="@id/exo_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</merge>
