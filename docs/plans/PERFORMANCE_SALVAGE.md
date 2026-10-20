@@ -466,6 +466,13 @@ minutes remaining - the hero's `ProgrammeProgressRow`), looked up through the re
 re-checked every 30s. Screenshot-verified ("What Ever Happened to Baby Jane?", 5:10-8:05 AM, 159
 min remaining); falls back to "No schedule information" when there is none.
 
+## User bug #8a done - v0.41.22 (2026-10-20 05:45)
+
+Live TV says when the guide is refreshing: "Updating…" right-aligned in the Categories header
+while any playlist's EPG sync runs (`EpgSyncScheduler.anyRunningFlow` - WorkManager's unique-work
+flows, no new tags needed). Screenshot-verified during a real sync. Note: "Update EPG now" re-queues
+with the scheduler's 45s initial delay, so the note appears ~30-45s after pressing it.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

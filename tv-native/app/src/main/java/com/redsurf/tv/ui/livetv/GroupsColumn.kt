@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
@@ -134,6 +135,7 @@ fun GroupsColumn(
     groups: List<GroupCount>,
     selectedGroup: GroupKey?,
     onGroupFocused: (GroupKey) -> Unit,
+    guideUpdating: Boolean = false,
     modifier: Modifier = Modifier,
     // false when a caller is placing focus elsewhere deliberately (ChannelListOverlay, decision
     // 11's "focus lands on the current channel row") - root-caused live, 2026-09-17: this
@@ -367,12 +369,30 @@ fun GroupsColumn(
                 true
             },
     ) {
-        Text(
-            "Categories",
-            style = RedSurfType.sectionTitle,
-            color = TextPrimary,
-            modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Categories",
+                style = RedSurfType.sectionTitle,
+                color = TextPrimary,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
+            )
+            // User bug #8a (2026-10-05): say when the guide is refreshing, so listings changing
+            // under the user (or still missing) have an explanation. Takes only the space the
+            // title leaves (it squeezed "Categories" onto two lines at first).
+            if (guideUpdating) {
+                Text(
+                    "Updating…",
+                    style = RedSurfType.gridMeta,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp, end = 8.dp, bottom = 10.dp),
+                )
+            }
+        }
         LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             itemsIndexed(
                 rows,

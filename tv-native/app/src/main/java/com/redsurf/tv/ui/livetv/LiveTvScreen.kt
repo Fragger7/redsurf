@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import com.redsurf.tv.sync.EpgSyncScheduler
 import androidx.compose.runtime.key
 import com.redsurf.tv.player.SharedPreviewHost
 import com.redsurf.tv.player.rememberPlayerController
@@ -342,6 +343,12 @@ fun LiveTvScreen(
     }
     LaunchedEffect(catchupFailed) { if (catchupFailed != null) { delay(3_000); catchupFailed = null } }
     LaunchedEffect(isFullscreen) { if (!isFullscreen) catchupUrl = null }
+
+    val syncContext = androidx.compose.ui.platform.LocalContext.current
+    val playlistIds = remember(playlists) { playlists.map { it.id } }
+    val guideUpdating by remember(playlistIds) {
+        EpgSyncScheduler.anyRunningFlow(syncContext, playlistIds)
+    }.collectAsState(initial = false)
 
     // L5 (2026-10-20, TiviMate parity): ONE player for the preview pane and fullscreen. It used to
     // be two - torn down and rebuilt on every switch, re-buffering each time and briefly holding
@@ -806,6 +813,7 @@ fun LiveTvScreen(
                     GroupsColumn(
                         groups = groups,
                         selectedGroup = selectedGroup,
+                        guideUpdating = guideUpdating,
                         onGroupFocused = { group ->
                             // Only focus moving *within* Categories is the user browsing. Focus that
                             // merely lands here (falling out of fullscreen or out of replaced guide

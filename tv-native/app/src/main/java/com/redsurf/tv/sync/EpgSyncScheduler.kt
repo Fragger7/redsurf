@@ -1,5 +1,9 @@
 package com.redsurf.tv.sync
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.Flow
 import android.content.Context
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -82,6 +86,16 @@ object EpgSyncScheduler {
     /** Called from `deletePlaylist` - an orphaned periodic sync for a deleted playlist would
      * keep firing forever, hit `EpgSyncWorker`'s own "playlist no longer exists" no-op every
      * time, and never stop. */
+    /** Whether any of these playlists' guide syncs is executing - Live TV's "Updating guide…"
+     * note (user bug #8a, 2026-10-05). */
+    fun anyRunningFlow(context: Context, playlistIds: List<String>): Flow<Boolean> {
+        if (playlistIds.isEmpty()) return flowOf(false)
+        val wm = WorkManager.getInstance(context)
+        return combine(playlistIds.map { wm.getWorkInfosForUniqueWorkFlow(workName(it)) }) { perPlaylist ->
+            perPlaylist.any { infos -> infos.any { it.state == WorkInfo.State.RUNNING } }
+        }.distinctUntilChanged()
+    }
+
     fun cancel(context: Context, playlistId: String) {
         val wm = WorkManager.getInstance(context)
         wm.cancelUniqueWork(workName(playlistId))
