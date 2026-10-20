@@ -163,6 +163,34 @@ wait for a report. Concrete checklist for any new flow with meaningful state:
   mode — hoisting the data is necessary but not sufficient if the composable that reads it still
   gets torn down and rebuilt)?
 
+### 10. Lessons from the Compose 1.11 upgrade (2026-10-20) — check these on any focus or scroll change
+
+Device-found the night Compose went 1.6 → 1.11 (`PERFORMANCE_SALVAGE.md`, v0.41.6-v0.41.27):
+
+- **Scroll containers on a TV pivot.** Since Compose 1.7 a scrollable's default
+  `BringIntoViewSpec` on a leanback device moves the focused child to 30% of the viewport. Any
+  container that positions itself (the guide timeline, the categories list's `holdMidList`) must
+  provide its own `LocalBringIntoViewSpec` (minimal or no-op), or two scrolls fight per move.
+- **A focus-trapped root must handle Back itself.** With `focusProperties { exit = Cancel }` on the
+  focused node, Back no longer fell through to the `BackHandler` - fullscreen could not be left.
+  The player root now peels on Back in its own `onKeyEvent` (consuming both edges); the
+  `BackHandler` stays as a fallback.
+- **Rule 1 applies to rails too.** RIGHT from the Settings rail resolved to a nav-strip pill via
+  directional search; it now requests the pane's first row explicitly. Never leave a cross-region
+  move to spatial search.
+- **Commit state only for focus the user moved.** A row's `onFocused` also fires when focus merely
+  *lands* (out of fullscreen, out of replaced list items). Gate side effects (Live TV's category
+  commit) on focus moving *within* the region (`categoriesHaveFocus` was already true), or one
+  landing can start a loop.
+- **Move focus inside the key press when the target is on screen.** Focus that lands a frame later
+  lets the *next* key act from the old position (lost presses; RIGHT entering the wrong category).
+  Register per-row requesters; keep the frame-later path only for rows not yet composed.
+- **An effect must not be keyed on the flag it clears** - clearing it restarts the effect and
+  cancels its own work (the held-RIGHT grid entry never ran).
+- **Row-level focus beats cell-level focus** (TiviMate F14): one focus target per guide row with a
+  selected-programme index, not a focusable per programme - far fewer nodes for focus search and
+  for the accessibility diff that runs on every change while any accessibility service is on.
+
 ## Established good idioms in this codebase — use these, don't reinvent
 
 - **The `hadFocus` re-entry pattern** (`GroupsColumn.kt`, `ChannelsColumn.kt`): a local
