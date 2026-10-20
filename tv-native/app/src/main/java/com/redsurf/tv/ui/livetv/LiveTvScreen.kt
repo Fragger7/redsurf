@@ -1,5 +1,9 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.runtime.key
+import com.redsurf.tv.player.SharedPreviewHost
+import com.redsurf.tv.player.rememberPlayerController
+import com.redsurf.tv.player.PlayerController
 import com.redsurf.tv.ui.stableCallback
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.graphics.ImageBitmap
@@ -72,8 +76,6 @@ import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.EpgProgramEntity
 import com.redsurf.tv.epg.PublicEpg
 import com.redsurf.tv.player.Catchup
-import com.redsurf.tv.player.PreviewPlayerHost
-import com.redsurf.tv.player.rememberPreviewPlayerController
 import com.redsurf.tv.ui.player.PlayerScreen
 import com.redsurf.tv.ui.theme.hiddenButComposed
 import com.redsurf.tv.ui.theme.Accent
@@ -340,6 +342,23 @@ fun LiveTvScreen(
     }
     LaunchedEffect(catchupFailed) { if (catchupFailed != null) { delay(3_000); catchupFailed = null } }
     LaunchedEffect(isFullscreen) { if (!isFullscreen) catchupUrl = null }
+
+    // L5 (2026-10-20, TiviMate parity): ONE player for the preview pane and fullscreen. It used to
+    // be two - torn down and rebuilt on every switch, re-buffering each time and briefly holding
+    // two provider connections where the provider allows one (HTTP 456). Its User-Agent is the
+    // playing channel's playlist's, so it is rebuilt only when that changes.
+    val playingPlaylistId = if (isFullscreen) focusedChannel?.playlistId else previewingChannel?.playlistId
+    val playerUserAgent = remember(playingPlaylistId, playlists) {
+        playlists.firstOrNull { it.id == playingPlaylistId }?.userAgent
+    }
+    val livePlayer = key(playerUserAgent) { rememberPlayerController(playerUserAgent) }
+    // Fullscreen's PlayerHost drives the stream (zaps, catch-up); otherwise the preview does - or
+    // nothing plays and the connection is dropped.
+    val previewStream = previewingChannel?.streamId
+    LaunchedEffect(livePlayer, isFullscreen, previewStream) {
+        if (isFullscreen) return@LaunchedEffect
+        if (previewStream == null) livePlayer.stop() else livePlayer.play(previewStream)
+    }
 
     // Auto-play last channel on launch, the trigger's actual effect - see the parameter doc
     // above for why this reacts to the dedicated trigger, not to focusedChannel itself.
@@ -770,9 +789,8 @@ fun LiveTvScreen(
                     now = now,
                     groupLabel = selectedGroupInfo?.let { formatGroupName(it.groupName) },
                     groupCount = selectedGroupInfo?.count,
-                    playlistUserAgent = remember(previewingChannel?.playlistId, playlists) {
-                        playlists.firstOrNull { it.id == previewingChannel?.playlistId }?.userAgent
-                    },
+                    // No view while fullscreen holds the video surface.
+                    player = if (isFullscreen) null else livePlayer,
                     isFavorite = { isFavorite(it) },
                     previewOnSelect = previewOnSelect,
                     onThumbBounds = { heroThumbBounds = it },
@@ -939,9 +957,7 @@ fun LiveTvScreen(
                 recentChannels = recentChannels.filter { it.streamId != focusedChannel?.streamId },
                 blackScreenBetweenZaps = blackScreenBetweenZaps,
                 showRawResolution = showRawResolution,
-                playlistUserAgent = remember(focusedChannel?.playlistId, playlists) {
-                    playlists.firstOrNull { it.id == focusedChannel?.playlistId }?.userAgent
-                },
+                controller = livePlayer,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -996,7 +1012,7 @@ private fun LiveHero(
     now: Long,
     groupLabel: String?,
     groupCount: Int?,
-    playlistUserAgent: String?,
+    player: PlayerController?,
     isFavorite: (ChannelEntity?) -> Boolean,
     previewOnSelect: Boolean,
     onThumbBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
@@ -1026,7 +1042,7 @@ private fun LiveHero(
         expanded = previewingChannel != null || heroChannel != null,
         groupLabel = groupLabel,
         groupCount = groupCount,
-        playlistUserAgent = playlistUserAgent,
+        player = player,
         isFavorite = isFavorite(heroChannel ?: previewingChannel),
         previewOnSelect = previewOnSelect,
         onThumbBounds = onThumbBounds,
@@ -1075,7 +1091,7 @@ private fun HeroPreviewBand(
     expanded: Boolean,
     groupLabel: String?,
     groupCount: Int?,
-    playlistUserAgent: String?,
+    player: PlayerController?,
     isFavorite: Boolean = false,
     // EPG_WRAPUP.md 1.1 (user report, 2026-09-30) - the hints used to promise a preview even with
     // "Preview channel on select" off, where one OK goes straight to fullscreen.
@@ -1092,7 +1108,7 @@ private fun HeroPreviewBand(
             .background(Surface),
     ) {
         if (expanded) {
-            ExpandedHero(focusedChannel, previewingChannel, programme, now, playlistUserAgent, isFavorite, previewOnSelect, onThumbBounds)
+            ExpandedHero(focusedChannel, previewingChannel, programme, now, player, isFavorite, previewOnSelect, onThumbBounds)
         } else {
             CollapsedHero(groupLabel, groupCount, now, previewOnSelect)
         }
@@ -1150,7 +1166,7 @@ private fun ExpandedHero(
     previewingChannel: ChannelEntity?,
     programme: EpgProgramEntity?,
     now: Long,
-    playlistUserAgent: String?,
+    player: PlayerController?,
     isFavorite: Boolean,
     previewOnSelect: Boolean,
     onThumbBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
@@ -1179,13 +1195,13 @@ private fun ExpandedHero(
             // lives for as long as something is previewing at all, and only the *visual* choice
             // (video vs. the fallback thumbnail) reacts to `hasError` - recovering automatically
             // the moment a reconnect reaches STATE_READY again, no separate local flag to resync.
-            if (previewingChannel != null) {
-                val previewController = rememberPreviewPlayerController(playlistUserAgent)
-                val hasError by previewController.hasError.collectAsState()
-                if (!hasError) {
-                    PreviewPlayerHost(
-                        controller = previewController,
-                        streamUrl = previewingChannel.streamId,
+            // The shared Live TV player (L5) - Live TV starts and switches its stream; this pane
+            // only shows it. Null while fullscreen holds the video surface.
+            if (previewingChannel != null && player != null) {
+                val error by player.errorPresentation.collectAsState()
+                if (error == null) {
+                    SharedPreviewHost(
+                        controller = player,
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(RedSurfDensity.PanelRadius)),
                     )
                     Box(

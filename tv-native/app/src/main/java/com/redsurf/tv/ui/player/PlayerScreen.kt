@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.player
 
+import com.redsurf.tv.player.PlayerController
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -61,7 +62,6 @@ import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.player.NetworkStats
 import com.redsurf.tv.player.PlayerHost
 import com.redsurf.tv.player.StreamInfo
-import com.redsurf.tv.player.rememberPlayerController
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.Background
 import com.redsurf.tv.ui.theme.RedSurfFocus
@@ -154,7 +154,7 @@ fun PlayerScreen(
     showRawResolution: Boolean = false,
     // PLAYER_ENGINEERING_BRIEF.md §6/§9 - the currently-playing channel's own playlist User-Agent,
     // resolved reactively by LiveTvScreen (see its own doc comment for why not here).
-    playlistUserAgent: String? = null,
+    controller: PlayerController,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -169,7 +169,6 @@ fun PlayerScreen(
     // first composition would race directly against `rememberPlayerController`'s `remember {}` in
     // the very same composition pass and always lose - the controller and its data source's
     // User-Agent have to exist together from this screen's very first frame.
-    val controller = rememberPlayerController(playlistUserAgent)
     val streamInfo by controller.streamInfo.collectAsState()
     val networkStats by controller.networkStats.collectAsState()
     val errorPresentation by controller.errorPresentation.collectAsState()

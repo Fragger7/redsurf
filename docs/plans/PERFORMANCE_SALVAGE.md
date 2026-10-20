@@ -416,6 +416,22 @@ trimmed copy of `exo_player_view.xml` (content frame, shutter, subtitles, overla
 errors). Remaining in that frame: first composition of the player screen (~62ms) and its first
 layout/draw (~200ms incl. text). Fullscreen → Back: 36-41% janky, p50 25-27ms.
 
+## L5 done: one shared player for preview and fullscreen - v0.41.18 (2026-10-20 05:00)
+
+PREVIEW.md's two players (a minimal preview ExoPlayer and the fullscreen PlayerController,
+"mutually exclusive in time") were torn down and rebuilt on every switch: a fresh connection and
+re-buffer each time, and a moment with two provider connections where the provider allows one
+(IPTV_DOMAIN_KNOWLEDGE §10, HTTP 456). Now Live TV owns ONE `PlayerController` (keyed on the playing
+playlist's User-Agent): fullscreen's PlayerHost drives zaps/catch-up; otherwise Live TV plays the
+previewing channel or `stop()`s (new: drops the stream without releasing the player). The hero shows
+it through `SharedPreviewHost` (display only); views hand the surface over on release.
+
+Device-verified (positions from PlayerController's watchdog log): OK → fullscreen plays; Back →
+preview keeps the same stream (position 6.3s → 14.4s, one brief BUFFERING while the surface
+moves, no reconnect); OK → fullscreen again: no state change at all, position continuing; zap UP in
+fullscreen starts the next channel; Back previews that zapped channel with no state change. No
+crash. `PreviewPlayerController` is now unused by Live TV (kept for now).
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

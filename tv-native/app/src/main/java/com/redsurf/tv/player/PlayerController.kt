@@ -450,6 +450,18 @@ class PlayerController(
         exoPlayer.prepare()
     }
 
+    /** Stop playing and drop the stream (and its provider connection) without releasing the
+     * player - the shared Live TV player outlives any one channel (L5, 2026-10-20). */
+    fun stop() {
+        lastUrl = null
+        retryJob?.cancel()
+        _errorPresentation.value = null
+        cancelStallWatchdog()
+        cancelBackgroundRecoveryRetry()
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
+    }
+
     /** §4.4: classify, retry with bounded backoff for retryable classes only, surface a friendly
      * message via [PlayerErrorMapper] - never a raw code. */
     private fun handlePlaybackError(error: PlaybackException) {

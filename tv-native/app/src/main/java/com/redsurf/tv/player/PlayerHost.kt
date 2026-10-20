@@ -112,6 +112,10 @@ fun PlayerHost(
     val exoPlayer = controller.exoPlayer
     val context = LocalContext.current
 
+    // Leaving fullscreen no longer releases the controller, so restore the display mode here.
+    DisposableEffect(fullscreen, controller) {
+        onDispose { if (fullscreen) controller.setFullscreen(false) }
+    }
     LaunchedEffect(fullscreen, controller) {
         controller.setFullscreen(fullscreen)
     }
@@ -198,7 +202,12 @@ fun PlayerHost(
             view.setKeepContentOnPlayerReset(!blackScreenBetweenZaps)
             view.resizeMode = resizeMode
         },
-        onRelease = { VideoFrames.registerFullscreen(null) },
+        // The player outlives this view now (one shared Live TV player, L5): hand the surface
+        // back, so the preview's view can take it.
+        onRelease = { view ->
+            view.player = null
+            VideoFrames.registerFullscreen(null)
+        },
         modifier = modifier.fillMaxSize(),
     )
 
