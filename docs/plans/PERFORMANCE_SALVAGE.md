@@ -40,7 +40,7 @@ it, and to question whether foundational architecture decisions are wrong.
 
 ## ▶ STATUS 2026-10-20 05:55 CDT - read this first (night 2, autonomous)
 
-**Installed on the TV and released:** v0.41.23 (CI run 167 = same code). Everything below this
+**Installed on the TV and released:** v0.41.27 (CI run 171 = same code). Everything below this
 block up to "Test navigation" is the night's log, newest first; the older 2026-10-19 handoff
 further down is history.
 
@@ -51,7 +51,8 @@ further down is history.
 | Guide 20×DOWN+20×UP | 98% janky, p50 250ms | **12.2%, p50 36ms**, p90 44 | 7.6%, 29ms |
 | Guide 10×RIGHT+10×LEFT | 36%, p90 200ms | **8.4%, p50 30ms, p90 38** | 1%, p50 32, p90 36 |
 | Categories 20×DOWN+20×UP | 69%, p50 200ms | **24-25%, p50 24ms, p90 57** (v0.41.25) | 7.5%, 18ms |
-| Fullscreen → Back | 100%, p50 200ms | **36-43%, p50 25-27ms** (v0.41.16-17) | 15%, 7ms |
+| Fullscreen → Back | 100%, p50 200ms | **first frame 174ms** (UI trace, v0.41.27; gfxinfo 39-61% / p50 34-65, few frames) | 15%, 7ms |
+| OK → fullscreen, first frame | ~290ms (v0.41.16) | **~82ms** (UI trace, v0.41.27) | preview→fullscreen p50 57ms |
 
 **Done tonight:** Compose 1.7 → 1.11 + toolchain (Kotlin 2.2, AGP 8.13, compileSdk 36) + Media3
 1.10.1; guide rows own focus (TiviMate F14) with painted timeline + label; categories commit after

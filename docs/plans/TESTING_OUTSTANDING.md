@@ -30,6 +30,28 @@ Categories UP escaping to the nav strip early (fixed Sprint 2 #24). Section D fe
 true top), #25 (focus lands on "now"), overall sluggishness after Sprint 1, and the 2026-09-28
 Settings crash fix.
 
+## M. Night 2 of the performance salvage - feel check (v0.41.27, 2026-10-20) - `PERFORMANCE_SALVAGE.md`
+
+Everything below was device-verified by script (navigation, logs, screenshots) - what's left is
+*feel*, which only you can judge. Install the latest release first (OTA). Five minutes:
+1. **Guide UP/DOWN and LEFT/RIGHT** - should feel close to TiviMate now (12% janky vs 98% two
+   days ago). The whole channel row now holds focus; LEFT/RIGHT move the red programme highlight.
+2. **Categories** - the list now *glides* under the focus row like TiviMate's; the guide reloads
+   ~0.2s after you stop. Fast presses never get lost; RIGHT straight after a fast flight lands in
+   the category you're on.
+3. **OK → fullscreen and Back** - much lighter now (first frame ~80ms in, ~175ms out). Back from
+   fullscreen works again (it was broken by an upgrade earlier the same night). With "Preview
+   channel on select" on, OK previews, OK again goes fullscreen *without re-buffering*, Back keeps
+   the preview playing (one shared player now).
+4. **Fullscreen overlay** (OK in fullscreen) - shows the programme on now with its progress bar.
+5. **"Updating…"** appears next to "Categories" while the guide syncs.
+6. **Public-guide programmes** - a stronger cool tint and a small dot in the corner. Enough, or do
+   you still want a legend?
+7. **Settings** - RIGHT from the category rail goes into the pane again (an upgrade had broken it).
+8. One thing to look at on the TV itself: during my test my script's keys briefly went to the
+   Projectivy launcher's settings after a crash (OK on "Utility Apps", Back) - probably nothing
+   changed, but worth a glance.
+
 ## L. EPG wrap-up - real-remote feel check (v0.41.1, 2026-10-05) - `EPG_WRAPUP.md`
 
 K1/K2/K3 below are fixed (K1 was the "Preview channel on select" setting being off; hints now say
