@@ -249,6 +249,30 @@ cause; a real app baseline profile (TV is API 34, generation works unrooted) is 
 
 40/40 category presses land; Settings navigates. TiviMate: 7.5%/18ms, 7.6%/29ms.
 
+## Toolchain + Compose 1.11 + Media3 1.10.1 - v0.41.6 (2026-10-20 00:40)
+
+Gradle 8.7→8.13, AGP 8.2.2→8.13.2, Kotlin 1.9.22→2.2.21 (+ Compose compiler plugin; strong
+skipping now default), KSP 2.2.21-2.0.5, Room 2.6.1→2.7.2 (first with KSP2; same schema),
+compileSdk 34→36 (targetSdk unchanged 34), Compose BOM 2026.05.01 (Compose 1.11.2, material3
+1.4.0), **Media3 1.2.1→1.10.1** (TiviMate's version, S1). Playback verified on device: READY,
+position advancing 5s/5s, `c2.amlogic.avc.decoder`, audio focus held, 0 player errors.
+
+Also found + fixed: since Compose 1.7 a plain scroll container on a TV device pivots the focused
+child to 30% of the viewport - the guide timeline put "now" a column off the left edge on entry
+(x=1163 = 880 + 0.3×944, intermittent) and would shift the hours on every RIGHT. The timeline now
+uses a minimal `BringIntoViewSpec`; entry lands at x=880 every run, 10×RIGHT+10×LEFT returns to the
+start cell, 3×RIGHT moves without scrolling.
+
+A/B, both compiled, both built as versionCode 150, alternated twice (BTN+ PPV):
+
+| | A: v0.41.5 code | B: v0.41.6 |
+|---|---|---|
+| Guide 20×DOWN+20×UP | 59.3% / 62.2% janky, p50 81 / 81ms | **46.5% / 44.3%, p50 48 / 46ms** |
+| Categories 20×DOWN+20×UP | 66.2% / 71.3%, p50 61 / 113ms | **46.0% / 36.6%, p50 40 / 34ms** |
+
+(A's numbers here are worse than its single run earlier - run-to-run noise is large on this TV, so
+only interleaved A/B runs count.) TiviMate: 7.5%/18ms, 7.6%/29ms.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

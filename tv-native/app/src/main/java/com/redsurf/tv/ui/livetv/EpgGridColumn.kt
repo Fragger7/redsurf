@@ -1,5 +1,9 @@
 package com.redsurf.tv.ui.livetv
 
+import kotlin.math.abs
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -547,74 +551,96 @@ private fun EpgChannelRow(
                     drawLine(Spine, Offset(size.width - hairlinePx / 2f, 0f), Offset(size.width - hairlinePx / 2f, size.height), hairlinePx)
                 },
         )
-        Box(modifier = Modifier.weight(1f).fillMaxHeight().horizontalScroll(sharedScroll)) {
-            Row(
-                modifier = Modifier
-                    .width(timelineContentWidth)
-                    .fillMaxHeight()
-                    .drawBehind {
-                        // i = 0 is the spine's own position; the timeline starts right after it.
-                        for (i in 1..columns) {
-                            val x = i * halfHourPx
-                            drawLine(if (i % 2 == 0) TickHour else TickHalf, Offset(x, 0f), Offset(x, size.height), hairlinePx)
-                        }
-                    },
-            ) {
-                val nowIndex = remember(slots, now) { nowSlotIndex(slots, now) }
-                // Is there anything before "now" worth walking LEFT into? Past listings, or an
-                // archive to catch up from. If not, LEFT from the now-cell leaves for Categories
-                // instead of stepping through hours of empty half-hours (2026-10-05).
-                val hasPast = remember(slots, now, channel.tvArchiveDays) {
-                    channel.tvArchiveDays > 0 || slots.any { it is AiredSlot && it.start < now && it.end <= now }
-                }
-                // Performance salvage batch 2 (2026-10-19): compose only the slots near the
-                // viewport. The window is 24 half-hour columns and 6 are visible; every slot used
-                // to be a full focusable Surface, measured at ~48ms of main thread per row - the
-                // main cost of every category change and every new row scrolled in. Columns are
-                // derived from the shared scroll, so a row recomposes only when the view crosses
-                // a column, not per scrolled pixel. The now-cell and a time-jump target are always
-                // kept (entry focus and UP/DOWN land on them), plus one neighbour on each side so
-                // LEFT/RIGHT always has a cell to move to.
-                val firstVisibleColumn by remember(halfHourPx) {
-                    derivedStateOf { (sharedScroll.value / halfHourPx).toInt() }
-                }
-                val composed = remember(slots, firstVisibleColumn, nowIndex, jumpIndex) {
-                    composedSlotRange(slots, firstVisibleColumn, nowIndex, jumpIndex)
-                }
-                if (!composed.isEmpty() && composed.first > 0) {
-                    Spacer(modifier = Modifier.width(pxPerMinute * ((slots[composed.first].start - slots.first().start) / MINUTE_MS.toFloat())))
-                }
-                for (index in composed) {
-                    val slot = slots[index]
-                    // Keyed by start time, so a cell keeps its identity (and real focus) when the
-                    // composed range shifts.
-                    key(slot.start) { SlotCell(
-                        rowWindowStart = slots.first().start,
-                        sharedScroll = sharedScroll,
-                        slot = slot,
-                        isFirstInRow = index == 0,
-                        channel = channel,
-                        now = now,
-                        pxPerMinute = pxPerMinute,
-                        gapDash = gapDash,
-                        wash = wash,
-                        onCursor = onCursor,
-                        onTune = onTune,
-                        onLongPress = onLongPress,
-                        onPlayCatchup = onPlayCatchup,
-                        onShowInfo = onShowInfo,
-                        // Entry lands on the cell airing now (EPG_WRAPUP.md 1.3), not index 0 -
-                        // index 0 is six hours in the past now.
-                        focusRequester = if (index == nowIndex) firstCellFocusRequester else null,
-                        isNowCell = index == nowIndex,
-                        expanded = expanded,
-                        timeFocusRequester = if (index == jumpIndex) timeFocus else null,
-                        onVerticalMove = onVerticalMove,
-                        leftLeavesGrid = index == 0 || (index == nowIndex && !hasPast) || (index < nowIndex && !hasPast),
-                        onLeftEdge = onLeftEdge,
-                    ) }
+        // Minimal scrolling for the timeline (see MinimalBringIntoView) - never the TV pivot.
+        CompositionLocalProvider(LocalBringIntoViewSpec provides MinimalBringIntoView) {
+            Box(modifier = Modifier.weight(1f).fillMaxHeight().horizontalScroll(sharedScroll)) {
+                Row(
+                    modifier = Modifier
+                        .width(timelineContentWidth)
+                        .fillMaxHeight()
+                        .drawBehind {
+                            // i = 0 is the spine's own position; the timeline starts right after it.
+                            for (i in 1..columns) {
+                                val x = i * halfHourPx
+                                drawLine(if (i % 2 == 0) TickHour else TickHalf, Offset(x, 0f), Offset(x, size.height), hairlinePx)
+                            }
+                        },
+                ) {
+                    val nowIndex = remember(slots, now) { nowSlotIndex(slots, now) }
+                    // Is there anything before "now" worth walking LEFT into? Past listings, or an
+                    // archive to catch up from. If not, LEFT from the now-cell leaves for Categories
+                    // instead of stepping through hours of empty half-hours (2026-10-05).
+                    val hasPast = remember(slots, now, channel.tvArchiveDays) {
+                        channel.tvArchiveDays > 0 || slots.any { it is AiredSlot && it.start < now && it.end <= now }
+                    }
+                    // Performance salvage batch 2 (2026-10-19): compose only the slots near the
+                    // viewport. The window is 24 half-hour columns and 6 are visible; every slot used
+                    // to be a full focusable Surface, measured at ~48ms of main thread per row - the
+                    // main cost of every category change and every new row scrolled in. Columns are
+                    // derived from the shared scroll, so a row recomposes only when the view crosses
+                    // a column, not per scrolled pixel. The now-cell and a time-jump target are always
+                    // kept (entry focus and UP/DOWN land on them), plus one neighbour on each side so
+                    // LEFT/RIGHT always has a cell to move to.
+                    val firstVisibleColumn by remember(halfHourPx) {
+                        derivedStateOf { (sharedScroll.value / halfHourPx).toInt() }
+                    }
+                    val composed = remember(slots, firstVisibleColumn, nowIndex, jumpIndex) {
+                        composedSlotRange(slots, firstVisibleColumn, nowIndex, jumpIndex)
+                    }
+                    if (!composed.isEmpty() && composed.first > 0) {
+                        Spacer(modifier = Modifier.width(pxPerMinute * ((slots[composed.first].start - slots.first().start) / MINUTE_MS.toFloat())))
+                    }
+                    for (index in composed) {
+                        val slot = slots[index]
+                        // Keyed by start time, so a cell keeps its identity (and real focus) when the
+                        // composed range shifts.
+                        key(slot.start) { SlotCell(
+                            rowWindowStart = slots.first().start,
+                            sharedScroll = sharedScroll,
+                            slot = slot,
+                            isFirstInRow = index == 0,
+                            channel = channel,
+                            now = now,
+                            pxPerMinute = pxPerMinute,
+                            gapDash = gapDash,
+                            wash = wash,
+                            onCursor = onCursor,
+                            onTune = onTune,
+                            onLongPress = onLongPress,
+                            onPlayCatchup = onPlayCatchup,
+                            onShowInfo = onShowInfo,
+                            // Entry lands on the cell airing now (EPG_WRAPUP.md 1.3), not index 0 -
+                            // index 0 is six hours in the past now.
+                            focusRequester = if (index == nowIndex) firstCellFocusRequester else null,
+                            isNowCell = index == nowIndex,
+                            expanded = expanded,
+                            timeFocusRequester = if (index == jumpIndex) timeFocus else null,
+                            onVerticalMove = onVerticalMove,
+                            leftLeavesGrid = index == 0 || (index == nowIndex && !hasPast) || (index < nowIndex && !hasPast),
+                            onLeftEdge = onLeftEdge,
+                        ) }
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The timeline's bring-into-view: scroll only as far as needed to show the focused cell. Since
+ * Compose 1.7 a scroll container on a TV device defaults to pivoting the focused child to 30% of
+ * the viewport - for the timeline that pulled "now" off the left edge on entry (measured: focus at
+ * x=1163 = 880 + 0.3 x 944) and would shift the hours on every RIGHT. The rows' own vertical list
+ * keeps the pivot, which is what the tv-foundation list it replaced did too.
+ */
+private val MinimalBringIntoView = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val trailing = offset + size
+        return when {
+            offset >= 0f && trailing <= containerSize -> 0f // already fully visible
+            offset < 0f && trailing > containerSize -> 0f // larger than the viewport, already covering it
+            abs(offset) < abs(trailing - containerSize) -> offset
+            else -> trailing - containerSize
         }
     }
 }

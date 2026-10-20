@@ -3,7 +3,8 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp") version "1.9.22-1.0.17"
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp") version "2.2.21-2.0.5"
 }
 
 // Release signing.
@@ -23,7 +24,8 @@ val hasReleaseSigning: Boolean = releaseStorePath != null && File(releaseStorePa
 
 android {
     namespace = "com.redsurf.tv"
-    compileSdk = 34
+    // 36 since 2026-10-20: Media3 1.10 needs it, Compose 1.11 needs 35. targetSdk is unchanged.
+    compileSdk = 36
     defaultConfig {
         applicationId = "com.redsurf.tv"
         minSdk = 23
@@ -35,12 +37,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures {
         buildConfig = true
         compose = true 
     }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.8" }
 
     signingConfigs {
         if (hasReleaseSigning) {
@@ -91,24 +91,27 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
-    // Compose 1.7.8 (performance salvage, 2026-10-19): the newest Compose needs compileSdk 37 /
-    // AGP 9.1; 1.7.8 is the last line that builds on this toolchain. The tv-foundation alpha lists
-    // were replaced by foundation's own LazyColumn/LazyRow (TvLazy* were deprecated upstream).
-    implementation(platform("androidx.compose:compose-bom:2025.02.00"))
+    // Compose 1.11 (performance salvage, 2026-10-20; BOM 2026.05.01). The tv-foundation alpha
+    // lists were replaced by foundation's own LazyColumn/LazyRow (TvLazy* deprecated upstream).
+    // Compose 1.12 needs compileSdk 37 + AGP 9.1 - not yet.
+    implementation(platform("androidx.compose:compose-bom:2026.05.01"))
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.tv:tv-material:1.0.1")
     
-    implementation("androidx.media3:media3-exoplayer:1.2.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.2.1")
-    implementation("androidx.media3:media3-datasource-okhttp:1.2.1")
-    implementation("androidx.media3:media3-ui:1.2.1")
+    // Media3 1.10.1 - what TiviMate 5.3.3 ships (TIVIMATE_LEARNINGS.md F1/S1), proven on this TV.
+    val media3 = "1.10.1"
+    implementation("androidx.media3:media3-exoplayer:$media3")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3")
+    implementation("androidx.media3:media3-datasource-okhttp:$media3")
+    implementation("androidx.media3:media3-ui:$media3")
 
-    val room_version = "2.6.1"
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    implementation("androidx.room:room-paging:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    // 2.7.2: the first Room that supports KSP2 (Kotlin 2.2). Same schema, same migrations.
+    val room = "2.7.2"
+    implementation("androidx.room:room-runtime:$room")
+    implementation("androidx.room:room-ktx:$room")
+    implementation("androidx.room:room-paging:$room")
+    ksp("androidx.room:room-compiler:$room")
 
     // Paging for per-group channel lists - never load a whole playlist into memory (PHASE_1.md #2).
     implementation("androidx.paging:paging-compose:3.2.1")
@@ -129,19 +132,16 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    kotlinOptions {
-        freeCompilerArgs = freeCompilerArgs + listOf(
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        freeCompilerArgs.addAll(
             "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api",
             "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
             "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
             "-opt-in=androidx.media3.common.util.UnstableApi",
-            // Performance salvage L2 (2026-10-19): with strong skipping, a composable whose
-            // arguments are the same instances as last time skips, and lambdas are remembered
-            // automatically - so a recomposition at AppShell (on every channel-focus move)
-            // stops re-running every screen beneath it. Default in Compose compiler 2.0+.
-            "-P",
-            "plugin:androidx.compose.compiler.plugins.kotlin:experimentalStrongSkipping=true",
+            // Strong skipping (performance salvage L2, 2026-10-19) is the default in the Kotlin 2
+            // Compose compiler plugin, so it no longer needs a flag here.
         )
     }
 }

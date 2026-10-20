@@ -198,3 +198,7 @@ goto_category_row() {
   done
   echo "goto_category_row: gave up at row ${now:-?} (target $target)"; return 1
 }
+
+# Compile the app ahead of time (as Android eventually does in idle maintenance). Measure only
+# after this: right after adb install the app runs uncompiled and frame timings are ~2x worse.
+compile_app() { ADB shell cmd package compile -m speed-profile -f com.redsurf.tv >/dev/null; }
