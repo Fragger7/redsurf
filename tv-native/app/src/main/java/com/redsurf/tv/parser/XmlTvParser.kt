@@ -1,5 +1,6 @@
 package com.redsurf.tv.parser
 
+import com.redsurf.tv.sync.UserActivity
 import android.util.Log
 import android.util.Xml
 import com.redsurf.tv.db.EpgProgramEntity
@@ -67,6 +68,8 @@ object XmlTvParser {
             // single-thread transaction executor, not on SQLite's write lock. `runInTransaction`
             // runs on this (IO) thread instead, so user writes only ever wait on SQLite itself,
             // for at most one of these batches.
+            // Yield to someone browsing (L6, see UserActivity): these flushes saturate storage.
+            UserActivity.awaitQuiet()
             val t0 = System.currentTimeMillis()
             val rows = pendingTransactionBatches.sumOf { it.size }
             db.runInTransaction {

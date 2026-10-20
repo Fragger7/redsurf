@@ -447,6 +447,17 @@ crash. `PreviewPlayerController` is now unused by Live TV (kept for now).
   Teleport → Nav-Strip → Settings; note OK on the Settings pill leaves focus on the pill (one DOWN
   enters the rail) and the rail opens on the last-used category.
 
+## L6 measured; sync yields to input - v0.41.20 (2026-10-20 05:35)
+
+During an EPG sync ("Update EPG now"): guide 20×DOWN+20×UP 15.4% janky (96) vs ~11% (64-72)
+idle; the category query `gridQuery` took 134-683ms vs ~5ms idle. `sync/UserActivity` (AppShell
+stamps every key press; `awaitQuiet()` waits up to 10s while input is recent) now gates each XMLTV
+flush. Re-measured during a sync: guide 12.3% (76); but query times unchanged (100-325ms) - the
+`epg-sync` thread sits in state D (storage I/O) downloading/reading the feed, so the flushes were
+only part of it. Next candidates if this matters to the user: cache per-category channel lists in
+memory; stream-parse without staging the feed on disk. Syncs run daily, so lower priority than
+the steady-state numbers.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.shell
 
+import com.redsurf.tv.sync.UserActivity
 import com.redsurf.tv.diag.traced
 import android.app.Activity
 import kotlin.math.roundToInt
@@ -453,6 +454,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             if (isDown) {
                 lastKeyWasUp = event.key == Key.DirectionUp
                 keyPresses.tryEmit(Unit)
+                UserActivity.touch()
             }
             if (event.key == Key.Back) {
                 if (isDown && event.nativeKeyEvent.repeatCount == 0) backHeldLong = false
