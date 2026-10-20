@@ -1,5 +1,7 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.graphics.ImageBitmap
 import com.redsurf.tv.diag.traced
 import androidx.compose.runtime.SideEffect
 import kotlinx.coroutines.Job
@@ -55,7 +57,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1085,13 +1086,25 @@ private fun HeroPreviewBand(
     }
 }
 
+/** The mark, decoded once per process - `painterResource` decoded the PNG again (~5ms, measured)
+ * every time the collapsed hero was composed afresh, i.e. on entering Categories. */
+@Composable
+private fun rememberMarkBitmap(): ImageBitmap {
+    val resources = androidx.compose.ui.platform.LocalContext.current.resources
+    return MarkBitmap.cached ?: ImageBitmap.imageResource(resources, R.drawable.ic_mark).also { MarkBitmap.cached = it }
+}
+
+private object MarkBitmap {
+    var cached: ImageBitmap? = null
+}
+
 @Composable
 private fun CollapsedHero(groupLabel: String?, groupCount: Int?, now: Long, previewOnSelect: Boolean) {
     Row(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Image(painter = painterResource(R.drawable.ic_mark), contentDescription = null, modifier = Modifier.size(18.dp))
+        Image(bitmap = rememberMarkBitmap(), contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(10.dp))
         Text(
             groupLabel ?: "Live TV",

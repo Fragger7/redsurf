@@ -344,65 +344,77 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // The playlist "you're in": the channel under focus/playing, else the selected category's,
     // else the last one played.
     val teleportPlaylistId = liveTvFocusedChannel?.playlistId ?: liveTvSelectedGroup?.playlistId ?: lastPlayedChannel?.playlistId
-    val favoritesTarget = teleportPlaylistId
-        ?.let { GroupKey(it, FAVORITES_GROUP) }
-        ?.takeIf { key -> groups.any { it.key() == key } }
-    val rootCategoryTarget = resolveRootCategoryTarget(groups, liveTvSelectedGroup)
-    val lastGroupTarget = resolveLastGroupTarget(groups, teleportPlaylistId)
-    val teleportRows = buildList {
-        add(TeleportRow.Live("Nav-Strip") { teleportToNavStrip() })
-        add(
-            if (teleportPlaylistId != null) {
-                TeleportRow.Live("Playlist Root") {
-                    teleportToCategoryRow(GroupsFocusRequest.PlaylistHeader(teleportPlaylistId, System.nanoTime()), select = null)
-                }
-            } else {
-                TeleportRow.Grey("Playlist Root")
-            },
-        )
-        add(
-            if (favoritesTarget != null) {
-                TeleportRow.Live("Playlist Favorites") {
-                    teleportToCategoryRow(GroupsFocusRequest.Group(favoritesTarget, System.nanoTime()), select = favoritesTarget)
-                }
-            } else {
-                TeleportRow.Grey("Playlist Favorites")
-            },
-        )
-        add(
-            if (rootCategoryTarget != null) {
-                TeleportRow.Live("Root Category") {
-                    teleportToCategoryRow(GroupsFocusRequest.Group(rootCategoryTarget, System.nanoTime()), select = rootCategoryTarget)
-                }
-            } else {
-                TeleportRow.Grey("Root Category")
-            },
-        )
-        // User request, 2026-10-05 - the bottom of the current provider's category list, the
-        // mirror of Playlist Root (which lands on the top). Same Categories-row landing.
-        add(
-            if (lastGroupTarget != null) {
-                TeleportRow.Live("Last Channel Group (Current Provider)") {
-                    teleportToCategoryRow(GroupsFocusRequest.Group(lastGroupTarget, System.nanoTime()), select = lastGroupTarget)
-                }
-            } else {
-                TeleportRow.Grey("Last Channel Group (Current Provider)")
-            },
-        )
-        // "Root Channel Group" renamed (user, 2026-09-29) - "take me back to what I'm watching."
-        add(
-            if (lastPlayedChannel != null) TeleportRow.Live("Now Playing") { teleportToChannel(lastPlayedChannel) }
-            else TeleportRow.Grey("Now Playing"),
-        )
-        // Hidden when the menu was opened from fullscreen - you're already there.
-        if (!teleportFromFullscreen) {
+    // Built only while the menu is open (performance salvage, 2026-10-20): the targets below scan
+    // every category (~2,200 here) and the list holds fresh lambdas - recomputed on every AppShell
+    // recomposition, i.e. every category commit, they also made the hidden menu recompose. While
+    // closed (including its close animation) the last list is reused, same instance.
+    fun buildTeleportRows(): List<TeleportRow> {
+        val favoritesTarget = teleportPlaylistId
+            ?.let { GroupKey(it, FAVORITES_GROUP) }
+            ?.takeIf { key -> groups.any { it.key() == key } }
+        val rootCategoryTarget = resolveRootCategoryTarget(groups, liveTvSelectedGroup)
+        val lastGroupTarget = resolveLastGroupTarget(groups, teleportPlaylistId)
+        return buildList {
+            add(TeleportRow.Live("Nav-Strip") { teleportToNavStrip() })
             add(
-                if (lastPlayedChannel != null) TeleportRow.Live("Return to fullscreen") { teleportToFullscreen(lastPlayedChannel) }
-                else TeleportRow.Grey("Return to fullscreen"),
+                if (teleportPlaylistId != null) {
+                    TeleportRow.Live("Playlist Root") {
+                        teleportToCategoryRow(GroupsFocusRequest.PlaylistHeader(teleportPlaylistId, System.nanoTime()), select = null)
+                    }
+                } else {
+                    TeleportRow.Grey("Playlist Root")
+                },
             )
+            add(
+                if (favoritesTarget != null) {
+                    TeleportRow.Live("Playlist Favorites") {
+                        teleportToCategoryRow(GroupsFocusRequest.Group(favoritesTarget, System.nanoTime()), select = favoritesTarget)
+                    }
+                } else {
+                    TeleportRow.Grey("Playlist Favorites")
+                },
+            )
+            add(
+                if (rootCategoryTarget != null) {
+                    TeleportRow.Live("Root Category") {
+                        teleportToCategoryRow(GroupsFocusRequest.Group(rootCategoryTarget, System.nanoTime()), select = rootCategoryTarget)
+                    }
+                } else {
+                    TeleportRow.Grey("Root Category")
+                },
+            )
+            // User request, 2026-10-05 - the bottom of the current provider's category list, the
+            // mirror of Playlist Root (which lands on the top). Same Categories-row landing.
+            add(
+                if (lastGroupTarget != null) {
+                    TeleportRow.Live("Last Channel Group (Current Provider)") {
+                        teleportToCategoryRow(GroupsFocusRequest.Group(lastGroupTarget, System.nanoTime()), select = lastGroupTarget)
+                    }
+                } else {
+                    TeleportRow.Grey("Last Channel Group (Current Provider)")
+                },
+            )
+            // "Root Channel Group" renamed (user, 2026-09-29) - "take me back to what I'm watching."
+            add(
+                if (lastPlayedChannel != null) TeleportRow.Live("Now Playing") { teleportToChannel(lastPlayedChannel) }
+                else TeleportRow.Grey("Now Playing"),
+            )
+            // Hidden when the menu was opened from fullscreen - you're already there.
+            if (!teleportFromFullscreen) {
+                add(
+                    if (lastPlayedChannel != null) TeleportRow.Live("Return to fullscreen") { teleportToFullscreen(lastPlayedChannel) }
+                    else TeleportRow.Grey("Return to fullscreen"),
+                )
+            }
+            add(TeleportRow.Grey("Multi-View")) // no Multi-View feature yet (user, 2026-09-29)
+            add(TeleportRow.Live("Exit RedSurf") { (prefsContext as? Activity)?.finish() })
         }
-        add(TeleportRow.Grey("Multi-View")) // no Multi-View feature yet (user, 2026-09-29)
-        add(TeleportRow.Live("Exit RedSurf") { (prefsContext as? Activity)?.finish() })
+    }
+    val lastTeleportRows = remember { arrayOfNulls<List<TeleportRow>>(1) }
+    val teleportRows = if (teleportMenuOpen) {
+        buildTeleportRows().also { lastTeleportRows[0] = it }
+    } else {
+        lastTeleportRows[0] ?: emptyList()
     }
 
     // BACKLOG_SWEEP.md #8: excluded while Live TV's own Channels column holds focus, mirroring
