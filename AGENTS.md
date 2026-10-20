@@ -490,6 +490,16 @@ before the report comes in, not after.
     list - exact threshold needs the user's own gut-check against how long a genuinely long list
     actually takes to traverse, not a guessed number); long-press Back firing its default behavior
     while the Teleport Menu setting is off (the exact moment its extra value would be obvious).
+- **Visual effect tiers, Lite / Full** (user, 2026-10-20) - backlog, after the design language
+  is chosen (`docs/vision/design-language/`). One layout, one set of screens - not two UIs. Lite is
+  the signature baseline and must look complete on the Chromecast with Google TV; Full layers
+  extras (blur/glass, focus glow, grain, richer motion, video behind UI) for stronger boxes (Google
+  TV Streamer, onn 4K Pro, Nvidia Shield), each a code switch. Choice: auto-detect on first launch
+  (RAM, Android version, measured frame times), named in the setup wizard, Settings → Appearance →
+  "Visual effects: Auto / Lite / Full", a warning when choosing Full on a weak device, and a
+  one-time offer to drop back if sustained jank is measured. **Verification:** the user will lend
+  an Nvidia Shield Pro when this starts - until then Full can't be device-verified and must be
+  labelled as such.
 - **Provider Intelligence (unsupervised playlist fingerprinting, no brand names)** - user request,
   2026-09-17, explicitly low priority ("not a whole useful of a feature right now") - logged, not
   scheduled. Origin: the user wanted to identify which real-world IPTV reseller brand (e.g.
