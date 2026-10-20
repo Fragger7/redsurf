@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.foundation.focusable
@@ -304,6 +305,7 @@ fun GroupsColumn(
     // row and was lost (measured 2026-10-19: "down -> 819" twice, 20 down + 20 up ended one row
     // off). Each press moves from the previous press's target; real focus resets it.
     val headedTo = remember { IntArray(1) { -1 } }
+    val rowRequesters = remember { HashMap<String, FocusRequester>() }
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -340,6 +342,20 @@ fun GroupsColumn(
                 // (measured live; user report #6, "erratic focus between Categories and the grid").
                 val target = if (goingUp) startIndex - 1 else startIndex + 1
                 headedTo[0] = target
+                // An on-screen neighbour (the usual case - the focused row is held mid-list) gets
+                // focus right here, inside this key press. Moving it a frame later let a RIGHT
+                // pressed straight after a DOWN act on the row focus was leaving: the guide opened
+                // for that category, then the late move pulled focus back (measured 2026-10-20).
+                val onScreen = listState.layoutInfo.visibleItemsInfo.any { it.index == target }
+                val ownFocus = rowRequesters[rowKey(rows[target])]
+                if (onScreen && ownFocus != null) {
+                    runCatching { ownFocus.requestFocus() }
+                    if (focusedIndex == target) {
+                        Log.d(TAG, "${if (goingUp) "up" else "down"} -> $target landed=true")
+                        scope.launch { runCatching { listState.holdMidList(target) } }
+                        return@onPreviewKeyEvent true
+                    }
+                }
                 scope.launch {
                     targetRowKey = rowKey(rows[target])
                     runCatching { listState.holdMidList(target) }
@@ -362,7 +378,16 @@ fun GroupsColumn(
                 rows,
                 key = { _, row -> rowKey(row) },
             ) { index, row ->
-                val targetModifier = if (rowKey(row) == targetRowKey) Modifier.focusRequester(targetFocus) else Modifier
+                // Each row's own requester, registered while it's composed, so UP/DOWN can move
+                // focus inside the key press itself (see the handler).
+                val ownFocus = remember { FocusRequester() }
+                val key = rowKey(row)
+                DisposableEffect(key) {
+                    rowRequesters[key] = ownFocus
+                    onDispose { if (rowRequesters[key] === ownFocus) rowRequesters.remove(key) }
+                }
+                val targetModifier = Modifier.focusRequester(ownFocus)
+                    .then(if (key == targetRowKey) Modifier.focusRequester(targetFocus) else Modifier)
                 when (row) {
                     is GroupsRow.Header -> PlaylistHeaderRow(
                         row = row,

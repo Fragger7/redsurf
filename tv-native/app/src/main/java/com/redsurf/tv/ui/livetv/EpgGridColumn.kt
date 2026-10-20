@@ -1,5 +1,7 @@
 package com.redsurf.tv.ui.livetv
 
+import coil.compose.AsyncImagePainter
+import coil.compose.AsyncImage
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -81,7 +83,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.Text
-import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.epg.PublicEpg
 import com.redsurf.tv.player.Catchup
@@ -346,7 +347,9 @@ fun EpgGridColumn(
                     else if (jump.index >= last) runCatching { rowsState.scrollToItem((first + (jump.index - last) + 1).coerceAtLeast(0)) }
                 }
                 LazyColumn(state = rowsState, modifier = Modifier.fillMaxSize()) {
-                    items(count = channels.size, key = { channels[it].streamId }) { index ->
+                    // One content type for every row, so rows leaving the list (a category change)
+                    // are recycled for the new category's rows instead of built from nothing.
+                    items(count = channels.size, key = { channels[it].streamId }, contentType = { 0 }) { index ->
                         val channel = channels[index]
                         val isFocusTarget = if (targetIndex >= 0) index == targetIndex else index == 0
                         val programmes = programsByChannel[channel.streamId].orEmpty()
@@ -927,15 +930,19 @@ internal fun ChannelLogoChip(channel: ChannelEntity, size: Dp, modifier: Modifie
         contentAlignment = Alignment.Center,
     ) {
         val icon = channel.streamIcon
-        if (icon.isNullOrBlank()) {
+        // A plain AsyncImage, not SubcomposeAsyncImage - Coil's own docs warn the subcomposing one
+        // is slower and not for lazy lists, and this chip is in every guide row (performance
+        // salvage, 2026-10-20). Blank while loading (no flicker on a fast-scrolling grid); the
+        // initial letter only once the logo has actually failed.
+        var failed by remember(icon) { mutableStateOf(icon.isNullOrBlank()) }
+        if (failed) {
             Text(channel.name.take(1).uppercase(), style = RedSurfType.gridMeta, color = TextPrimary)
         } else {
-            SubcomposeAsyncImage(
+            AsyncImage(
                 model = icon,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize().padding(2.dp),
-                error = { Text(channel.name.take(1).uppercase(), style = RedSurfType.gridMeta, color = TextPrimary) },
-                loading = { /* blank while loading - avoids flicker on a fast-scrolling grid */ },
+                onState = { if (it is AsyncImagePainter.State.Error) failed = true },
             )
         }
     }

@@ -1,5 +1,7 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.runtime.SideEffect
+import kotlinx.coroutines.Job
 import android.util.Log
 import com.redsurf.tv.player.VideoFrames
 import androidx.compose.foundation.layout.offset
@@ -369,14 +371,29 @@ fun LiveTvScreen(
     // D-pad key-repeat was triggering once per row flown over. queriedGroup is what actually
     // drives the grid; only the group the user settles on for 200ms gets a real query.
     var queriedGroup by remember { mutableStateOf<GroupKey?>(null) }
-    LaunchedEffect(selectedGroup) {
-        val group = selectedGroup
-        if (group == null) {
-            queriedGroup = null
-        } else {
-            delay(200)
-            queriedGroup = group
-        }
+    // The browse debounce moved up a level (performance salvage, 2026-10-20): moving through
+    // Categories no longer changes selectedGroup on every row - that value lives in AppShell, and
+    // each change re-ran the whole Live TV screen (~90ms per move, measured). GroupsColumn's own
+    // focus moves instantly; the group is committed once the user settles for GROUP_COMMIT_MS (or
+    // presses RIGHT, or leaves the column). So the query itself no longer needs a delay.
+    LaunchedEffect(selectedGroup) { queriedGroup = selectedGroup }
+    val groupScope = rememberCoroutineScope()
+    val pendingGroup = remember { arrayOfNulls<GroupKey>(1) }
+    val groupCommitJob = remember { arrayOfNulls<Job>(1) }
+    // The group as of the latest commit - fresher than `selectedGroup` between a commit and the
+    // recomposition that delivers it (the held-RIGHT check below reads it in the same event).
+    val latestGroup = remember { arrayOfNulls<GroupKey>(1) }
+    SideEffect { latestGroup[0] = selectedGroup }
+    fun commitGroup(group: GroupKey) {
+        latestGroup[0] = group
+        onSelectedGroupChanged(group)
+        onFocusedChannelChanged(null)
+    }
+    fun flushPendingGroup() {
+        val group = pendingGroup[0] ?: return
+        groupCommitJob[0]?.cancel()
+        pendingGroup[0] = null
+        commitGroup(group)
     }
 
     // EPG_GRID_REDESIGN.md G.7 - one ticking clock for the whole screen, not a `remember`ed
@@ -614,7 +631,10 @@ fun LiveTvScreen(
     }
     var categoriesHaveFocus by remember { mutableStateOf(false) }
     var pendingGridEntry by remember { mutableStateOf(false) }
-    LaunchedEffect(gridLoadedFor, pendingGridEntry) {
+    // Keyed on the loaded group only (2026-10-20): it used to be keyed on pendingGridEntry too, and
+    // clearing that flag below restarted this effect - cancelling the claim one frame in. A held
+    // RIGHT then never entered the grid ("quick RIGHT after a category flight leaves no focus").
+    LaunchedEffect(gridLoadedFor) {
         if (pendingGridEntry && gridLoadedFor == selectedGroup) {
             pendingGridEntry = false
             Log.d("LiveTvScreen", "held RIGHT -> entering grid for $selectedGroup")
@@ -697,12 +717,16 @@ fun LiveTvScreen(
                 if (pendingGridEntry && event.type == KeyEventType.KeyDown && event.key != Key.DirectionRight) {
                     pendingGridEntry = false
                 }
+                if (categoriesHaveFocus && event.key == Key.DirectionRight && event.type == KeyEventType.KeyDown) {
+                    flushPendingGroup()
+                }
+                val currentGroup = latestGroup[0] ?: selectedGroup
                 if (contextMenuChannel == null && categoriesHaveFocus && event.key == Key.DirectionRight &&
-                    selectedGroup != null && gridLoadedFor != selectedGroup
+                    currentGroup != null && gridLoadedFor != currentGroup
                 ) {
                     if (event.type == KeyEventType.KeyDown) {
                         pendingGridEntry = true
-                        Log.d("LiveTvScreen", "RIGHT held until $selectedGroup loads (grid has $gridLoadedFor)")
+                        Log.d("LiveTvScreen", "RIGHT held until $currentGroup loads (grid has $gridLoadedFor)")
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -758,12 +782,22 @@ fun LiveTvScreen(
                     groups = groups,
                     selectedGroup = selectedGroup,
                     onGroupFocused = { group ->
-                        if (group != selectedGroup) {
-                            onSelectedGroupChanged(group)
-                            onFocusedChannelChanged(null)
+                        groupCommitJob[0]?.cancel()
+                        if (group != latestGroup[0]) {
+                            pendingGroup[0] = group
+                            groupCommitJob[0] = groupScope.launch {
+                                delay(GROUP_COMMIT_MS)
+                                pendingGroup[0] = null
+                                commitGroup(group)
+                            }
+                        } else {
+                            pendingGroup[0] = null
                         }
                     },
-                    modifier = Modifier.width(RedSurfDensity.CategoriesWidth).onFocusChanged { categoriesHaveFocus = it.hasFocus },
+                    modifier = Modifier.width(RedSurfDensity.CategoriesWidth).onFocusChanged {
+                        categoriesHaveFocus = it.hasFocus
+                        if (!it.hasFocus) flushPendingGroup()
+                    },
                     onEscapeUp = onEscapeUp,
                     focusRequest = groupsFocusRequest ?: localGroupsFocusRequest,
                     onFocusRequestConsumed = {
@@ -981,6 +1015,10 @@ private fun LiveHero(
 
 /** Grid rows whose listings are fetched before a category is shown (the grid's publish effect) -
  * more than a screen of rows plus the lazy list's prefetch. */
+/** How long Categories focus must rest on a group before it becomes the selected one (and the
+ * guide loads it) - the old query debounce, now applied before the app-level state changes. */
+private const val GROUP_COMMIT_MS = 200L
+
 private const val FIRST_PROGRAMME_ROWS = 40
 
 /** Listings for the rest of a big category arrive in chunks of this many channels. */

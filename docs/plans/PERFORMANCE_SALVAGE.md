@@ -333,6 +333,27 @@ removing animation frames shrinks the denominator, so the % alone misleads:
 Categories are now the gap (TiviMate 7.5%, 18ms): each move still rebuilds the guide's rows for
 the new category (~8 rows, label + logo + painted Box) after the 200ms debounce.
 
+## Categories: commit after settling, synchronous moves, held-RIGHT fix - v0.41.11 (2026-10-20 03:40)
+
+Frame-by-frame trace of category moves: each move = a ~90ms recomposition frame (the browsed
+group was written to AppShell state on every row, re-running the whole Live TV screen) plus a
+~250-330ms row-rebuild frame after the debounce.
+- The group is committed to AppShell only after focus rests on it for `GROUP_COMMIT_MS` (200ms,
+  the old query debounce) - or at once on RIGHT / leaving the column; the guide query then runs
+  without a second delay. In-between categories are no longer queried at all.
+- GroupsColumn UP/DOWN move focus inside the key press when the target row is on screen (each row
+  registers its own requester); the frame-later path remains for rows not yet composed.
+- **Bug fixed (open since 2026-10-19, "quick RIGHT after a category flight leaves no focused
+  node"):** the held-RIGHT effect was keyed on `pendingGridEntry` and cleared it first - which
+  restarted the effect and cancelled the focus claim. 3/3 now: DOWN×3 fast + RIGHT enters the guide
+  on the right category's first row.
+- Guide logos: `AsyncImage` instead of `SubcomposeAsyncImage` (Coil: not for lazy lists); rows
+  share one `contentType` so they recycle across categories (no measurable change alone).
+
+A/B vs v0.41.10, compiled, alternated twice: guide janky 14.2% (85) → **11.3-11.6% (69-71)**;
+categories p50 81 → **57ms**, janky 60% → **52-53%** (count ~equal; p90 200ms unchanged - the
+row-rebuild frame is the remaining categories cost).
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees
