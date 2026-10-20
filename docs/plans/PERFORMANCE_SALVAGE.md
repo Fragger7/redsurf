@@ -40,7 +40,7 @@ it, and to question whether foundational architecture decisions are wrong.
 
 ## ▶ STATUS 2026-10-20 05:55 CDT - read this first (night 2, autonomous)
 
-**Installed on the TV:** the real CI release **v0.44.4** (run 171). **Version names:** CI's release
+**Installed on the TV:** the real CI release **v0.44.5** (run 172 - same app code as v0.44.4; cut so the TV could return to a genuine release after a reverted experiment had been installed as versionCode 172). **Version names:** CI's release
 action bumps the *minor* version on every `feat:` commit, so from run 165 the real names differ from
 the v0.41.x labels used for local builds in this log: v0.41.21 = **v0.42.0**, .22 = **v0.43.0**,
 .23 = **v0.44.0**, .24 = **v0.44.1**, .25 = **v0.44.2**, .27 = **v0.44.3**, then v0.44.4 (refactor).
