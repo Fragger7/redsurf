@@ -103,3 +103,12 @@ Android's own janky-frame share; p50/p90/p99 = frame time in ms. Device context 
 Method notes: `screencap` on this TV does not capture the video layer (both apps show a grey frame
 during playback - not a bug). Keep labels honest - several runs landed on the wrong screen and
 were relabeled `(misnav)` in the raw log rather than reported.
+
+### Visual design notes - 2026-10-20 (design-language research, `docs/vision/design-language/RESEARCH.md`)
+
+Measured from a TiviMate 5.3.3 device screenshot and the decoded resources: guide row pitch ~44dp
+(~40dp cell + ~4dp gutter); rows and cells are separated by **background-coloured gutters, no
+lines**; near-square cells; cell `#1B1E21` on a cool `#131619` background, focused row `#424547`,
+selected cell desaturated red `#753A37`. Its only bundled font is a **digits-only subset of Roboto
+Medium with tabular figures** - it makes numbers line up. (Poppins, our wordmark font, has no
+tabular figures at all - keep it off numbers.)
