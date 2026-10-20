@@ -282,6 +282,35 @@ hold-OK weren't reached (the crash ended the run) - first OK on the live cell tu
 and went fullscreen. After the crash the script's leftover keys went to the Projectivy launcher's
 settings (LEFT×3, OK on "Utility Apps", Back, hold-OK, Back) - probably nothing changed; tell the user.
 
+## Row focus (TiviMate F14) - v0.41.8 (2026-10-20 02:40)
+
+Found by trace: on this TV Projectivy Launcher's accessibility service is always on, so Compose
+runs `checkForSemanticsChanges` / `sendAccessibilitySemanticsStructureChangeEvent` on every change
+(~800ms per 12 guide presses). TiviMate's uiautomator tree showed why it pays so little: its guide
+focuses whole channel rows (16 focusables on screen, cells are plain TextViews) where RedSurf made
+every programme cell focusable (51). Rebuilt `EpgChannelRow` the same way: the row is the one focus
+target; LEFT/RIGHT move a selected programme (tracked by start time, so late listings can't shift
+it); UP/DOWN keep the time-anchored jump; OK/hold-OK act on the selection; `SlotCell` is drawn only;
+one accessibility node per row ("num name · programme"), none for the time ruler. Semantics work
+in the trace: 804 → 425ms.
+
+Device-verified: entry on the programme airing now; RIGHT/LEFT step programmes; DOWN/UP move rows
+keeping the time; OK on a future programme doesn't tune; hold-OK opens "Add to Favorites"; Back keeps
+the row. No crash. A/B (both compiled, both versionCode 152, alternated twice, CW category with
+listings):
+
+| | A: per-cell focus (v0.41.7) | B: row focus (v0.41.8) |
+|---|---|---|
+| Guide 20×DOWN+20×UP | 46.6% / 41.4% janky, p50 48 / 44ms, p90 97 / 89 | **23.7% / 25.5%, p50 36 / 38ms, p90 65 / 69** |
+| Categories 20×DOWN+20×UP | 40.1% / 40.1%, p50 38 / 36ms | **34.6% / 34.1%, p50 30 / 34ms** |
+
+TiviMate: guide 7.6% / 29ms, categories 7.5% / 18ms.
+
+Test tooling this session: `tv_in_use` wakes a sleeping Chromecast only while HDMI-CEC control is
+off; `redsurf_in_front` retries a transient null focus; `focused_info` reads the focused node's own
+label first. Note: `adb install` of RedSurf brings the *next* task to the front (e.g. a TiviMate left
+open) - relaunch after every install.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

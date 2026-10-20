@@ -39,23 +39,27 @@ focused_info() {
   python3 - <<'PY'
 import re
 data = open('/tmp/wd_now.xml').read()
-fb = None
+fb = None; own = None
 for m in re.finditer(r'<node ([^>]*)/?>', data):
     if 'focused="true"' in m.group(1):
         bm = re.search(r'bounds="([^"]*)"', m.group(1))
         fb = bm.group(1)
+        # The focused node's own label first (a cell/row that carries one accessibility label).
+        om = re.search(r'content-desc="([^"]+)"', m.group(1)) or re.search(r' text="([^"]+)"', m.group(1))
+        own = om.group(1) if om else None
 if not fb:
     print('no focused node found'); raise SystemExit
 x1,y1,x2,y2 = [int(v) for v in re.findall(r'-?\d+', fb)]
 best=None; bestd=1e9
-for m in re.finditer(r'<node [^>]*text="([^"]+)"[^>]*bounds="([^"]*)"', data):
+for m in re.finditer(r'<node [^>]*?(?:text|content-desc)="([^"]+)"[^>]*bounds="([^"]*)"', data):
     text, b = m.groups()
     if not text.strip(): continue
     bx1,by1,bx2,by2 = [int(v) for v in re.findall(r'-?\d+', b)]
     d = (((bx1+bx2)/2-(x1+x2)/2)**2+((by1+by2)/2-(y1+y2)/2)**2)**0.5
     if d < bestd: bestd=d; best=text
 huge = (x2-x1) > 1000 and (y2-y1) > 500
-print('focused bounds=%s nearest_text=%r%s' % (fb, best, '  (huge bounds - label unreliable)' if huge else ''))
+if own: best = own
+print('focused bounds=%s nearest_text=%r%s' % (fb, best, '  (huge bounds - label unreliable)' if huge and not own else ''))
 PY
 }
 
@@ -125,6 +129,15 @@ seed_playlist() {
 
 # 0 = someone is using the TV (another app in front, or media playing) - stop device work.
 tv_in_use() {
+  # A sleeping Chromecast reports no focused window. Wake it only while HDMI-CEC control is off
+  # (set off for unattended runs), so a wake can never switch the real TV on.
+  if ADB shell dumpsys power | grep -q "mWakefulness=Asleep"; then
+    if [ "$(ADB shell settings get global hdmi_control_enabled | tr -d '\r')" = "0" ]; then
+      ADB shell input keyevent KEYCODE_WAKEUP; sleep 4
+    else
+      echo "TV asleep and HDMI-CEC is on - not waking it"; return 0
+    fi
+  fi
   local f; f=$(ADB shell dumpsys window | grep mCurrentFocus)
   case "$f" in *com.redsurf.tv*|*com.spocky.projengmenu*) ;; *) echo "TV in use: $f"; return 0;; esac
   if ADB shell dumpsys media_session | grep -q "state=3"; then echo "TV in use: media playing"; return 0; fi
@@ -147,7 +160,12 @@ unwatch_human() { ADB shell "pkill -x getevent; rm -f $HUMAN_LOG" >/dev/null 2>&
 
 # 0 = RedSurf is the focused window. Otherwise says what is, and returns 1.
 redsurf_in_front() {
-  local f; f=$(ADB shell dumpsys window | grep mCurrentFocus)
+  local f i
+  # mCurrentFocus=null for a moment while windows change (relaunch, dialogs) - retry briefly.
+  for i in 1 2 3 4; do
+    f=$(ADB shell dumpsys window | grep mCurrentFocus)
+    case "$f" in *"=null"*) sleep 1;; *) break;; esac
+  done
   case "$f" in *com.redsurf.tv*) return 0;; esac
   echo "RedSurf not in front: $f"; return 1
 }

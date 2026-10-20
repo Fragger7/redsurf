@@ -1,9 +1,8 @@
 package com.redsurf.tv.ui.livetv
 
-import kotlin.math.abs
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
-import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -412,6 +411,8 @@ private fun GridTimeHeader(
         modifier = Modifier
             .fillMaxWidth()
             .height(RedSurfDensity.GridHeaderHeight)
+            // Decorative ruler: no accessibility nodes (a dozen texts diffed on every change).
+            .clearAndSetSemantics { }
             .drawBehind {
                 drawLine(HeaderHairline, Offset(0f, size.height - hairlinePx / 2f), Offset(size.width, size.height - hairlinePx / 2f), hairlinePx)
             },
@@ -491,11 +492,27 @@ private fun EpgChannelRow(
     onJumpConsumed: (nonce: Long) -> Unit = {},
 ) {
     var rowHasFocus by remember { mutableStateOf(false) }
-    // The cell covering the jump's time gets this row's own requester (see RowJump).
-    val timeFocus = remember { FocusRequester() }
-    val jumpIndex = remember(jump, slots) {
-        jump?.let { j -> slots.indexOfFirst { j.time >= it.start && j.time < it.end }.takeIf { it >= 0 } ?: slots.lastIndex }
+    // TiviMate F14 (2026-10-20): the row is the one focus target, as in TiviMate's guide, and
+    // LEFT/RIGHT move a selected programme inside it. Per-cell focus put ~50 focusables on screen,
+    // and every move ran focus search, bring-into-view and the accessibility diff over all of them
+    // (on this TV an accessibility service is always on - Projectivy Launcher's).
+    val rowFocus = remember { FocusRequester() }
+    // The selected programme, by start time - listings can replace the slot list while the row is
+    // focused, and an index would then point at a different programme. MIN_VALUE = none yet.
+    var selectedStart by remember { mutableStateOf(Long.MIN_VALUE) }
+    // Where a pending UP/DOWN wants the selection, applied when focus lands (see the jump effect).
+    val pendingStart = remember { LongArray(1) { Long.MIN_VALUE } }
+    val nowIndex = remember(slots, now) { nowSlotIndex(slots, now) }
+    val selected = remember(slots, selectedStart) { slotIndexAt(slots, selectedStart) }
+    // Is there anything before "now" worth walking LEFT into? Past listings, or an archive to
+    // catch up from. If not, LEFT from the now-cell leaves for Categories instead of stepping
+    // through hours of empty half-hours (2026-10-05).
+    val hasPast = remember(slots, now, channel.tvArchiveDays) {
+        channel.tvArchiveDays > 0 || slots.any { it is AiredSlot && it.start < now && it.end <= now }
     }
+    // OK / hold-OK, tracked without state (no recomposition per press): [0] = this press began
+    // on this row, [1] = its long-press already fired.
+    val okPress = remember { BooleanArray(2) }
     // Whether this row has been placed on screen at least once. A lazy list pre-builds upcoming
     // rows before placing them; requestFocus() on one of those crashed the app with "Expected
     // BringIntoViewRequester to not be used before parents are placed" (crash log, 2026-10-19
@@ -503,34 +520,135 @@ private fun EpgChannelRow(
     val placed = remember { BooleanArray(1) }
     LaunchedEffect(jump?.nonce) {
         if (jump == null) return@LaunchedEffect
+        pendingStart[0] = slots.getOrNull(slotIndexAt(slots, jump.time))?.start ?: Long.MIN_VALUE
         repeat(15) {
             withFrameNanos { }
             if (!placed[0]) return@repeat
-            runCatching { timeFocus.requestFocus() }
+            runCatching { rowFocus.requestFocus() }
             if (rowHasFocus) {
                 onJumpConsumed(jump.nonce)
                 return@LaunchedEffect
             }
         }
         // Spent either way - never replayed when this row is composed again later.
+        pendingStart[0] = Long.MIN_VALUE
         onJumpConsumed(jump.nonce)
     }
     val density = LocalDensity.current
     val hairlinePx = with(density) { RedSurfDensity.Hairline.toPx() }
     val halfHourPx = with(density) { (pxPerMinute * 30).toPx() }
+    val pxPerMinutePx = with(density) { pxPerMinute.toPx() }
     val columns = WINDOW_MINUTES / 30
+    // The selection drives the hero and keeps itself in view - TiviMate holds the hours still
+    // until the cursor reaches an edge; a programme already partly visible doesn't scroll.
+    LaunchedEffect(selected, rowHasFocus) {
+        if (!rowHasFocus || selected !in slots.indices) return@LaunchedEffect
+        val slot = slots[selected]
+        onCursor(CursorKey(channel.playlistId, channel.streamId, slot.start), slot)
+        val width = (slot.end - slot.start) / MINUTE_MS.toFloat() * pxPerMinutePx
+        val offset = (slot.start - slots.first().start) / MINUTE_MS.toFloat() * pxPerMinutePx - sharedScroll.value
+        val viewport = sharedScroll.viewportSize.toFloat()
+        val distance = when {
+            offset + width <= 0f -> if (width <= viewport) offset else offset + width - viewport
+            offset >= viewport -> if (width <= viewport) offset + width - viewport else offset
+            else -> 0f
+        }
+        if (distance != 0f) runCatching { sharedScroll.animateScrollBy(distance) }
+    }
+
+    fun onOk(slot: EpgSlot) {
+        when (slot) {
+            is AiredSlot -> when {
+                now >= slot.start && now < slot.end -> onTune(channel)
+                Catchup.isInArchive(channel.tvArchiveDays, slot.programme.startTime, now) -> onPlayCatchup(channel, slot.programme)
+                else -> onShowInfo(slot.programme)
+            }
+            is GapSlot -> onTune(channel)
+        }
+    }
+    val description = slots.getOrNull(if (selected >= 0) selected else nowIndex)
+        .let { slot -> "${channel.num} $displayName · ${(slot as? AiredSlot)?.programme?.title ?: "No listings"}" }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(if (expanded) RedSurfDensity.GridRowHeight * 2 else RedSurfDensity.GridRowHeight)
             .onPlaced { placed[0] = true }
+            .then(firstCellFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+            .focusRequester(rowFocus)
             .onFocusChanged {
+                if (it.hasFocus && !rowHasFocus) {
+                    // Entry lands on the programme airing now (EPG_WRAPUP.md 1.3); UP/DOWN on the
+                    // one covering the anchor time.
+                    selectedStart = pendingStart[0].takeIf { p -> p != Long.MIN_VALUE }
+                        ?: slots.getOrNull(nowIndex)?.start ?: Long.MIN_VALUE
+                    pendingStart[0] = Long.MIN_VALUE
+                    onRowFocused()
+                }
                 rowHasFocus = it.hasFocus
-                if (it.hasFocus) onRowFocused()
             }
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // Read from state, not the composed `selected`: on fast presses the row may not
+                // have recomposed since the last move.
+                val cur = slotIndexAt(slots, selectedStart).takeIf { it >= 0 } ?: nowIndex
+                val slot = slots.getOrNull(cur) ?: return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> {
+                        if (cur == 0 || (cur <= nowIndex && !hasPast)) onLeftEdge() else selectedStart = slots[cur - 1].start
+                        true
+                    }
+                    Key.DirectionRight -> {
+                        if (cur < slots.lastIndex) selectedStart = slots[cur + 1].start
+                        true
+                    }
+                    Key.DirectionUp, Key.DirectionDown -> {
+                        // Anchor on the visible part of the programme, so a long one that began
+                        // hours ago doesn't drag the target back to its start. From the live
+                        // programme the anchor is *now* (user report 2026-10-19, TiviMate's
+                        // behaviour): otherwise the next row could land on one already over,
+                        // where OK only opens info.
+                        val viewportLeftTime = slots.first().start + (sharedScroll.value / pxPerMinutePx).toLong() * MINUTE_MS
+                        val anchor = if (now >= slot.start && now < slot.end) now else maxOf(slot.start, viewportLeftTime) + MINUTE_MS
+                        onVerticalMove(event.key == Key.DirectionDown, anchor)
+                    }
+                    else -> false
+                }
+            }
+            .onKeyEvent { event ->
+                if (event.key != Key.DirectionCenter && event.key != Key.Enter && event.key != Key.NumPadEnter) {
+                    return@onKeyEvent false
+                }
+                val native = event.nativeKeyEvent
+                when (event.type) {
+                    KeyEventType.KeyDown -> {
+                        if (native.repeatCount == 0) {
+                            okPress[0] = true
+                            okPress[1] = false
+                        } else if (okPress[0] && !okPress[1] && native.isLongPress) {
+                            okPress[1] = true
+                            onLongPress(channel)
+                        }
+                        true
+                    }
+                    KeyEventType.KeyUp -> {
+                        // Only a press that began here counts - not the release of an OK that
+                        // opened something else first and handed focus to this row.
+                        if (okPress[0] && !okPress[1]) {
+                            slots.getOrNull(slotIndexAt(slots, selectedStart).takeIf { it >= 0 } ?: nowIndex)?.let { onOk(it) }
+                        }
+                        okPress[0] = false
+                        true
+                    }
+                    else -> false
+                }
+            }
+            .focusable()
+            // One accessibility node per row (number, name, selected programme) instead of a node
+            // per text and per cell - the diff that runs on every change stays small.
+            .clearAndSetSemantics { contentDescription = description }
             // Own drawing layer per row: a scroll step only moves the layers, and the Wash, the
-            // marquee or a focus change re-records just this row, not the whole grid.
+            // marquee or a selection change re-records just this row, not the whole grid.
             .graphicsLayer()
             .drawBehind {
                 drawRect(if (rowHasFocus) SurfaceBand else Background)
@@ -551,74 +669,48 @@ private fun EpgChannelRow(
                     drawLine(Spine, Offset(size.width - hairlinePx / 2f, 0f), Offset(size.width - hairlinePx / 2f, size.height), hairlinePx)
                 },
         )
-        // Minimal scrolling for the timeline (see MinimalBringIntoView) - never the TV pivot.
-        CompositionLocalProvider(LocalBringIntoViewSpec provides MinimalBringIntoView) {
-            Box(modifier = Modifier.weight(1f).fillMaxHeight().horizontalScroll(sharedScroll)) {
-                Row(
-                    modifier = Modifier
-                        .width(timelineContentWidth)
-                        .fillMaxHeight()
-                        .drawBehind {
-                            // i = 0 is the spine's own position; the timeline starts right after it.
-                            for (i in 1..columns) {
-                                val x = i * halfHourPx
-                                drawLine(if (i % 2 == 0) TickHour else TickHalf, Offset(x, 0f), Offset(x, size.height), hairlinePx)
-                            }
-                        },
-                ) {
-                    val nowIndex = remember(slots, now) { nowSlotIndex(slots, now) }
-                    // Is there anything before "now" worth walking LEFT into? Past listings, or an
-                    // archive to catch up from. If not, LEFT from the now-cell leaves for Categories
-                    // instead of stepping through hours of empty half-hours (2026-10-05).
-                    val hasPast = remember(slots, now, channel.tvArchiveDays) {
-                        channel.tvArchiveDays > 0 || slots.any { it is AiredSlot && it.start < now && it.end <= now }
-                    }
-                    // Performance salvage batch 2 (2026-10-19): compose only the slots near the
-                    // viewport. The window is 24 half-hour columns and 6 are visible; every slot used
-                    // to be a full focusable Surface, measured at ~48ms of main thread per row - the
-                    // main cost of every category change and every new row scrolled in. Columns are
-                    // derived from the shared scroll, so a row recomposes only when the view crosses
-                    // a column, not per scrolled pixel. The now-cell and a time-jump target are always
-                    // kept (entry focus and UP/DOWN land on them), plus one neighbour on each side so
-                    // LEFT/RIGHT always has a cell to move to.
-                    val firstVisibleColumn by remember(halfHourPx) {
-                        derivedStateOf { (sharedScroll.value / halfHourPx).toInt() }
-                    }
-                    val composed = remember(slots, firstVisibleColumn, nowIndex, jumpIndex) {
-                        composedSlotRange(slots, firstVisibleColumn, nowIndex, jumpIndex)
-                    }
-                    if (!composed.isEmpty() && composed.first > 0) {
-                        Spacer(modifier = Modifier.width(pxPerMinute * ((slots[composed.first].start - slots.first().start) / MINUTE_MS.toFloat())))
-                    }
-                    for (index in composed) {
-                        val slot = slots[index]
-                        // Keyed by start time, so a cell keeps its identity (and real focus) when the
-                        // composed range shifts.
-                        key(slot.start) { SlotCell(
+        Box(modifier = Modifier.weight(1f).fillMaxHeight().horizontalScroll(sharedScroll)) {
+            Row(
+                modifier = Modifier
+                    .width(timelineContentWidth)
+                    .fillMaxHeight()
+                    .drawBehind {
+                        // i = 0 is the spine's own position; the timeline starts right after it.
+                        for (i in 1..columns) {
+                            val x = i * halfHourPx
+                            drawLine(if (i % 2 == 0) TickHour else TickHalf, Offset(x, 0f), Offset(x, size.height), hairlinePx)
+                        }
+                    },
+            ) {
+                // Performance salvage batch 2 (2026-10-19): compose only the slots near the
+                // viewport. The window is 24 half-hour columns and 6 are visible. Columns are
+                // derived from the shared scroll, so a row recomposes only when the view crosses
+                // a column, not per scrolled pixel. The now-cell and the selected one are always
+                // kept, plus one neighbour on each side.
+                val firstVisibleColumn by remember(halfHourPx) {
+                    derivedStateOf { (sharedScroll.value / halfHourPx).toInt() }
+                }
+                val composed = remember(slots, firstVisibleColumn, nowIndex, selected) {
+                    composedSlotRange(slots, firstVisibleColumn, nowIndex, selected.takeIf { it >= 0 })
+                }
+                if (!composed.isEmpty() && composed.first > 0) {
+                    Spacer(modifier = Modifier.width(pxPerMinute * ((slots[composed.first].start - slots.first().start) / MINUTE_MS.toFloat())))
+                }
+                for (index in composed) {
+                    val slot = slots[index]
+                    key(slot.start) {
+                        SlotCell(
                             rowWindowStart = slots.first().start,
                             sharedScroll = sharedScroll,
                             slot = slot,
-                            isFirstInRow = index == 0,
-                            channel = channel,
                             now = now,
                             pxPerMinute = pxPerMinute,
                             gapDash = gapDash,
                             wash = wash,
-                            onCursor = onCursor,
-                            onTune = onTune,
-                            onLongPress = onLongPress,
-                            onPlayCatchup = onPlayCatchup,
-                            onShowInfo = onShowInfo,
-                            // Entry lands on the cell airing now (EPG_WRAPUP.md 1.3), not index 0 -
-                            // index 0 is six hours in the past now.
-                            focusRequester = if (index == nowIndex) firstCellFocusRequester else null,
+                            selected = rowHasFocus && index == selected,
                             isNowCell = index == nowIndex,
                             expanded = expanded,
-                            timeFocusRequester = if (index == jumpIndex) timeFocus else null,
-                            onVerticalMove = onVerticalMove,
-                            leftLeavesGrid = index == 0 || (index == nowIndex && !hasPast) || (index < nowIndex && !hasPast),
-                            onLeftEdge = onLeftEdge,
-                        ) }
+                        )
                     }
                 }
             }
@@ -626,23 +718,11 @@ private fun EpgChannelRow(
     }
 }
 
-/**
- * The timeline's bring-into-view: scroll only as far as needed to show the focused cell. Since
- * Compose 1.7 a scroll container on a TV device defaults to pivoting the focused child to 30% of
- * the viewport - for the timeline that pulled "now" off the left edge on entry (measured: focus at
- * x=1163 = 880 + 0.3 x 944) and would shift the hours on every RIGHT. The rows' own vertical list
- * keeps the pivot, which is what the tv-foundation list it replaced did too.
- */
-private val MinimalBringIntoView = object : BringIntoViewSpec {
-    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
-        val trailing = offset + size
-        return when {
-            offset >= 0f && trailing <= containerSize -> 0f // already fully visible
-            offset < 0f && trailing > containerSize -> 0f // larger than the viewport, already covering it
-            abs(offset) < abs(trailing - containerSize) -> offset
-            else -> trailing - containerSize
-        }
-    }
+/** Index of the slot covering [time]; the last slot past the end; -1 for none / MIN_VALUE. */
+private fun slotIndexAt(slots: List<EpgSlot>, time: Long): Int {
+    if (time == Long.MIN_VALUE || slots.isEmpty()) return -1
+    val i = slots.indexOfFirst { time >= it.start && time < it.end }
+    return if (i >= 0) i else if (time < slots.first().start) 0 else slots.lastIndex
 }
 
 /** Part 7.4's layout at the 180dp width: 4 | 26 (number, right-aligned) | 6 | 26 (logo) | 8 | 106 (name) | 4. */
@@ -708,32 +788,16 @@ private fun SlotCell(
     rowWindowStart: Long,
     sharedScroll: ScrollState,
     slot: EpgSlot,
-    isFirstInRow: Boolean,
-    channel: ChannelEntity,
     now: Long,
     pxPerMinute: Dp,
     gapDash: PathEffect,
     wash: Animatable<Float, *>,
-    onCursor: (CursorKey, EpgSlot) -> Unit,
-    onTune: (ChannelEntity) -> Unit,
-    onLongPress: (ChannelEntity) -> Unit,
-    onPlayCatchup: (ChannelEntity, EpgProgramEntity) -> Unit,
-    onShowInfo: (EpgProgramEntity) -> Unit,
-    focusRequester: FocusRequester?,
+    selected: Boolean,
     isNowCell: Boolean = false,
     expanded: Boolean = false,
-    leftLeavesGrid: Boolean = false,
-    onLeftEdge: () -> Unit = {},
-    timeFocusRequester: FocusRequester? = null,
-    onVerticalMove: (goingDown: Boolean, time: Long) -> Boolean = { _, _ -> false },
 ) {
     val minutes = (slot.end - slot.start) / MINUTE_MS.toFloat()
     val width = pxPerMinute * minutes
-    val key = remember(channel.playlistId, channel.streamId, slot.start) { CursorKey(channel.playlistId, channel.streamId, slot.start) }
-    // OK / hold-OK, tracked without state (no recomposition per press): [0] = this press began
-    // on this cell, [1] = its long-press already fired.
-    val okPress = remember { BooleanArray(2) }
-    var focused by remember { mutableStateOf(false) }
     val isCurrent = slot is AiredSlot && now >= slot.start && now < slot.end
     val isPast = slot.end <= now
     val density = LocalDensity.current
@@ -746,53 +810,13 @@ private fun SlotCell(
     val hairlinePx = with(density) { RedSurfDensity.Hairline.toPx() }
     val labelClearancePx = with(density) { 74.dp.toPx() }
 
-    fun onOk() {
-        when (slot) {
-            is AiredSlot -> when {
-                isCurrent -> onTune(channel)
-                Catchup.isInArchive(channel.tvArchiveDays, slot.programme.startTime, now) -> onPlayCatchup(channel, slot.programme)
-                else -> onShowInfo(slot.programme)
-            }
-            is GapSlot -> onTune(channel)
-        }
-    }
-    // Performance salvage batch 2 (2026-10-19): a plain focusable Box, not a tv-material
-    // `Surface`. The Surface here was fully neutralized (transparent, no scale, border or glow -
-    // everything visible is the drawBehind below) yet still built its animated state for scale,
-    // border, glow and colour in every cell; with ~10 cells per row that was a large share of the
-    // ~58ms it took to compose a row. OK and hold-OK (add to favorites) are handled directly.
+    // Since 2026-10-20 (TiviMate F14) a cell is drawn only - no focus, keys or semantics. The row
+    // owns focus and moves a selected programme; this cell just paints itself selected or not.
     Box(
         modifier = Modifier
             .width(width)
             .fillMaxHeight()
             .clipToBounds()
-            .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
-            .then(timeFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
-            .onPreviewKeyEvent { event ->
-                when {
-                    leftLeavesGrid && event.key == Key.DirectionLeft -> {
-                        if (event.type == KeyEventType.KeyDown) onLeftEdge()
-                        true
-                    }
-                    (event.key == Key.DirectionUp || event.key == Key.DirectionDown) && event.type == KeyEventType.KeyDown -> {
-                        // Anchor on the visible part of this cell, so a long programme that began
-                        // hours ago doesn't drag the target back to its start.
-                        // From the live block, the anchor is *now* (user report 2026-10-19,
-                        // TiviMate's behaviour): anchoring on the visible start of a programme that
-                        // began before the view landed the next row on one that had already
-                        // ended, where OK only opens info - "OK doesn't play, I have to arrow back
-                        // to the live programme".
-                        val viewportLeftTime = rowWindowStart + (sharedScroll.value / with(density) { pxPerMinute.toPx() }).toLong() * MINUTE_MS
-                        val anchor = if (now >= slot.start && now < slot.end) now else maxOf(slot.start, viewportLeftTime) + MINUTE_MS
-                        onVerticalMove(event.key == Key.DirectionDown, anchor)
-                    }
-                    else -> false
-                }
-            }
-            .onFocusChanged {
-                focused = it.isFocused
-                if (it.isFocused) onCursor(key, slot)
-            }
             .drawBehind {
                 val w = size.width
                 val h = size.height
@@ -821,7 +845,7 @@ private fun SlotCell(
                         if (w > dashStart) drawLine(GapLine, Offset(dashStart, h / 2f), Offset(w, h / 2f), hairlinePx, pathEffect = gapDash)
                     }
                 }
-                if (focused) {
+                if (selected) {
                     drawRoundRect(CursorFill, Offset(0f, insetPx), Size(w, h - 2 * insetPx), CornerRadius(radiusPx))
                     drawRoundRect(
                         Accent,
@@ -846,34 +870,7 @@ private fun SlotCell(
                         )
                     }
                 }
-            }
-            .onKeyEvent { event ->
-                if (event.key != Key.DirectionCenter && event.key != Key.Enter && event.key != Key.NumPadEnter) {
-                    return@onKeyEvent false
-                }
-                val native = event.nativeKeyEvent
-                when (event.type) {
-                    KeyEventType.KeyDown -> {
-                        if (native.repeatCount == 0) {
-                            okPress[0] = true
-                            okPress[1] = false
-                        } else if (okPress[0] && !okPress[1] && native.isLongPress) {
-                            okPress[1] = true
-                            onLongPress(channel)
-                        }
-                        true
-                    }
-                    KeyEventType.KeyUp -> {
-                        // Only a press that began here counts - not the release of an OK that
-                        // opened something else first and handed focus to this cell.
-                        if (okPress[0] && !okPress[1]) onOk()
-                        okPress[0] = false
-                        true
-                    }
-                    else -> false
-                }
-            }
-            .focusable(),
+            },
     ) {
         // TiviMate's sticky titles (2026-10-05): a programme that started before the visible edge
         // keeps its title pinned to that edge instead of cut off mid-word. Read in the layout
@@ -897,7 +894,7 @@ private fun SlotCell(
                         slot.programme.title.ifBlank { "Untitled" },
                         style = RedSurfType.gridCell,
                         color = when {
-                            focused || isCurrent -> TextPrimary
+                            selected || isCurrent -> TextPrimary
                             isPast -> PastTitle
                             else -> RestingTitle
                         },
