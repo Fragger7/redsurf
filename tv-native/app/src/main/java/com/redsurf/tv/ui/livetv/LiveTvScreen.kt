@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import com.redsurf.tv.ui.stableCallback
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.graphics.ImageBitmap
 import com.redsurf.tv.diag.traced
@@ -815,13 +816,17 @@ fun LiveTvScreen(
                     EpgGridColumn(
                         channels = gridChannels,
                         programsByChannel = gridPrograms,
-                        groupName = selectedGroup?.groupName,
+                        // The group the rows actually belong to (prefix stripping must match the rows),
+                        // not the one just selected and still loading.
+                        groupName = gridLoadedFor?.groupName,
                         now = now,
                         windowStart = windowStart,
-                        onTuneChannel = { channel -> openChannel(channel) },
-                        onPlayCatchup = { channel, programme -> playCatchup(channel, programme) },
-                        onLeftEdge = { goToCategories() },
-                        onLongPressChannel = { channel ->
+                        // Stable instances (see stableCallback): a fresh lambda here recomposed every
+                        // visible guide row on each category change.
+                        onTuneChannel = stableCallback { channel: ChannelEntity -> openChannel(channel) },
+                        onPlayCatchup = stableCallback { channel: ChannelEntity, programme: EpgProgramEntity -> playCatchup(channel, programme) },
+                        onLeftEdge = stableCallback { goToCategories() },
+                        onLongPressChannel = stableCallback { channel: ChannelEntity ->
                             contextMenuArmed = false
                             contextMenuChannel = channel
                         },
@@ -830,8 +835,8 @@ fun LiveTvScreen(
                         playingStreamId = previewingChannel?.streamId,
                         firstCellFocusRequester = gridFocus,
                         targetChannelStreamId = focusedChannel?.streamId,
-                        onCursorChanged = { channel, slot -> onCursorChanged(channel, slot) },
-                        onFocusStateChanged = { hasFocus ->
+                        onCursorChanged = stableCallback { channel: ChannelEntity, slot: EpgSlot -> onCursorChanged(channel, slot) },
+                        onFocusStateChanged = stableCallback { hasFocus: Boolean ->
                             channelsHasFocus = hasFocus
                             if (!hasFocus) {
                                 cursor.channel = null
