@@ -42,10 +42,10 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyListScope
-import androidx.tv.foundation.lazy.list.items
-import androidx.tv.foundation.lazy.list.itemsIndexed
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -65,8 +65,8 @@ import com.redsurf.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.tv.foundation.lazy.list.rememberTvLazyListState
-import androidx.tv.foundation.lazy.list.TvLazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 
 private const val TAG = "SettingsScreen"
 
@@ -167,7 +167,7 @@ fun SettingsScreen(
     // 2026-09-30: success = the rail actually holds focus afterwards, not "requestFocus() didn't
     // throw" - found live that choosing the Settings pill left focus on the pill (the request on
     // a just-shown, not-yet-placed rail silently did nothing and the old check called it done).
-    val railListState = rememberTvLazyListState()
+    val railListState = rememberLazyListState()
     var railHasFocus by remember { mutableStateOf(false) }
     suspend fun claimRail() {
         repeat(10) { attempt ->
@@ -245,7 +245,7 @@ fun SettingsScreen(
             // of leaving it inside Settings: DOWN past the rail's last row, or RIGHT into a
             // category with nothing focusable in its pane (confirmed live for both). Only fires
             // while focus is on the rail (`!focusInPane`) - once inside the pane, its own content
-            // and `TvLazyColumn` handle their own UP/DOWN normally.
+            // and `LazyColumn` handle their own UP/DOWN normally.
             //
             // UP at the rail's top row ("General") is deliberately NOT guarded (BACKLOG_SWEEP.md
             // #3, found live 2026-09-14/15) - the pane side of this same row was never guarded and
@@ -330,7 +330,7 @@ private fun CategoryRail(
     selected: SettingsCategory,
     onFocused: (SettingsCategory) -> Unit,
     railFocus: FocusRequester,
-    listState: TvLazyListState,
+    listState: LazyListState,
     onRailFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -382,12 +382,12 @@ private fun CategoryRail(
             color = TextPrimary,
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
-        // TvLazyColumn, not a plain Column (found live, BACKLOG_SWEEP.md #2) - nine fixed rows
+        // LazyColumn, not a plain Column (found live, BACKLOG_SWEEP.md #2) - nine fixed rows
         // never needed paging, but a plain Column also never scrolls, so "About" (the last row)
         // was clipped by the card's fixed height with no way to bring it into view. Every other
         // real list in the app (GroupsColumn, ChannelsColumn, SettingsPane itself) already uses
-        // TvLazyColumn specifically because it scrolls to keep focus on-screen for free.
-        TvLazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // LazyColumn specifically because it scrolls to keep focus on-screen for free.
+        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             items(SettingsCategory.entries, key = { it.name }) { category ->
                 CategoryRow(
                     category = category,
@@ -460,7 +460,7 @@ private fun CategoryTile(@androidx.annotation.DrawableRes iconRes: Int) {
 }
 
 /**
- * Right pane: header + a `TvLazyColumn` of rows, same skeleton as `ChannelsColumn`. Playlists and
+ * Right pane: header + a `LazyColumn` of rows, same skeleton as `ChannelsColumn`. Playlists and
  * About get real, bespoke content; every other category is [SETTINGS_GREY_ROWS] verbatim.
  *
  * `firstRowFocus`/the `onFocusChanged` entry-redirect below is the same fix `ChannelsColumn.kt`
@@ -535,7 +535,7 @@ private fun SettingsPane(
             color = TextPrimary,
             modifier = Modifier.padding(bottom = 10.dp, start = 4.dp),
         )
-        TvLazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             when (category) {
                 SettingsCategory.General -> generalContent(
                     autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
@@ -594,7 +594,7 @@ private fun SettingsPane(
  * then the Reset danger zone - unchanged from the pre-shell `SettingsScreen`'s behavior
  * (`MainViewModel.deletePlaylist`/`resetAndAddNewPlaylist`), just re-hosted in the new shell.
  */
-private fun TvLazyListScope.playlistsContent(
+private fun LazyListScope.playlistsContent(
     playlists: List<PlaylistEntity>,
     onAddPlaylist: () -> Unit,
     onResetPlaylist: () -> Unit,
@@ -847,7 +847,7 @@ private fun ResetRow(onReset: () -> Unit) {
  * completed sync and, only when the newest attempt failed, what it failed with. Grey rows stay
  * for Sources (P1 public supplement), Time offset, and Refresh every.
  */
-private fun TvLazyListScope.epgContent(
+private fun LazyListScope.epgContent(
     status: EpgSyncStatus,
     onUpdateNow: () -> Unit,
     firstRowFocus: FocusRequester,
@@ -911,7 +911,7 @@ private fun formatEpgTime(millis: Long): String = epgTimeFormat.format(java.util
  * About (`SETTINGS.md`): version + Check for updates moved here from the old screen's top - "this
  * is where people look for it" - plus its one grey row.
  */
-private fun TvLazyListScope.aboutContent(
+private fun LazyListScope.aboutContent(
     updateStatus: UpdateCheckStatus,
     onCheckForUpdates: () -> Unit,
     firstRowFocus: FocusRequester,
@@ -970,7 +970,7 @@ private fun TvLazyListScope.aboutContent(
  * `AppShell.kt`'s restore effect) - this one live toggle only controls whether that pre-selected
  * channel also starts playing immediately on launch, ahead of its remaining grey rows, same
  * layering as every other category's live-rows-then-grey-rows shape. */
-private fun TvLazyListScope.generalContent(
+private fun LazyListScope.generalContent(
     autoPlayLastChannelOnLaunch: Boolean,
     onToggle: () -> Unit,
     firstRowFocus: FocusRequester,
@@ -989,7 +989,7 @@ private fun TvLazyListScope.generalContent(
 /** Playback (`BACKLOG_SWEEP.md` #11): one live toggle - the "old cable box" black-screen-between-
  * zaps behavior - ahead of its remaining grey rows, same layering as [aboutContent]'s live rows
  * before [ABOUT_GREY_ROWS]. */
-private fun TvLazyListScope.playbackContent(
+private fun LazyListScope.playbackContent(
     blackScreenBetweenZaps: Boolean,
     onToggle: () -> Unit,
     previewOnSelect: Boolean,
@@ -1018,7 +1018,7 @@ private fun TvLazyListScope.playbackContent(
 
 /** Appearance (`BACKLOG_SWEEP.md` #12): one live toggle - literal `WxH` vs. the derived
  * SD/HD/FHD/4K class on the player's resolution badge - ahead of its remaining grey rows. */
-private fun TvLazyListScope.appearanceContent(
+private fun LazyListScope.appearanceContent(
     showRawResolution: Boolean,
     onToggle: () -> Unit,
     doubleHeightRow: Boolean,
@@ -1057,7 +1057,7 @@ private fun TvLazyListScope.appearanceContent(
 /** Remote control (`docs/plans/TELEPORT_MENU.md` decision 1, 2026-09-19): "Teleport Menu" is the
  * first live row this category has ever had - default off, see `AppShell.kt`'s long-press-Back
  * handler for what flipping it changes. Existing grey rows (Long-press OK, Digit keys) unchanged. */
-private fun TvLazyListScope.remoteControlContent(
+private fun LazyListScope.remoteControlContent(
     teleportMenuEnabled: Boolean,
     onToggle: () -> Unit,
     firstRowFocus: FocusRequester,

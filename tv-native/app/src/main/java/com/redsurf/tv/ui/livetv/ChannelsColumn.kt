@@ -32,8 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.rememberTvLazyListState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
@@ -47,7 +47,7 @@ import com.redsurf.tv.ui.theme.TextSecondary
 
 /**
  * Middle column: paged channels in the selected group (UI_SPEC.md #4). Uses the index form of
- * TvLazyColumn.items since tv-foundation alpha10 has no items(LazyPagingItems<T>) extension -
+ * LazyColumn.items since tv-foundation alpha10 has no items(LazyPagingItems<T>) extension -
  * see docs/plans/PHASE_1.md #2.
  *
  * Geometry from references/streamvault/LiveTV.png at this canvas: rows ~48dp with a 36dp square
@@ -96,7 +96,7 @@ fun ChannelsColumn(
 
     // Keeps the list scrolled to whatever channel is focused even while real D-pad focus lives
     // elsewhere (fullscreen zapping) - found live, 2026-09-12, reported as Back "not landing on
-    // the current channel... defaults back to Channel Category" after enough zaps. TvLazyColumn
+    // the current channel... defaults back to Channel Category" after enough zaps. LazyColumn
     // only composes rows near its current scroll position; zapping updates focusedChannelId many
     // times without ever scrolling this (invisible, but still-composed) column, so the row
     // returnFocusRequester targets below can end up outside the composed window entirely. Calling
@@ -104,7 +104,7 @@ fun ChannelsColumn(
     // call sites), leaving Compose to fall back to its own default focus target - the NavStrip's
     // first pill, which read as "Channel Category" to the user. Uses peek(), not the indexing
     // operator, so this search never itself triggers a page load.
-    val listState = rememberTvLazyListState()
+    val listState = rememberLazyListState()
     LaunchedEffect(focusedChannelId, channels.itemCount) {
         val id = focusedChannelId ?: return@LaunchedEffect
         val index = (0 until channels.itemCount).firstOrNull { channels.peek(it)?.streamId == id }
@@ -152,7 +152,7 @@ fun ChannelsColumn(
             color = TextSecondary,
             modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
         )
-        TvLazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(count = channels.itemCount, key = channels.itemKey { it.streamId }) { index ->
                 val channel = channels[index]
                 if (channel != null) {

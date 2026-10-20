@@ -67,8 +67,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.rememberTvLazyListState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.db.ChannelEntity
@@ -297,7 +297,7 @@ fun EpgGridColumn(
                 val targetIndex = remember(channels, targetChannelStreamId) {
                     targetChannelStreamId?.let { id -> channels.indexOfFirst { it.streamId == id } } ?: -1
                 }
-                val rowsState = rememberTvLazyListState()
+                val rowsState = rememberLazyListState()
                 LaunchedEffect(scrollToTargetNonce) {
                     if (scrollToTargetNonce == 0 || targetIndex < 0) return@LaunchedEffect
                     val visible = rowsState.layoutInfo.visibleItemsInfo.any { it.index == targetIndex }
@@ -328,7 +328,7 @@ fun EpgGridColumn(
                     if (jump.index < first) runCatching { rowsState.scrollToItem(jump.index) }
                     else if (jump.index >= last) runCatching { rowsState.scrollToItem((first + (jump.index - last) + 1).coerceAtLeast(0)) }
                 }
-                TvLazyColumn(state = rowsState, modifier = Modifier.fillMaxSize()) {
+                LazyColumn(state = rowsState, modifier = Modifier.fillMaxSize()) {
                     items(count = channels.size, key = { channels[it].streamId }) { index ->
                         val channel = channels[index]
                         val isFocusTarget = if (targetIndex >= 0) index == targetIndex else index == 0

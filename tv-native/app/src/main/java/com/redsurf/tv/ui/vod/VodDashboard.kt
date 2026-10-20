@@ -9,9 +9,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.*
 import com.redsurf.tv.vod.XtreamCategory
 import com.redsurf.tv.vod.VodMovie
@@ -34,7 +34,7 @@ fun VodDashboardView() {
         VodMovie("105", "Avengers: Endgame", "", "8.4", "mp4")
     )
 
-    TvLazyColumn(
+    LazyColumn(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F0F0F))
     ) {
         // Featured Hero Banner
@@ -82,7 +82,7 @@ fun VodDashboardView() {
                     modifier = Modifier.padding(start = 48.dp, bottom = 16.dp)
                 )
                 
-                TvLazyRow(
+                LazyRow(
                     contentPadding = PaddingValues(horizontal = 48.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {

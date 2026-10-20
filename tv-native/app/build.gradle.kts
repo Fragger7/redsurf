@@ -91,9 +91,13 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
-    implementation("androidx.tv:tv-foundation:1.0.0-alpha10")
-    implementation("androidx.tv:tv-material:1.0.0-alpha10")
-    implementation("androidx.compose.material3:material3:1.2.0")
+    // Compose 1.7.8 (performance salvage, 2026-10-19): the newest Compose needs compileSdk 37 /
+    // AGP 9.1; 1.7.8 is the last line that builds on this toolchain. The tv-foundation alpha lists
+    // were replaced by foundation's own LazyColumn/LazyRow (TvLazy* were deprecated upstream).
+    implementation(platform("androidx.compose:compose-bom:2025.02.00"))
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.tv:tv-material:1.0.1")
     
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.2.1")

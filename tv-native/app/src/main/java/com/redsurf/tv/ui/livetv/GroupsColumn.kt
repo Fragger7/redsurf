@@ -42,10 +42,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyListState
-import androidx.tv.foundation.lazy.list.itemsIndexed
-import androidx.tv.foundation.lazy.list.rememberTvLazyListState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.redsurf.tv.db.GroupCount
@@ -177,7 +177,7 @@ fun GroupsColumn(
     // Scroll-to-selected (user-found bug, 2026-09-17): this column had no equivalent of
     // ChannelsColumn's own scroll-to-selected effect at all - it relied entirely on Compose's
     // automatic "bring the newly-focused row into view" behavior, which silently does nothing if
-    // that row isn't composed yet (a `TvLazyColumn` only composes rows near its current scroll
+    // that row isn't composed yet (a `LazyColumn` only composes rows near its current scroll
     // position). With a real playlist's categories rarely starting near the top, the selected
     // category's row almost never existed yet when `initialFocus.requestFocus()` ran, so it threw
     // (swallowed by `runCatching`), landing the visible list at the top with focus nowhere near
@@ -185,7 +185,7 @@ fun GroupsColumn(
     // list, `rows` here is already a fully-realized in-memory list (no async load to race), so a
     // short bounded retry (not the channel fix's longer one) is enough margin for the scroll to
     // actually land before the focus claim.
-    val listState = rememberTvLazyListState()
+    val listState = rememberLazyListState()
     val initialFocus = remember { FocusRequester() }
     var initialFocusDone by remember { mutableStateOf(false) }
     LaunchedEffect(selectedGroup, rows) {
@@ -283,7 +283,7 @@ fun GroupsColumn(
     // Sprint 2, 2026-09-23 (FOCUS_MODEL.md rule 7) - real boundary guard for UP, where there was
     // none at all before. User report: "UP-scroll escapes to the nav-strip prematurely" - the
     // mechanism the audit found is that this column trusted Compose's default directional search
-    // to naturally stop at the list's true top, which a `TvLazyColumn` doesn't reliably do (a row
+    // to naturally stop at the list's true top, which a `LazyColumn` doesn't reliably do (a row
     // just above the current one that hasn't been composed yet isn't a candidate the search can
     // find, so it looks further afield and finds the NavStrip instead). Fix: intercept UP
     // ourselves whenever the focused row isn't genuinely the first one - explicitly scroll the
@@ -350,7 +350,7 @@ fun GroupsColumn(
             color = TextPrimary,
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
-        TvLazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             itemsIndexed(
                 rows,
                 key = { _, row -> rowKey(row) },
@@ -393,7 +393,7 @@ fun GroupsColumn(
 
 /** Scroll so row [index] sits about mid-viewport (L1 above); near either end of the list the
  * scroll clamps, so the first/last rows land wherever they naturally are, like TiviMate's. */
-private suspend fun TvLazyListState.holdMidList(index: Int) {
+private suspend fun LazyListState.holdMidList(index: Int) {
     val rowsAbove = (layoutInfo.visibleItemsInfo.size - 1) / 2
     scrollToItem((index - rowsAbove).coerceAtLeast(0))
 }

@@ -229,6 +229,26 @@ gfxinfo (BTN+ PPV, no listings): Categories 47.7% janky p50 42ms (was 50%/48); g
 (the lazy list re-laying out per scroll-animation frame). Next big lever: Compose 1.6 → current
 (the TV alpha lists are only in 5 files) together with the toolchain bump Media3 1.10+ needs.
 
+## Compose 1.7.8 - v0.41.5 (2026-10-20 00:10)
+
+Compose 1.6 (alpha tv-foundation lists) → BOM 2025.02.00 (Compose 1.7.8, material3 1.3.1,
+tv-material 1.0.1); `TvLazyColumn/Row` → foundation `LazyColumn/Row` (5 files). 1.7.8 is the newest
+line on this toolchain: Compose 1.12 needs compileSdk 37 + AGP 9.1, Media3 1.10+ compileSdk 36,
+tv-material 1.1 compileSdk 35 + AGP 8.6 (read from each AAR's aar-metadata, not guessed).
+
+**Measure compiled, always:** right after `adb install` the app runs uncompiled ("Skipping profile
+installation") - v0.41.5 measured 69% janky p50 113ms uncompiled vs 48%/42ms after
+`adb shell cmd package compile -m speed-profile -f com.redsurf.tv`. Users hit the uncompiled
+state after every OTA update until Android's idle-time dexopt runs - a real "choppy after update"
+cause; a real app baseline profile (TV is API 34, generation works unrooted) is a follow-up.
+
+| Compiled, BTN+ PPV | v0.41.4 | v0.41.5 |
+|---|---|---|
+| Guide 20×DOWN+20×UP | 58% janky, p50 61ms | **44.8%, p50 42ms**, p90 85 |
+| Categories 20×DOWN+20×UP | 51.8%, p50 53ms | **48.2%, p50 42ms** |
+
+40/40 category presses land; Settings navigates. TiviMate: 7.5%/18ms, 7.6%/29ms.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees
