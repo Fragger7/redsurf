@@ -22,6 +22,15 @@ a Next.js web portal at the repo root.
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which
 were false. It is kept for provenance only.
 
+## ▶ Status 2026-10-20 (night 2): performance salvage at its stop point; Cloud Sync brief awaits the user
+
+The salvage's leads are done and measured on the TV (`PERFORMANCE_SALVAGE.md` → "STATUS" block:
+guide 9% janky vs TiviMate 7.6%, categories glide, fullscreen transitions 82/174ms first frames,
+one shared player, Compose 1.11 + Media3 1.10.1). The user owes a feel-check
+(`TESTING_OUTSTANDING.md` section M). Next on the roadmap: Cloud Sync - `docs/plans/CLOUD_SYNC.md`
+is a draft brief with decisions D1-D4 for the user; nothing is built. The web portal builds locally
+again (`cp .env.example .env.local && npm run build`).
+
 ## ⚠ Current priority (2026-10-05): performance salvage — `docs/plans/PERFORMANCE_SALVAGE.md`
 
 The user judged the app's performance "a fatal point" (choppy menus, erratic focus, rough

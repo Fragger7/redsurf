@@ -563,6 +563,11 @@ the last-watched effect via `snapshotFlow`. Interleaved A/B, both compiled, twic
 *worse* (22-24% → 32-33% janky, p90 48-53 → 101-105ms); guide unchanged. Cause not found - not
 worth keeping blind. TV back on the CI v0.44.4 artifact.
 
+**Memory, v0.44.5 (2026-10-20 07:35):** guide 99 MB PSS, after browsing 15 categories + rows
+120 MB, fullscreen playing 128 MB, back in browse with the preview playing 132 MB; MemAvailable
+~760 MB. In line with Phase 1 (113-146 MB) - the upgrades and the shared player added nothing
+worrying.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees
