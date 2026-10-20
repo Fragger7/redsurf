@@ -384,6 +384,27 @@ A/B vs v0.41.11, compiled, alternated twice: guide janky 14.0% (84) / 12.9% (79)
 work: new rows' display lists and text glyphs). Decide on interleaved gfxinfo A/B; use traces to
 find causes.
 
+## Back out of fullscreen fixed; category commit loop fixed - v0.41.16 (2026-10-20 04:30)
+
+- **Bug (since the Compose 1.11 upgrade, v0.41.6):** with no player overlay open, Back did nothing
+  in fullscreen - a Back reaching the focus-trapped player root (`focusProperties { exit = Cancel }`)
+  no longer fell through to the `BackHandler`; it only worked while a tile held focus. The root now
+  peels on Back itself (`peelBack()`, shared with the BackHandler, which stays as a fallback).
+- **Bug (from v0.41.11's settle-commit):** focus falling onto a category row (leaving fullscreen,
+  or guide rows replaced while focused) scheduled a commit; the reload dropped focus onto the next
+  category row → commit → ... (log: GOLF → HBO MAX → KIDS → MATCHROOM with no key pressed). Commits
+  now happen only for focus moving *within* Categories (`categoriesHaveFocus` gate).
+- Device-verified: fullscreen → Back returns to the watched channel's row (no commits); overlay →
+  Back → Back exits; settled DOWN×2 + RIGHT and fast DOWN×3 + RIGHT land in the right category.
+- New logs: `LiveTvScreen: commitGroup <name> <- caller`, `AppShell: selectedGroup <- <name> caller`.
+
+| Move (compiled) | v0.41.1 | v0.41.16 | TiviMate |
+|---|---|---|---|
+| Fullscreen → Back to guide | 12 frames / 100% / p50 200 | **20-21 / 40-43% / p50 25-26** | 79 / 15% / 7 |
+| OK → fullscreen | 106 / 6.6% / 19 (different path) | 4-5 / 80-100% / p50 81-150 | (preview → fullscreen) 36 / 28% / 57 |
+
+Next: OK → fullscreen (one very heavy frame), then L5 (one shared player).
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

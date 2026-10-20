@@ -349,7 +349,7 @@ fun PlayerScreen(
 
     // Back peels exactly one layer, always (decision 4) - owns all Back handling for the player,
     // not just "exit fullscreen", now that there's overlay state to peel through first.
-    BackHandler(enabled = true) {
+    fun peelBack() {
         overlay = when (val current = overlay) {
             // History is opened from the Tiles floor (decision 8), not Actions - peeling back
             // from it has to return there, not to Actions like the other three Picker kinds
@@ -375,6 +375,7 @@ fun PlayerScreen(
             }
         }
     }
+    BackHandler(enabled = true) { peelBack() }
 
     Box(
         modifier = modifier
@@ -401,11 +402,17 @@ fun PlayerScreen(
             .focusRequester(focusRequester)
             .focusable()
             .onKeyEvent { event ->
-                // Back never gets consumed here - it must keep bubbling to the BackHandler above,
-                // a separate dispatcher mechanism from this modifier. Swallowing it here
-                // unconditionally, as an earlier version of this fix did, silently broke exiting
-                // fullscreen entirely. Found live, 2026-09-12.
-                if (event.key == Key.Back) return@onKeyEvent false
+                // Back peels here (2026-10-20). Since the Compose 1.11 upgrade a Back reaching
+                // this focus-trapped root no longer fell through to the BackHandler above, so with
+                // no overlay open fullscreen couldn't be left at all (device-verified: Back worked
+                // only while a tile held focus). Handled and consumed here - both edges, so the
+                // dispatcher never runs it a second time; the BackHandler stays as a fallback for a
+                // Back that never reaches this node. (2026-09-12's lesson still holds: swallowing
+                // Back here *without* acting broke fullscreen exit.)
+                if (event.key == Key.Back) {
+                    if (event.type == KeyEventType.KeyUp) peelBack()
+                    return@onKeyEvent true
+                }
 
                 val isDown = event.type == KeyEventType.KeyDown
                 val isFirstDown = isDown && event.nativeKeyEvent.repeatCount == 0

@@ -584,7 +584,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         showRawResolution = showRawResolution,
                         doubleHeightRow = doubleHeightRow,
                         selectedGroup = liveTvSelectedGroup,
-                        onSelectedGroupChanged = { liveTvSelectedGroup = it },
+                        onSelectedGroupChanged = {
+                            Log.d("AppShell", "selectedGroup <- ${it?.groupName} ${Throwable().stackTrace.getOrNull(1)?.let { f -> "${f.methodName}:${f.lineNumber}" }}")
+                            liveTvSelectedGroup = it
+                        },
                         focusedChannel = liveTvFocusedChannel,
                         onFocusedChannelChanged = { liveTvFocusedChannel = it },
                         autoPlayTrigger = liveTvAutoPlayTrigger,

@@ -388,6 +388,7 @@ fun LiveTvScreen(
     val latestGroup = remember { arrayOfNulls<GroupKey>(1) }
     SideEffect { latestGroup[0] = selectedGroup }
     fun commitGroup(group: GroupKey) {
+        Log.d("LiveTvScreen", "commitGroup ${group.groupName} <- ${Throwable().stackTrace.getOrNull(1)?.let { "${it.methodName}:${it.lineNumber}" }}")
         latestGroup[0] = group
         onSelectedGroupChanged(group)
         onFocusedChannelChanged(null)
@@ -788,6 +789,13 @@ fun LiveTvScreen(
                         groups = groups,
                         selectedGroup = selectedGroup,
                         onGroupFocused = { group ->
+                            // Only focus moving *within* Categories is the user browsing. Focus that
+                            // merely lands here (falling out of fullscreen or out of replaced guide
+                            // rows) used to schedule a commit too - which reloaded the guide, dropped
+                            // focus onto the next category row, and so on through the list
+                            // (device-verified loop, 2026-10-20 05:00). The row's callback runs
+                            // before the column's own onFocusChanged, so on entry this is still false.
+                            if (!categoriesHaveFocus) return@GroupsColumn
                             groupCommitJob[0]?.cancel()
                             if (group != latestGroup[0]) {
                                 pendingGroup[0] = group
