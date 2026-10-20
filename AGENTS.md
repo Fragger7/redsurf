@@ -203,7 +203,12 @@ merging.
     offline; credentials encrypted per account, not just rules-protected; last-write-wins with
     server timestamps, global enable/disable first; shape the account doc so favourites/recents/
     settings can ride the same rails later. Prerequisite: the web portal must build locally
-    again (the `@tailwindcss/oxide` issue below) before that sprint starts.
+    again (the `@tailwindcss/oxide` issue below) before that sprint starts. **Done 2026-10-20:**
+    it builds - the lockfile had been generated on Linux and listed only linux-x64 native binaries;
+    the macOS ones (`@tailwindcss/oxide-darwin-*` 4.1.11, `lightningcss-darwin-*` 1.30.1, pinned to
+    the versions in use) are now `optionalDependencies`. A real build still needs a `.env.local`
+    with the `NEXT_PUBLIC_FIREBASE_*` values (`lib/firebase.ts` fails loudly without them, by
+    design); with placeholders the full build succeeds.
   - *Branding before the Player sprint*, not after Cloud Sync: the point is that everything built
     afterwards carries it, so it goes as early as possible. Scope: Android TV launcher banner
     (320x180) + adaptive icon, the mark in the nav strip, the loading screen, About, the
@@ -977,6 +982,8 @@ DAO methods are all dead. `VodDashboard` is hardcoded film titles.
 runs); no design system, so nothing shows a focus state; the web app cannot currently be built
 locally on this machine — a pre-existing, unrelated native-binary install issue with
 `@tailwindcss/oxide`/`lightningcss`, see `docs/plans/PHASE_0.md`.
+*(2026-10-20: the web-build item is fixed - see the Cloud Sync prerequisite note above. The other
+two items in this 2026-09-10 snapshot were fixed long ago; this section is history.)*
 
 **Fixed 2026-09-10, verified against the live Firestore project with real HTTP requests, not just
 reviewed:** `firestore.rules` no longer leaves `pairingSessions` world-readable, and the playlist
