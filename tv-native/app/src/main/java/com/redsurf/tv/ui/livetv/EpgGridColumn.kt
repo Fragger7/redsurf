@@ -753,13 +753,6 @@ private fun EpgChannelRow(
     }
 }
 
-/** Index of the slot covering [time]; the last slot past the end; -1 for none / MIN_VALUE. */
-private fun slotIndexAt(slots: List<EpgSlot>, time: Long): Int {
-    if (time == Long.MIN_VALUE || slots.isEmpty()) return -1
-    val i = slots.indexOfFirst { time >= it.start && time < it.end }
-    return if (i >= 0) i else if (time < slots.first().start) 0 else slots.lastIndex
-}
-
 /**
  * Part 7.4's layout at the 180dp width: 4 | 26 (number, right-aligned) | 6 | 26 (logo) | 8 | name |
  * glyphs | 4 - painted, not composed (performance salvage, 2026-10-20: the composed label, and its

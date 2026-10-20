@@ -122,22 +122,14 @@ fun stripCategoryPrefix(channelName: String, groupName: String?): String {
     return remainder.ifEmpty { channelName }
 }
 
-/** Extra half-hour columns composed beyond each side of the viewport (see EpgChannelRow). */
-internal const val COLUMN_MARGIN = 2
-
-/** Indices of [slots] to compose for a view starting at [firstVisibleColumn] (see EpgChannelRow). */
-internal fun composedSlotRange(slots: List<EpgSlot>, firstVisibleColumn: Int, nowIndex: Int?, jumpIndex: Int?): IntRange {
-    if (slots.isEmpty()) return IntRange.EMPTY
-    val origin = slots.first().start
-    val from = origin + (firstVisibleColumn - COLUMN_MARGIN) * HALF_HOUR_MS
-    val to = origin + (firstVisibleColumn + VISIBLE_MINUTES / 30 + COLUMN_MARGIN) * HALF_HOUR_MS
-    var first = slots.indexOfFirst { it.end > from }.let { if (it < 0) slots.lastIndex else it }
-    var last = slots.indexOfLast { it.start < to }.let { if (it < 0) 0 else it }
-    first = (first - 1).coerceAtLeast(0)
-    last = (last + 1).coerceAtMost(slots.lastIndex)
-    listOfNotNull(nowIndex, jumpIndex).filter { it in slots.indices }.forEach {
-        first = minOf(first, it)
-        last = maxOf(last, it)
-    }
-    return first..last
+/**
+ * Index of the slot covering [time]: the first slot past the window's start, the last past its
+ * end, -1 for no slots or [Long.MIN_VALUE] ("nothing selected"). The guide row tracks its selected
+ * programme by start time and resolves it with this (listings can replace the slot list while a
+ * row is focused, so an index alone would drift to another programme).
+ */
+internal fun slotIndexAt(slots: List<EpgSlot>, time: Long): Int {
+    if (time == Long.MIN_VALUE || slots.isEmpty()) return -1
+    val i = slots.indexOfFirst { time >= it.start && time < it.end }
+    return if (i >= 0) i else if (time < slots.first().start) 0 else slots.lastIndex
 }

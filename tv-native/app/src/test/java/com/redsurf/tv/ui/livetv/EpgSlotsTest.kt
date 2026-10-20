@@ -118,45 +118,37 @@ class EpgSlotsTest {
         assertEquals("X - Y", stripCategoryPrefix("X - Y", null))
     }
 
-    // Performance salvage batch 2 (2026-10-19): rows compose only the slots near the viewport.
+    // Row focus (2026-10-20): a row's selected programme is tracked by start time.
 
     @Test
-    fun composedRange_emptyGuide_isViewportPlusMargins() {
-        val slots = slotsFor(emptyList(), windowStart, windowEnd) // 24 half-hour gaps
-        val nowColumn = PAST_MINUTES / 30
-        val range = composedSlotRange(slots, firstVisibleColumn = nowColumn, nowIndex = nowColumn, jumpIndex = null)
-        val visible = VISIBLE_MINUTES / 30
-        assertEquals(nowColumn - COLUMN_MARGIN - 1, range.first)
-        assertEquals(nowColumn + visible + COLUMN_MARGIN, range.last)
-        assertTrue("fewer than the whole window", range.count() < slots.size)
+    fun slotIndexAt_findsTheSlotCoveringTheTime() {
+        val slots = slotsFor(listOf(programme(60, 120, "a"), programme(120, 300, "b")), windowStart, windowEnd)
+        val a = slotIndexAt(slots, windowStart + 90 * MINUTE_MS)
+        assertEquals("a", (slots[a] as AiredSlot).programme.title)
+        val b = slotIndexAt(slots, windowStart + 120 * MINUTE_MS) // a programme's start belongs to it
+        assertEquals("b", (slots[b] as AiredSlot).programme.title)
     }
 
     @Test
-    fun composedRange_alwaysKeepsNowAndJumpTargets() {
+    fun slotIndexAt_clampsOutsideTheWindow() {
         val slots = slotsFor(emptyList(), windowStart, windowEnd)
-        val farRight = composedSlotRange(slots, firstVisibleColumn = 17, nowIndex = 12, jumpIndex = null)
-        assertTrue(12 in farRight)
-        val withJump = composedSlotRange(slots, firstVisibleColumn = 12, nowIndex = 12, jumpIndex = 1)
-        assertTrue(1 in withJump)
+        assertEquals(0, slotIndexAt(slots, windowStart - 1))
+        assertEquals(slots.lastIndex, slotIndexAt(slots, windowEnd + 1))
     }
 
     @Test
-    fun composedRange_includesLongProgrammeStartingBeforeTheView() {
-        // One programme covering the first 5.5 hours, then gaps.
-        val slots = slotsFor(listOf(programme(0, 330)), windowStart, windowEnd)
-        val range = composedSlotRange(slots, firstVisibleColumn = 12, nowIndex = null, jumpIndex = null)
-        assertEquals(0, range.first)
-    }
-
-    @Test
-    fun composedRange_clampsAtWindowEnd() {
+    fun slotIndexAt_nothingSelectedOrNoSlots_isMinusOne() {
         val slots = slotsFor(emptyList(), windowStart, windowEnd)
-        val range = composedSlotRange(slots, firstVisibleColumn = slots.size - 1, nowIndex = null, jumpIndex = null)
-        assertEquals(slots.lastIndex, range.last)
+        assertEquals(-1, slotIndexAt(slots, Long.MIN_VALUE))
+        assertEquals(-1, slotIndexAt(emptyList(), windowStart))
     }
 
     @Test
-    fun composedRange_noSlots_isEmpty() {
-        assertTrue(composedSlotRange(emptyList(), 0, null, null).isEmpty())
+    fun slotIndexAt_followsTheProgrammeWhenListingsReplaceTheSlots() {
+        // A row focused on the 1:00 gap; listings then arrive and that hour becomes a programme.
+        val before = slotsFor(emptyList(), windowStart, windowEnd)
+        val selectedStart = before[slotIndexAt(before, windowStart + 60 * MINUTE_MS)].start
+        val after = slotsFor(listOf(programme(45, 150, "late")), windowStart, windowEnd)
+        assertEquals("late", (after[slotIndexAt(after, selectedStart)] as AiredSlot).programme.title)
     }
 }
