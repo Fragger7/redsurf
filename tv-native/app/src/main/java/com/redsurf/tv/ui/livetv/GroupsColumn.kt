@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -291,6 +292,11 @@ fun GroupsColumn(
     // retried default move it replaced could overshoot, see the handler). Only a real index-0 UP
     // is left to escape naturally.
     val scope = rememberCoroutineScope()
+    // Where the last UP/DOWN was headed. Focus lands a frame or more after the press, so on fast
+    // presses focusedIndex still names the previous row: the next press then re-targeted the same
+    // row and was lost (measured 2026-10-19: "down -> 819" twice, 20 down + 20 up ended one row
+    // off). Each press moves from the previous press's target; real focus resets it.
+    val headedTo = remember { IntArray(1) { -1 } }
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -309,7 +315,7 @@ fun GroupsColumn(
                     Key.DirectionDown -> false
                     else -> return@onPreviewKeyEvent false
                 }
-                val startIndex = focusedIndex ?: return@onPreviewKeyEvent false
+                val startIndex = headedTo[0].takeIf { it in rows.indices } ?: focusedIndex ?: return@onPreviewKeyEvent false
                 if (goingUp && startIndex <= 0) {
                     onEscapeUp()
                     return@onPreviewKeyEvent true
@@ -326,6 +332,7 @@ fun GroupsColumn(
                 // landed three rows up, and the overshoot could leave the column for the guide
                 // (measured live; user report #6, "erratic focus between Categories and the grid").
                 val target = if (goingUp) startIndex - 1 else startIndex + 1
+                headedTo[0] = target
                 scope.launch {
                     targetRowKey = rowKey(rows[target])
                     runCatching { listState.holdMidList(target) }
@@ -355,7 +362,7 @@ fun GroupsColumn(
                         // Headers report their index too - the UP guard above and the explicit
                         // focus request both read focusedIndex, and a header that left it stale
                         // made UP from a header scroll to the wrong row.
-                        onFocused = { focusedIndex = index },
+                        onFocused = { focusedIndex = index; headedTo[0] = index },
                         modifier = targetModifier,
                         onToggle = {
                             collapsedPlaylists = if (row.collapsed) {
@@ -373,6 +380,7 @@ fun GroupsColumn(
                             onFocused = {
                                 onGroupFocused(row.group.key())
                                 focusedIndex = index
+                                headedTo[0] = index
                             },
                             modifier = (if (selected) Modifier.focusRequester(initialFocus) else Modifier).then(targetModifier),
                         )
@@ -487,7 +495,7 @@ private fun GroupRow(
                 color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).let { if (isFocused) it.basicMarquee() else it },
+                modifier = Modifier.weight(1f).let { if (isFocused) it.graphicsLayer().basicMarquee() else it },
             )
             Text(
                 group.count.toString(),

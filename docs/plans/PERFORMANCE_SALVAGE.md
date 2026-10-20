@@ -203,6 +203,32 @@ future cell shows info, hold-OK opens favorites); guide timings on a group with 
 (CBS shows "No listings"). Still far from TiviMate: next is row composition cost (double-height row
 relayout, draw cost, a lighter row), then L5 (one shared ExoPlayer), then Media3.
 
+## Batch 3 - v0.41.4 (2026-10-19 night), measured on device
+
+Trace of 12 guide DOWN presses (atrace, UI thread, double-height on) found layout dominated:
+the focused row grew a frame *after* focus landed, so every press laid the list out twice; and
+with no layers, any redraw (the Wash, a marquee, a scroll step) re-recorded the whole grid.
+Double-height off cut layout from ~1.07s to ~0.41s - so the row stays (TiviMate option) but:
+- the row grows on the key press itself (`cursorRow`, set with the jump), one layout pass;
+- each guide row and every marquee gets its own `graphicsLayer`;
+- UP/DOWN in Categories and the guide move from the previous press's *target*, not from where focus
+  currently is - fast presses were re-targeting the same row (log: "down -> 819" twice; 20+20 ended
+  a row off). Now 815→835→815 exactly (TiviMate F9 parity);
+- Teleport logs `Teleport: open/close/selected <row>` - uiautomator can't see the overlay, so test
+  scripts drive it from logcat (Teleport → Nav-Strip → Settings verified by script).
+
+| 12 guide DOWNs, UI thread | v0.41.3 | v0.41.4 |
+|---|---|---|
+| frame work total | 2452ms | 1955ms |
+| measure/layout | 1073ms | 607ms |
+| text layout | 80ms | 25ms |
+| new-row compose (prefetch) | 297ms | 104ms |
+
+gfxinfo (BTN+ PPV, no listings): Categories 47.7% janky p50 42ms (was 50%/48); guide 55.7%/53ms
+(noisy vs v0.41.3's CBS run, different category). Still ~40ms/press of untraced frame-callback work
+(the lazy list re-laying out per scroll-animation frame). Next big lever: Compose 1.6 → current
+(the TV alpha lists are only in 5 files) together with the toolchain bump Media3 1.10+ needs.
+
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`
 `watch_human`/`human_pressed` stop a run within ~10s of a real remote press (getevent sees

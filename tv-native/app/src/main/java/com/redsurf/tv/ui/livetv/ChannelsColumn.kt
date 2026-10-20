@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -222,7 +223,7 @@ private fun ChannelRow(
                         color = TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = if (selected) Modifier.basicMarquee() else Modifier,
+                        modifier = if (selected) Modifier.graphicsLayer().basicMarquee() else Modifier,
                     )
                 }
                 Text(

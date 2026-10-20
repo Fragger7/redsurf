@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.shell
 
+import android.util.Log
 import android.provider.Settings as AndroidSettings
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -176,6 +177,8 @@ fun TeleportMenu(
     var lastCloseTimeMs by remember { mutableStateOf(0L) }
 
     LaunchedEffect(visible) {
+        // Test hooks: uiautomator can't see this overlay, so scripts drive it from logcat.
+        Log.d("Teleport", if (visible) "open" else "close")
         if (visible) {
             // Fast-repeat rule: bouncing the menu open again right after closing it shouldn't
             // feel like paying the full toll every time.
@@ -339,6 +342,7 @@ fun TeleportMenu(
  * consultation); grey rows are dimmed and the key handler never lands on them. */
 @Composable
 private fun TeleportRowView(row: TeleportRow, selected: Boolean) {
+    if (selected) LaunchedEffect(row.label) { Log.d("Teleport", "selected ${row.label}") }
     val shape = RoundedCornerShape(8.dp)
     Row(
         modifier = Modifier

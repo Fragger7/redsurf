@@ -309,6 +309,11 @@ fun EpgGridColumn(
                 // row focuses its own cell for that time - never a focusProperties link to a row
                 // that may not be composed (an unattached FocusRequester throws).
                 var rowJump by remember { mutableStateOf<RowJump?>(null) }
+                // The row that is (or is about to be) focused - the double-height row. Set on the
+                // UP/DOWN key press itself, so the heights change in the same pass that starts the
+                // move, not a frame later once focus lands (2026-10-19 trace: the late height
+                // change cost ~55ms of extra layout per press).
+                var cursorRow by remember { mutableStateOf(-1) }
                 // A new category starts at its top row unless focus is returning to a specific
                 // channel (found 2026-10-05: the previous category's vertical scroll carried over,
                 // leaving the focused first row off-screen).
@@ -353,13 +358,19 @@ fun EpgGridColumn(
                             onLeftEdge = onLeftEdge,
                             onShowInfo = { infoCardProgramme = it },
                             firstCellFocusRequester = if (isFocusTarget) firstCellFocusRequester else null,
-                            expandOnFocus = doubleHeightRow,
+                            expanded = doubleHeightRow && gridHadFocus && index == cursorRow,
+                            onRowFocused = { cursorRow = index },
                             isPlaying = channel.streamId == playingStreamId,
                             jump = rowJump?.takeIf { it.index == index && it.streamId == channel.streamId },
                             onJumpConsumed = { nonce -> if (rowJump?.nonce == nonce) rowJump = null },
                             onVerticalMove = { goingDown, time ->
-                                val target = if (goingDown) index + 1 else index - 1
+                                // From the row the last press was headed to (cursorRow), not this
+                                // one: on fast presses focus hasn't landed there yet, and moving
+                                // from here again would lose a press (as GroupsColumn did).
+                                val from = if (cursorRow in channels.indices) cursorRow else index
+                                val target = if (goingDown) from + 1 else from - 1
                                 if (target in channels.indices) {
+                                    cursorRow = target
                                     rowJump = RowJump(target, time, System.nanoTime(), channels[target].streamId)
                                     true
                                 } else {
@@ -468,7 +479,8 @@ private fun EpgChannelRow(
     onShowInfo: (EpgProgramEntity) -> Unit,
     firstCellFocusRequester: FocusRequester?,
     onLeftEdge: () -> Unit = {},
-    expandOnFocus: Boolean = false,
+    expanded: Boolean = false,
+    onRowFocused: () -> Unit = {},
     isPlaying: Boolean = false,
     jump: RowJump? = null,
     onVerticalMove: (goingDown: Boolean, time: Long) -> Boolean = { _, _ -> false },
@@ -499,7 +511,6 @@ private fun EpgChannelRow(
         // Spent either way - never replayed when this row is composed again later.
         onJumpConsumed(jump.nonce)
     }
-    val expanded = expandOnFocus && rowHasFocus
     val density = LocalDensity.current
     val hairlinePx = with(density) { RedSurfDensity.Hairline.toPx() }
     val halfHourPx = with(density) { (pxPerMinute * 30).toPx() }
@@ -510,7 +521,13 @@ private fun EpgChannelRow(
             .fillMaxWidth()
             .height(if (expanded) RedSurfDensity.GridRowHeight * 2 else RedSurfDensity.GridRowHeight)
             .onPlaced { placed[0] = true }
-            .onFocusChanged { rowHasFocus = it.hasFocus }
+            .onFocusChanged {
+                rowHasFocus = it.hasFocus
+                if (it.hasFocus) onRowFocused()
+            }
+            // Own drawing layer per row: a scroll step only moves the layers, and the Wash, the
+            // marquee or a focus change re-records just this row, not the whole grid.
+            .graphicsLayer()
             .drawBehind {
                 drawRect(if (rowHasFocus) SurfaceBand else Background)
                 drawLine(RowHairline, Offset(0f, size.height - hairlinePx / 2f), Offset(size.width, size.height - hairlinePx / 2f), hairlinePx)
@@ -633,7 +650,7 @@ private fun ChannelLabelBlock(
             // The app's established focused-row marquee convention (AGENTS.md, 2026-09-15) - the
             // row holding the cursor, not the cell, since the name belongs to the whole row.
             // A double-height row shows two lines instead of scrolling.
-            modifier = Modifier.weight(1f).let { if (marquee) it.basicMarquee() else it },
+            modifier = Modifier.weight(1f).let { if (marquee) it.graphicsLayer().basicMarquee() else it },
         )
         // TiviMate's own order (EPG_WRAPUP.md 1.6, the user's reference screenshots): name, then
         // the blue ▶ when this channel is the one playing, then the catch-up glyph.
