@@ -50,7 +50,7 @@ further down is history.
 |---|---|---|---|
 | Guide 20×DOWN+20×UP | 98% janky, p50 250ms | **12.2%, p50 36ms**, p90 44 | 7.6%, 29ms |
 | Guide 10×RIGHT+10×LEFT | 36%, p90 200ms | **8.4%, p50 30ms, p90 38** | 1%, p50 32, p90 36 |
-| Categories 20×DOWN+20×UP | 69%, p50 200ms | **53%, p50 57ms**, p90 129 | 7.5%, 18ms |
+| Categories 20×DOWN+20×UP | 69%, p50 200ms | **24-25%, p50 24ms, p90 57** (v0.41.25) | 7.5%, 18ms |
 | Fullscreen → Back | 100%, p50 200ms | **36-43%, p50 25-27ms** (v0.41.16-17) | 15%, 7ms |
 
 **Done tonight:** Compose 1.7 → 1.11 + toolchain (Kotlin 2.2, AGP 8.13, compileSdk 36) + Media3
@@ -511,6 +511,20 @@ and a small sky-blue dot drawn in each such programme's top-right corner - a sha
 dashed start tick, not colour alone (AGENTS.md indicator decision). Screenshot-checked. The hero's
 "Guide: EPGSHARE01 (public)" line remains the per-programme explanation; a separate legend was not
 added (user to judge whether it's still needed).
+
+## Categories glide like TiviMate's list - v0.41.25 (2026-10-20 06:35)
+
+TiviMate renders ~15 cheap frames per category move (601 / 40 moves) because its list *slides*
+under the fixed focus row; ours snapped (`scrollToItem`) - one heavy frame, and Compose's own TV
+bring-into-view (30% pivot) scrolled the list a second time toward a different spot on every move.
+Now `holdMidList` animates steps of up to 3 rows (`animateScrollToItem`; long jumps still snap)
+and the category list has a no-op `BringIntoViewSpec` (holdMidList is its only positioner).
+
+A/B vs v0.41.24, compiled, alternated twice: categories 179-192 frames / 63-64% janky / p50 57ms /
+p90 133-150 → **503-520 frames / 24-25% / p50 24ms / p90 57ms**; guide 11-12% (unchanged/slightly
+better). Honest reading: the heavy reload frames remain (janky *count* 115-120 → 125-128) - the
+list now moves smoothly between them, which is TiviMate's pattern. 40/40 presses still land;
+settled and fast moves + RIGHT land on the right category.
 
 **Test navigation (user, 2026-10-19):** never walk hundreds of rows. Relaunch resumes the last
 *played* channel's category; Teleport (long-press Back) for other jumps. `scripts/tv-test.sh`

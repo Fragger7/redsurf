@@ -1,5 +1,8 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
@@ -393,49 +396,51 @@ fun GroupsColumn(
                 )
             }
         }
-        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            itemsIndexed(
-                rows,
-                key = { _, row -> rowKey(row) },
-            ) { index, row ->
-                // Each row's own requester, registered while it's composed, so UP/DOWN can move
-                // focus inside the key press itself (see the handler).
-                val ownFocus = remember { FocusRequester() }
-                val key = rowKey(row)
-                DisposableEffect(key) {
-                    rowRequesters[key] = ownFocus
-                    onDispose { if (rowRequesters[key] === ownFocus) rowRequesters.remove(key) }
-                }
-                val targetModifier = Modifier.focusRequester(ownFocus)
-                    .then(if (key == targetRowKey) Modifier.focusRequester(targetFocus) else Modifier)
-                when (row) {
-                    is GroupsRow.Header -> PlaylistHeaderRow(
-                        row = row,
-                        // Headers report their index too - the UP guard above and the explicit
-                        // focus request both read focusedIndex, and a header that left it stale
-                        // made UP from a header scroll to the wrong row.
-                        onFocused = { focusedIndex = index; headedTo[0] = index },
-                        modifier = targetModifier,
-                        onToggle = {
-                            collapsedPlaylists = if (row.collapsed) {
-                                collapsedPlaylists - row.playlistId
-                            } else {
-                                collapsedPlaylists + row.playlistId
-                            }
-                        },
-                    )
-                    is GroupsRow.Item -> {
-                        val selected = row.group.key() == selectedGroup
-                        GroupRow(
-                            group = row.group,
-                            selected = selected,
-                            onFocused = {
-                                onGroupFocused(row.group.key())
-                                focusedIndex = index
-                                headedTo[0] = index
+        CompositionLocalProvider(LocalBringIntoViewSpec provides NoBringIntoView) {
+            LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                itemsIndexed(
+                    rows,
+                    key = { _, row -> rowKey(row) },
+                ) { index, row ->
+                    // Each row's own requester, registered while it's composed, so UP/DOWN can move
+                    // focus inside the key press itself (see the handler).
+                    val ownFocus = remember { FocusRequester() }
+                    val key = rowKey(row)
+                    DisposableEffect(key) {
+                        rowRequesters[key] = ownFocus
+                        onDispose { if (rowRequesters[key] === ownFocus) rowRequesters.remove(key) }
+                    }
+                    val targetModifier = Modifier.focusRequester(ownFocus)
+                        .then(if (key == targetRowKey) Modifier.focusRequester(targetFocus) else Modifier)
+                    when (row) {
+                        is GroupsRow.Header -> PlaylistHeaderRow(
+                            row = row,
+                            // Headers report their index too - the UP guard above and the explicit
+                            // focus request both read focusedIndex, and a header that left it stale
+                            // made UP from a header scroll to the wrong row.
+                            onFocused = { focusedIndex = index; headedTo[0] = index },
+                            modifier = targetModifier,
+                            onToggle = {
+                                collapsedPlaylists = if (row.collapsed) {
+                                    collapsedPlaylists - row.playlistId
+                                } else {
+                                    collapsedPlaylists + row.playlistId
+                                }
                             },
-                            modifier = (if (selected) Modifier.focusRequester(initialFocus) else Modifier).then(targetModifier),
                         )
+                        is GroupsRow.Item -> {
+                            val selected = row.group.key() == selectedGroup
+                            GroupRow(
+                                group = row.group,
+                                selected = selected,
+                                onFocused = {
+                                    onGroupFocused(row.group.key())
+                                    focusedIndex = index
+                                    headedTo[0] = index
+                                },
+                                modifier = (if (selected) Modifier.focusRequester(initialFocus) else Modifier).then(targetModifier),
+                            )
+                        }
                     }
                 }
             }
@@ -447,7 +452,17 @@ fun GroupsColumn(
  * scroll clamps, so the first/last rows land wherever they naturally are, like TiviMate's. */
 private suspend fun LazyListState.holdMidList(index: Int) {
     val rowsAbove = (layoutInfo.visibleItemsInfo.size - 1) / 2
-    scrollToItem((index - rowsAbove).coerceAtLeast(0))
+    val first = (index - rowsAbove).coerceAtLeast(0)
+    // A step of a row or few glides, the way TiviMate's list slides under its fixed focus row
+    // (F8; it renders ~15 cheap frames per category move where a snap rendered one heavy one);
+    // a long jump (teleport, initial landing) still snaps.
+    if (kotlin.math.abs(first - firstVisibleItemIndex) <= 3) animateScrollToItem(first) else scrollToItem(first)
+}
+
+/** The category list positions itself (holdMidList) - Compose's own bring-into-view (a 30% pivot
+ * on TV since 1.7) scrolled it a second time, toward a different spot, on every focus move. */
+private val NoBringIntoView = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
 }
 
 /**
