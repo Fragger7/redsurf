@@ -1,5 +1,7 @@
 package com.redsurf.tv.ui.livetv
 
+import com.redsurf.tv.diag.tracedMeasure
+import com.redsurf.tv.ui.LogoOrLetter
 import com.redsurf.tv.sync.EpgSyncScheduler
 import androidx.compose.runtime.key
 import com.redsurf.tv.player.SharedPreviewHost
@@ -68,7 +70,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.R
 import com.redsurf.tv.data.favoriteKey
@@ -801,7 +802,7 @@ fun LiveTvScreen(
                     isFavorite = { isFavorite(it) },
                     previewOnSelect = previewOnSelect,
                     onThumbBounds = { heroThumbBounds = it },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = RedSurfDensity.ColumnGap),
+                    modifier = Modifier.tracedMeasure("LiveHero:measure").fillMaxWidth().padding(bottom = RedSurfDensity.ColumnGap),
                 )
             }
 
@@ -834,7 +835,7 @@ fun LiveTvScreen(
                                 pendingGroup[0] = null
                             }
                         },
-                        modifier = Modifier.width(RedSurfDensity.CategoriesWidth).onFocusChanged {
+                        modifier = Modifier.tracedMeasure("GroupsColumn:measure").width(RedSurfDensity.CategoriesWidth).onFocusChanged {
                             categoriesHaveFocus = it.hasFocus
                             if (!it.hasFocus) flushPendingGroup()
                         },
@@ -877,7 +878,7 @@ fun LiveTvScreen(
                                 cursor.slot = null
                             }
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.tracedMeasure("EpgGridColumn:measure").weight(1f),
                     )
                 }
             }
@@ -915,59 +916,61 @@ fun LiveTvScreen(
                 }
                 if (info != null) "${info.playlistName} › ${formatGroupName(info.groupName)}" else ""
             }
-            PlayerScreen(
-                streamUrl = catchupUrl ?: previewUrl,
-                focusRequester = fullscreenFocus,
-                onExitFullscreen = { scope.launch {
-                    val frame = if (animationsOn && heroThumbBounds != null) VideoFrames.grabFullscreen() else null
-                    // TiviMate parity (user, 2026-09-30): an ordinary Back out of fullscreen keeps
-                    // the channel playing in the hero's preview pane, focus on its guide row; OK
-                    // on it goes straight back to fullscreen (it's the previewing channel).
-                    // Long-press Back is the "stop" variant - [exitFullscreenStoppedRequest].
-                    Log.d("LiveTvScreen", "fullscreen -> browse (keep playing in preview)")
-                    previewingChannel = focusedChannel
-                    isFullscreen = false
-                    onFullscreenChanged(false)
-                    if (frame != null) {
-                        transitionGrow = false
-                        transitionFrame = frame.asImageBitmap()
-                    }
-                } },
-                // LIVE_TV_GUIDE_MERGE.md M.1 - the player's "Guide" quick-action used to switch
-                // AppShell's destination to a separate Guide pill; that pill no longer exists, and
-                // this screen's browse view already always shows the grid, so the action is just
-                // "exit fullscreen" now - PlayerScreen's own default (onOpenGuide = onExitFullscreen)
-                // already does exactly that; no override needed here any more.
-                currentChannel = focusedChannel,
-                repository = viewModel.repository,
-                onChannelChanged = { channel ->
-                    catchupUrl = null
-                    onFocusedChannelChanged(channel)
-                    // Bypass the browse-debounce, same reason as openChannel above: zapping is
-                    // a deliberate action, not a D-pad fly-by.
-                    previewUrl = channel.streamId
-                    recordRecent(channel)
-                    // BACKLOG_SWEEP.md #7: a channel change originating from inside the player
-                    // must also move selectedGroup, not just focusedChannel - otherwise Categories
-                    // keeps whatever group was selected before fullscreen, and Back after a
-                    // cross-category tile pick lands on the wrong category.
-                    // Favorites exception (2026-09-29): zapping inside Favorites stays in Favorites,
-                    // same as TiviMate - only a channel from outside it moves the category.
-                    val stayInFavorites = isFavoritesGroup(selectedGroup?.groupName) &&
-                        selectedGroup?.playlistId == channel.playlistId && isFavorite(channel)
-                    val newGroup = GroupKey(channel.playlistId, channel.groupName)
-                    if (!stayInFavorites && newGroup != selectedGroup) onSelectedGroupChanged(newGroup)
-                },
-                breadcrumb = breadcrumb,
-                zapGroupName = selectedGroup
-                    ?.takeIf { isFavoritesGroup(it.groupName) && it.playlistId == focusedChannel?.playlistId }
-                    ?.groupName,
-                recentChannels = recentChannels.filter { it.streamId != focusedChannel?.streamId },
-                blackScreenBetweenZaps = blackScreenBetweenZaps,
-                showRawResolution = showRawResolution,
-                controller = livePlayer,
-                modifier = Modifier.fillMaxSize(),
-            )
+            traced("PlayerScreen") {
+                PlayerScreen(
+                    streamUrl = catchupUrl ?: previewUrl,
+                    focusRequester = fullscreenFocus,
+                    onExitFullscreen = { scope.launch {
+                        val frame = if (animationsOn && heroThumbBounds != null) VideoFrames.grabFullscreen() else null
+                        // TiviMate parity (user, 2026-09-30): an ordinary Back out of fullscreen keeps
+                        // the channel playing in the hero's preview pane, focus on its guide row; OK
+                        // on it goes straight back to fullscreen (it's the previewing channel).
+                        // Long-press Back is the "stop" variant - [exitFullscreenStoppedRequest].
+                        Log.d("LiveTvScreen", "fullscreen -> browse (keep playing in preview)")
+                        previewingChannel = focusedChannel
+                        isFullscreen = false
+                        onFullscreenChanged(false)
+                        if (frame != null) {
+                            transitionGrow = false
+                            transitionFrame = frame.asImageBitmap()
+                        }
+                    } },
+                    // LIVE_TV_GUIDE_MERGE.md M.1 - the player's "Guide" quick-action used to switch
+                    // AppShell's destination to a separate Guide pill; that pill no longer exists, and
+                    // this screen's browse view already always shows the grid, so the action is just
+                    // "exit fullscreen" now - PlayerScreen's own default (onOpenGuide = onExitFullscreen)
+                    // already does exactly that; no override needed here any more.
+                    currentChannel = focusedChannel,
+                    repository = viewModel.repository,
+                    onChannelChanged = { channel ->
+                        catchupUrl = null
+                        onFocusedChannelChanged(channel)
+                        // Bypass the browse-debounce, same reason as openChannel above: zapping is
+                        // a deliberate action, not a D-pad fly-by.
+                        previewUrl = channel.streamId
+                        recordRecent(channel)
+                        // BACKLOG_SWEEP.md #7: a channel change originating from inside the player
+                        // must also move selectedGroup, not just focusedChannel - otherwise Categories
+                        // keeps whatever group was selected before fullscreen, and Back after a
+                        // cross-category tile pick lands on the wrong category.
+                        // Favorites exception (2026-09-29): zapping inside Favorites stays in Favorites,
+                        // same as TiviMate - only a channel from outside it moves the category.
+                        val stayInFavorites = isFavoritesGroup(selectedGroup?.groupName) &&
+                            selectedGroup?.playlistId == channel.playlistId && isFavorite(channel)
+                        val newGroup = GroupKey(channel.playlistId, channel.groupName)
+                        if (!stayInFavorites && newGroup != selectedGroup) onSelectedGroupChanged(newGroup)
+                    },
+                    breadcrumb = breadcrumb,
+                    zapGroupName = selectedGroup
+                        ?.takeIf { isFavoritesGroup(it.groupName) && it.playlistId == focusedChannel?.playlistId }
+                        ?.groupName,
+                    recentChannels = recentChannels.filter { it.streamId != focusedChannel?.streamId },
+                    blackScreenBetweenZaps = blackScreenBetweenZaps,
+                    showRawResolution = showRawResolution,
+                    controller = livePlayer,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
 
         // The grow/shrink overlay (EPG_WRAPUP.md 2.4) - drawn above the player, never focusable.
@@ -1305,29 +1308,13 @@ private fun ExpandedHero(
  * 2026-09-23), so both read the same way rather than two slightly-different implementations. */
 @Composable
 private fun ChannelFallbackThumbnail(channel: ChannelEntity) {
-    val icon = channel.streamIcon
-    if (icon.isNullOrBlank()) {
-        Text(
-            channel.name.take(1).uppercase(),
-            style = RedSurfType.heroTitle.copy(fontSize = 32.sp),
-            color = TextSecondary.copy(alpha = 0.5f),
-        )
-    } else {
-        SubcomposeAsyncImage(
-            model = icon,
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize().padding(12.dp),
-            error = {
-                Text(
-                    channel.name.take(1).uppercase(),
-                    style = RedSurfType.heroTitle.copy(fontSize = 32.sp),
-                    color = TextSecondary.copy(alpha = 0.5f),
-                )
-            },
-            loading = { },
-        )
-    }
+    LogoOrLetter(
+        channel.streamIcon,
+        channel.name,
+        RedSurfType.heroTitle.copy(fontSize = 32.sp),
+        TextSecondary.copy(alpha = 0.5f),
+        Modifier.fillMaxSize().padding(12.dp),
+    )
 }
 
 /** The red progress track + "N min remaining" (TiviMate parity, `RedThemedEPGLiveTVScreen.jpg`),

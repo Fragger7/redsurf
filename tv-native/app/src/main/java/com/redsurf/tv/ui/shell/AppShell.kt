@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.shell
 
+import com.redsurf.tv.diag.tracedMeasure
 import com.redsurf.tv.sync.UserActivity
 import com.redsurf.tv.diag.traced
 import android.app.Activity
@@ -551,7 +552,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         current = destination,
                         onSelect = { destination = it },
                         focusRequesters = navPillFocusRequesters,
-                        modifier = Modifier.onFocusChanged {
+                        modifier = Modifier.tracedMeasure("NavStrip:measure").onFocusChanged {
                             val arrived = it.hasFocus && !navHasFocus
                             navHasFocus = it.hasFocus
                             if (arrived && lastKeyWasUp) {

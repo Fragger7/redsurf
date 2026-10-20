@@ -1,5 +1,8 @@
 package com.redsurf.tv.ui.player
 
+import com.redsurf.tv.diag.tracedMeasure
+import com.redsurf.tv.diag.traced
+import com.redsurf.tv.ui.LogoOrLetter
 import androidx.compose.runtime.produceState
 import com.redsurf.tv.ui.livetv.ProgrammeProgressRow
 import com.redsurf.tv.db.EpgProgramEntity
@@ -59,7 +62,6 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface as TvSurface
 import androidx.tv.material3.Text
-import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.data.ChannelRepository
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.player.NetworkStats
@@ -398,6 +400,7 @@ fun PlayerScreen(
 
     Box(
         modifier = modifier
+            .tracedMeasure("Player:measure")
             .fillMaxSize()
             // Opaque black, painted before anything else (PHASE_1 round 6 - the browse Row stays
             // composed underneath for state preservation, so a transparent letterbox gap on a
@@ -546,13 +549,15 @@ fun PlayerScreen(
                 true
             },
     ) {
-        PlayerHost(
-            controller = controller,
-            streamUrl = streamUrl,
-            fullscreen = true,
-            modifier = Modifier.fillMaxSize(),
-            blackScreenBetweenZaps = blackScreenBetweenZaps,
-        )
+        traced("Player:host") {
+            PlayerHost(
+                controller = controller,
+                streamUrl = streamUrl,
+                fullscreen = true,
+                modifier = Modifier.fillMaxSize(),
+                blackScreenBetweenZaps = blackScreenBetweenZaps,
+            )
+        }
 
         // Branded, centered feedback (user request, 2026-09-17, after comparing directly against
         // TiviMate: a spinner front-and-center while genuinely loading/buffering/reconnecting, a
@@ -647,15 +652,17 @@ fun PlayerScreen(
             // of it, not new behavior).
             if (overlay == PlayerOverlay.ZapBanner || overlay is PlayerOverlay.Controls) {
                 Column(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
-                    PlayerInfoBlock(
-                        channel = currentChannel,
-                        programme = nowProgramme,
-                        now = clock,
-                        streamInfo = streamInfo,
-                        showRawResolution = showRawResolution,
-                        providerConnections = providerConnections,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    traced("Player:infoBlock") {
+                        PlayerInfoBlock(
+                            channel = currentChannel,
+                            programme = nowProgramme,
+                            now = clock,
+                            streamInfo = streamInfo,
+                            showRawResolution = showRawResolution,
+                            providerConnections = providerConnections,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     val controlsOverlay = overlay as? PlayerOverlay.Controls
                     if (controlsOverlay != null) {
                         Spacer(modifier = Modifier.height(12.dp))
@@ -730,15 +737,17 @@ fun PlayerScreen(
         // every other tune path uses); Back closing it is handled by the BackHandler above
         // (ChannelList -> None, decision 4), not anything in here.
         if (overlay == PlayerOverlay.ChannelList) {
-            ChannelListOverlay(
-                repository = repository,
-                currentChannel = currentChannel,
-                onChannelSelected = { channel ->
-                    onChannelChanged(channel)
-                    overlay = PlayerOverlay.ZapBanner
-                },
-                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(0.62f),
-            )
+            traced("Player:channelList") {
+                ChannelListOverlay(
+                    repository = repository,
+                    currentChannel = currentChannel,
+                    onChannelSelected = { channel ->
+                        onChannelChanged(channel)
+                        overlay = PlayerOverlay.ZapBanner
+                    },
+                    modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(0.62f),
+                )
+            }
         }
 
         // Long-press OK's context menu (decision 12) - favourite toggle + hide, the two DAO
@@ -1384,18 +1393,7 @@ private fun PlayerInfoBlock(
             modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)).background(SurfaceRaised),
             contentAlignment = Alignment.Center,
         ) {
-            val icon = channel.streamIcon
-            if (icon.isNullOrBlank()) {
-                Text(channel.name.take(1).uppercase(), style = RedSurfType.heroTitle, color = TextPrimary)
-            } else {
-                SubcomposeAsyncImage(
-                    model = icon,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
-                    error = { Text(channel.name.take(1).uppercase(), style = RedSurfType.heroTitle, color = TextPrimary) },
-                    loading = {},
-                )
-            }
+            LogoOrLetter(channel.streamIcon, channel.name, RedSurfType.heroTitle, TextPrimary, Modifier.fillMaxSize().padding(8.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column {

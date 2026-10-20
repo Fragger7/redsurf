@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import com.redsurf.tv.ui.LogoOrLetter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
@@ -36,7 +37,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil.compose.SubcomposeAsyncImage
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
@@ -261,19 +261,6 @@ private fun ChannelLogo(channel: ChannelEntity) {
         modifier = Modifier.size(LogoSize).clip(RoundedCornerShape(8.dp)).background(SurfaceRaised),
         contentAlignment = Alignment.Center,
     ) {
-        val icon = channel.streamIcon
-        if (icon.isNullOrBlank()) {
-            Text(channel.name.take(1).uppercase(), style = RedSurfType.rowTitle, color = TextPrimary)
-        } else {
-            SubcomposeAsyncImage(
-                model = icon,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().padding(4.dp),
-                error = {
-                    Text(channel.name.take(1).uppercase(), style = RedSurfType.rowTitle, color = TextPrimary)
-                },
-                loading = { /* blank while loading - avoids flicker on a fast-scrolling list */ },
-            )
-        }
+        LogoOrLetter(channel.streamIcon, channel.name, RedSurfType.rowTitle, TextPrimary, Modifier.fillMaxSize().padding(4.dp))
     }
 }
