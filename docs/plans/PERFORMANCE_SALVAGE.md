@@ -38,6 +38,37 @@ it, and to question whether foundational architecture decisions are wrong.
   RedSurf's footprint.
 - Seen in passing, to check: several adjacent guide rows show the same channel number (`3205`).
 
+## ▶ STATUS 2026-10-20 05:55 CDT - read this first (night 2, autonomous)
+
+**Installed on the TV and released:** v0.41.23 (CI run 167 = same code). Everything below this
+block up to "Test navigation" is the night's log, newest first; the older 2026-10-19 handoff
+further down is history.
+
+**Where it stands** (compiled builds, same script, BTN+/CW/MOVIES categories):
+
+| Move | v0.41.1 (2026-10-19) | v0.41.23 | TiviMate |
+|---|---|---|---|
+| Guide 20×DOWN+20×UP | 98% janky, p50 250ms | **12.2%, p50 36ms**, p90 44 | 7.6%, 29ms |
+| Guide 10×RIGHT+10×LEFT | 36%, p90 200ms | **8.4%, p50 30ms, p90 38** | 1%, p50 32, p90 36 |
+| Categories 20×DOWN+20×UP | 69%, p50 200ms | **53%, p50 57ms**, p90 129 | 7.5%, 18ms |
+| Fullscreen → Back | 100%, p50 200ms | **36-43%, p50 25-27ms** (v0.41.16-17) | 15%, 7ms |
+
+**Done tonight:** Compose 1.7 → 1.11 + toolchain (Kotlin 2.2, AGP 8.13, compileSdk 36) + Media3
+1.10.1; guide rows own focus (TiviMate F14) with painted timeline + label; categories commit after
+settling; one shared player (L5); PlayerView without Media3's controller; fixes for 4 regressions
+the upgrade caused or exposed (paging crash, Back in fullscreen, Settings RIGHT, a category commit
+loop); user bugs #3 (verified), #5, #7b, #8a.
+
+**Next, in order:** (1) categories: each settled move still costs ~2 janky frames (commit
+recompose + row rebuild ~140-170ms) vs TiviMate's one ~100ms frame - make the rebuild cheaper /
+spread it (merging into one frame was tried and reverted, see F15); (2) OK → fullscreen first
+frame (~230ms: first composition of PlayerScreen) - consider keeping it composed-but-hidden;
+(3) sync-time I/O (category query 100-300ms during an EPG sync) - cache per-category channel lists;
+(4) then the roadmap's next sprint (SEQUENCING.md / AGENTS.md).
+
+**Always:** measure *compiled* (`compile_app` in tv-test.sh) and decide by interleaved A/B
+(both builds at the same versionCode); run test helpers with `bash` (they use bash-only features).
+
 ## ⏸ OVERNIGHT RESUME HERE (written 2026-10-19 01:45 CDT, user asleep - autonomous until noon)
 
 **Permission (user, 2026-10-19 ~01:45):** keep working through the salvage sprints on your own from
