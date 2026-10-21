@@ -500,7 +500,8 @@ before the report comes in, not after.
   a token system from day one (colours, type, shapes, density, focus style, separators), with
   theme-specific signature pieces (e.g. Crest's crescent cut) as optional slots, so a theme is a
   token set, not a re-skin of every screen. Themes and the Lite/Full tiers below are independent
-  axes. Not built yet; the user confirms the hybrid mock-up first.
+  axes. **Confirmed 2026-10-20: code only Crest + Surf now** (still on tokens, so later themes stay
+  cheap); Graphite/Surfglass wait for a separate themes sprint.
 - **Visual effect tiers, Lite / Full** (user, 2026-10-20) - backlog, after the design language
   is chosen (`docs/vision/design-language/`). One layout, one set of screens - not two UIs. Lite is
   the signature baseline and must look complete on the Chromecast with Google TV; Full layers
