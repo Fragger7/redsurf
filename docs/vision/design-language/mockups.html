@@ -249,6 +249,12 @@ html,body{margin:0;background:var(--page);color:var(--pageInk);font:15px/1.45 In
 .full .d-glass .cell.focus,.full .d-glass .sr.focus{box-shadow:inset 0 0 0 3px #EF4444,0 0 30px rgba(239,68,68,.45)}
 .full .d-glass .nowline{box-shadow:0 0 14px 2px rgba(239,68,68,.6)}
 .full .d-glass .sr.focus{transform:scale(1.015)}
+/* =================== A+C. CREST + SURF - Crest tokens; Surfglass backdrop on calm screens only =================== */
+.d-hybrid{--setBg:rgba(22,22,24,.80);--railIcon:rgba(22,22,24,.80);--catSelBg:rgba(22,22,24,.85)}
+.d-hybrid .backdrop{background:
+ url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"),
+ radial-gradient(1300px 760px at 10% -4%,#4a0b11 0%,#1c0709 46%,transparent 76%),
+ radial-gradient(1000px 640px at 104% 108%,rgba(130,14,26,.30),transparent 70%),#07070A}
 .info > *{flex:none}
 .htitle{line-height:1.22}
 .cat > span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -263,6 +269,7 @@ html,body{margin:0;background:var(--page);color:var(--pageInk);font:15px/1.45 In
   <button class="tab" data-dir="crest">A · Crest</button>
   <button class="tab" data-dir="graphite">B · Graphite</button>
   <button class="tab" data-dir="glass">C · Surfglass</button>
+  <button class="tab" data-dir="hybrid">A+C · Crest + Surf</button>
   <div class="tiers">Effect tier
     <button class="tier" data-tier="lite">Lite (CCwGTV)</button>
     <button class="tier" data-tier="full">Full (Streamer / Shield)</button>
@@ -287,6 +294,10 @@ const DIRS = {
     lite: 'Lite keeps the static gradient + baked grain backdrop (one pre-rendered bitmap) and translucent fills over it - no live blur. Focus is a ring + red wash, no glow.',
     full: ['colour wash sampled from the live video behind the hero, cross-fading on zap', 'blur on the panels - on device only over the STATIC backdrop bitmap (RenderEffect, API 31+), never over video', 'outer red glow on the focus ring and now-line', 'subtle scale on focused settings rows']}
 };
+DIRS.hybrid = {name: 'A+C · Crest + Surf - the recommended blend',
+    idea: 'Crest where you work, Surfglass where you pause: the guide stays Crest (solid, square, dense, red focus block, the crescent motif). Calm screens - Settings, Home, onboarding, loading, Teleport - sit on Surfglass\'s static red-to-black grain backdrop with slightly translucent rows. Compare the Settings strip below with A.',
+    lite: 'Crest\'s Lite guide (cheaper than today) plus one pre-rendered backdrop bitmap on calm screens only - never under the guide.',
+    full: ['Crest\'s Full effects in the guide (video colour wash, focus sheen, now-line bloom)', 'Surfglass\'s video colour wash and glow on calm screens', 'blur over the static backdrop only (API 31+), never over video']};
 const ICON = {
   home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
   tv: '<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8 3l4 4 4-4"/>',
@@ -359,12 +370,14 @@ function guide(d) {
   return `<div class="guide"><div class="ruler"><div class="date num">Mon 20 Oct</div><div class="times">${times}</div></div>
   <div class="rows">${rows}</div><div class="nowlayer"><div class="nowline"></div><div class="nowchip num">20:47</div>${cap}</div></div>`;
 }
-function liveTv(d) {
+function liveTv(d0) {
+  const d = d0 === 'hybrid' ? 'crest' : d0;
   const extra = d === 'crest' ? '<div class="redrule"></div>' : d === 'glass' ? '<div class="amb"></div>' : d === 'graphite' ? '<div class="ghost">ESPN</div>' : '';
   const flags = (FLAGS[d]||[]).map(([x,y,t]) => `<div class="flag" style="left:${x}px;top:${y}px">${t}</div>`).join('');
   return `<div class="art d-${d}"><div class="backdrop"></div>${extra}${nav()}${hero(d)}<div class="main">${cats(d)}${guide(d)}</div>${d==='current'?'':'<div class="fade"></div>'}${flags}</div>`;
 }
-function settings(d) {
+function settings(d0) {
+  const hy = d0 === 'hybrid', d = hy ? 'crest' : d0;
   const rail = [['G','General'],['P','Playlists'],['A','Appearance'],['▶','Playback',1],['E','EPG'],['R','Remote control']];
   const rows = [
     ['Preview channel on select','First OK previews, second OK goes fullscreen','on'],
@@ -372,7 +385,7 @@ function settings(d) {
     ['Black screen between channels','Clear the last frame while the next one tunes','off'],
     ['Buffer size','More buffer rides out a shaky provider','Normal ›']];
   const flag = (d==='graphite'||d==='glass') ? `<div class="flag" style="left:560px;top:150px">FULL · lift on focused row</div>` : '';
-  return `<div class="art short d-${d}" style="height:620px"><div class="backdrop"></div>
+  return `<div class="art short d-${d}${hy?' d-hybrid':''}" style="height:620px"><div class="backdrop"></div>
   <div class="set" style="bottom:130px"><div class="rail">${rail.map(([i,t,s]) => `<div class="ri${s?' sel':''}"><i>${i}</i>${t}</div>`).join('')}</div>
   <div class="pane"><div class="ph">Playback</div>${rows.map(([t,s,v,f]) => `<div class="sr${f?' focus':''}"><div class="l"><b>${t}</b><small>${s}</small></div>${v==='on'||v==='off'?`<div class="sw${v==='on'?' on':''}"></div>`:`<div class="v">${v}</div>`}</div>`).join('')}</div></div>
   <div class="toast">Press <kbd>BACK</kbd> again to exit<span class="bar2"></span></div>${flag}</div>`;

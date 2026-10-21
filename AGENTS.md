@@ -490,6 +490,17 @@ before the report comes in, not after.
     list - exact threshold needs the user's own gut-check against how long a genuinely long list
     actually takes to traverse, not a guessed number); long-press Back firing its default behavior
     while the Teleport Menu setting is off (the exact moment its extra value would be obvious).
+- **Design language + themes - DECIDED direction, 2026-10-20 (user).** Of the three directions in
+  `docs/vision/design-language/` (mock-ups: `mockups.html`, published privately as
+  https://claude.ai/artifact/XUAM15bwfuu5W68NH8jLMp), the default is the **"Crest + Surf" hybrid**:
+  Crest in the guide (condensed type, square dense rows, solid red focus block, the crescent motif),
+  Surfglass's static red-to-black grain backdrop on calm screens only (Home, Settings, onboarding,
+  loading, Teleport). **Keep all designs** - Graphite and Surfglass become selectable **themes**
+  later (SluiceBox does swappable themes). Consequence for the design-language sprint: build it as
+  a token system from day one (colours, type, shapes, density, focus style, separators), with
+  theme-specific signature pieces (e.g. Crest's crescent cut) as optional slots, so a theme is a
+  token set, not a re-skin of every screen. Themes and the Lite/Full tiers below are independent
+  axes. Not built yet; the user confirms the hybrid mock-up first.
 - **Visual effect tiers, Lite / Full** (user, 2026-10-20) - backlog, after the design language
   is chosen (`docs/vision/design-language/`). One layout, one set of screens - not two UIs. Lite is
   the signature baseline and must look complete on the Chromecast with Google TV; Full layers
