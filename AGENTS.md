@@ -22,6 +22,32 @@ a Next.js web portal at the repo root.
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which
 were false. It is kept for provenance only.
 
+## ⏸ RESUME HERE - paused 2026-10-21 (user's weekly quota; resumes after it refreshes)
+
+**Plan agreed with the user, 2026-10-20 - this order supersedes SEQUENCING.md:**
+1. **Performance** - preview ↔ fullscreen first (the user's #1 choppy finding), then categories
+   (25% janky vs TiviMate 7.5%), sync-time I/O, nav auto-hide re-layout (`PERFORMANCE_SALVAGE.md`).
+2. **Design language - Crest + Surf** (decided; `docs/vision/design-language/`, backlog entry
+   below), built as tokens; no other themes yet.
+3. **Navigation + feedback** - final Back reveals the nav bar, the next Back exits (TiviMate's
+   "Confirm exit by second press Back", F17); graceful hints for the nav bar and Teleport; one
+   global sync indicator. Show the user 2-3 mock-ups before building.
+4. **Settings + playlist management** - layered like TiviMate (study its settings on the TV first,
+   brief for the user), designed with Cloud Sync in mind.
+5. **Playback resilience** - Buffer size setting (TiviMate has one), seamless reconnect, live-edge
+   speed, decoder/MIME fallbacks, FFmpeg audio, player brief P1/P2; a short look at Random Score's
+   NBC Sports Philadelphia jumping (likely the provider).
+6. **Live TV re-skin** in the new language (dashed lines go; denser rows).
+7. **Cloud Sync - starts with an interview** (`CLOUD_SYNC.md` D1-D4 + hosting), no build first.
+
+Standing: learn from TiviMate's code/design wherever it's faster; keep burning down performance
+before features. The user's feel-check results are in `TESTING_OUTSTANDING.md` section M.
+
+**Proposed for the next unattended run (user said the process "sounds great", answers pending):**
+queue = 1, then 5, then 2's token foundation (no visual change), plus *prepared, not built*: the
+TiviMate Settings study + brief and the nav-feedback mock-ups for morning review. Before starting,
+ask: the usage-window reset times, the stop point, OK to turn HDMI-CEC off for the night.
+
 ## ▶ Status 2026-10-20 (night 2): performance salvage at its stop point; Cloud Sync brief awaits the user
 
 The salvage's leads are done and measured on the TV (`PERFORMANCE_SALVAGE.md` → "STATUS" block:

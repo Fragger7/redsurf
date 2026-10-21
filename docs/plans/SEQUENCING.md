@@ -1,6 +1,8 @@
 # Execution sequencing — post-Lattice, 2026-09-22
 
-**⏸ RESUME HERE (updated 2026-10-05, end of session) - STOP: performance salvage first.**
+**Superseded 2026-10-21: the current plan is `AGENTS.md`'s "RESUME HERE - paused 2026-10-21" block.**
+
+**⏸ (old) RESUME HERE (updated 2026-10-05, end of session) - STOP: performance salvage first.**
 Read `docs/plans/PERFORMANCE_SALVAGE.md` before anything else. The user called the app's
 choppiness "a fatal point" - no new features until it's fixed. That file has the process (Opus
 architecture review → measured baseline → ranked fixes), three code-confirmed leads, and the user's
