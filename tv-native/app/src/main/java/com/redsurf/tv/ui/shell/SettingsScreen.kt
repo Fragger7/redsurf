@@ -111,6 +111,8 @@ fun SettingsScreen(
     updateStatus: UpdateCheckStatus,
     playlists: List<PlaylistEntity>,
     onCheckForUpdates: () -> Unit,
+    autoUpdate: Boolean,
+    onToggleAutoUpdate: () -> Unit,
     // 2026-09-21 - Settings → EPG's live rows, owned by MainViewModel like updateStatus.
     epgSyncStatus: EpgSyncStatus,
     onUpdateEpgNow: () -> Unit,
@@ -131,6 +133,8 @@ fun SettingsScreen(
     onToggleAfr: () -> Unit,
     preferredAudio: String?,
     onResetPreferredAudio: () -> Unit,
+    preferredSubtitles: String?,
+    onResetPreferredSubtitles: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
     doubleHeightRow: Boolean = true,
@@ -306,6 +310,8 @@ fun SettingsScreen(
             playlists = playlists,
             updateStatus = updateStatus,
             onCheckForUpdates = onCheckForUpdates,
+            autoUpdate = autoUpdate,
+            onToggleAutoUpdate = onToggleAutoUpdate,
             epgSyncStatus = epgSyncStatus,
             onUpdateEpgNow = onUpdateEpgNow,
             onResetPlaylist = onResetPlaylist,
@@ -323,6 +329,8 @@ fun SettingsScreen(
             onToggleAfr = onToggleAfr,
             preferredAudio = preferredAudio,
             onResetPreferredAudio = onResetPreferredAudio,
+            preferredSubtitles = preferredSubtitles,
+            onResetPreferredSubtitles = onResetPreferredSubtitles,
             showRawResolution = showRawResolution,
             onToggleShowRawResolution = onToggleShowRawResolution,
             doubleHeightRow = doubleHeightRow,
@@ -528,6 +536,8 @@ private fun SettingsPane(
     playlists: List<PlaylistEntity>,
     updateStatus: UpdateCheckStatus,
     onCheckForUpdates: () -> Unit,
+    autoUpdate: Boolean,
+    onToggleAutoUpdate: () -> Unit,
     epgSyncStatus: EpgSyncStatus,
     onUpdateEpgNow: () -> Unit,
     onResetPlaylist: () -> Unit,
@@ -546,6 +556,8 @@ private fun SettingsPane(
     onToggleAfr: () -> Unit,
     preferredAudio: String?,
     onResetPreferredAudio: () -> Unit,
+    preferredSubtitles: String?,
+    onResetPreferredSubtitles: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
     doubleHeightRow: Boolean = true,
@@ -702,6 +714,8 @@ private fun SettingsPane(
                 SettingsCategory.About -> aboutContent(
                     updateStatus = updateStatus,
                     onCheckForUpdates = onCheckForUpdates,
+                    autoUpdate = autoUpdate,
+                    onToggleAutoUpdate = onToggleAutoUpdate,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.Epg -> epgContent(
@@ -726,6 +740,8 @@ private fun SettingsPane(
                     onToggleAfr = onToggleAfr,
                     preferredAudio = preferredAudio,
                     onResetPreferredAudio = onResetPreferredAudio,
+                    preferredSubtitles = preferredSubtitles,
+                    onResetPreferredSubtitles = onResetPreferredSubtitles,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.Appearance -> appearanceContent(
@@ -1173,6 +1189,8 @@ private fun formatEpgTime(millis: Long): String = epgTimeFormat.format(java.util
 private fun LazyListScope.aboutContent(
     updateStatus: UpdateCheckStatus,
     onCheckForUpdates: () -> Unit,
+    autoUpdate: Boolean,
+    onToggleAutoUpdate: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     // The real mark (AGENTS.md Branding entry, 2026-09-16) - the one place in the app it's shown
@@ -1221,7 +1239,7 @@ private fun LazyListScope.aboutContent(
             modifier = Modifier.focusRequester(firstRowFocus),
         )
     }
-    items(ABOUT_GREY_ROWS) { GreyRowContent(it) }
+    item { LiveRow(label = "Auto-update", value = if (autoUpdate) "On" else "Off", onClick = onToggleAutoUpdate) }
 }
 
 /** General (`AGENTS.md` backlog, 2026-09-15, corrected same day): landing on Live TV with the
@@ -1247,7 +1265,7 @@ private fun LazyListScope.generalContent(
 
 /** Playback (`BACKLOG_SWEEP.md` #11): one live toggle - the "old cable box" black-screen-between-
  * zaps behavior - ahead of its remaining grey rows, same layering as [aboutContent]'s live rows
- * before [ABOUT_GREY_ROWS]. */
+ * before the Auto-update toggle. */
 private fun LazyListScope.playbackContent(
     blackScreenBetweenZaps: Boolean,
     onToggle: () -> Unit,
@@ -1261,6 +1279,8 @@ private fun LazyListScope.playbackContent(
     onToggleAfr: () -> Unit,
     preferredAudio: String?,
     onResetPreferredAudio: () -> Unit,
+    preferredSubtitles: String?,
+    onResetPreferredSubtitles: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
@@ -1293,6 +1313,14 @@ private fun LazyListScope.playbackContent(
             label = "Preferred audio",
             value = preferredAudio?.let { java.util.Locale(it).displayLanguage.ifBlank { it } } ?: "Auto",
             onClick = onResetPreferredAudio,
+        )
+    }
+    // Remembered from the player's Subtitles picker the same way; OK turns them back off.
+    item {
+        LiveRow(
+            label = "Preferred subtitles",
+            value = preferredSubtitles?.let { java.util.Locale(it).displayLanguage.ifBlank { it } } ?: "Off",
+            onClick = onResetPreferredSubtitles,
         )
     }
     items(SETTINGS_GREY_ROWS[SettingsCategory.Playback].orEmpty()) { GreyRowContent(it) }

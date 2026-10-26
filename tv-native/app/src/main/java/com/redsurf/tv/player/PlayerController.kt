@@ -472,6 +472,7 @@ class PlayerController(
         consecutiveEmptyWindows = 0
         mimeOverride = null
         exoPlayer.stop()
+        trackManager.applyPersistedLanguages(exoPlayer)
         exoPlayer.setMediaItem(mediaItemFor(streamUrl))
         exoPlayer.prepare()
     }

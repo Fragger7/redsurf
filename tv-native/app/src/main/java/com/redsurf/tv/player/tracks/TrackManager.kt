@@ -30,17 +30,26 @@ class TrackManager(private val context: Context) {
     private val appPreferences = AppPreferences(context)
 
     init {
-        val persistedAudioLanguage = appPreferences.preferredAudioLanguage.value
-        val audioLanguages = if (persistedAudioLanguage != null) {
-            arrayOf(persistedAudioLanguage)
-        } else {
-            Util.getSystemLanguageCodes()
-        }
-        val params = trackSelector.buildUponParameters()
-            .setPreferredAudioLanguages(*audioLanguages)
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-            .build()
-        trackSelector.setParameters(params)
+        trackSelector.setParameters(withPersistedLanguages(trackSelector.buildUponParameters()).build())
+    }
+
+    /** Re-reads the persisted audio/subtitle languages - called on every [PlayerController.play]
+     * because the player is shared and long-lived: a Settings reset made after it was built has
+     * to reach the next channel, not wait for a process restart. */
+    fun applyPersistedLanguages(player: ExoPlayer) {
+        player.trackSelectionParameters =
+            withPersistedLanguages(player.trackSelectionParameters.buildUpon()).build()
+    }
+
+    private fun <B : TrackSelectionParameters.Builder> withPersistedLanguages(builder: B): B {
+        val prefs = AppPreferences(context)
+        val audio = prefs.preferredAudioLanguage.value
+        val subtitle = prefs.preferredSubtitleLanguage.value
+        builder
+            .setPreferredAudioLanguages(*(if (audio != null) arrayOf(audio) else Util.getSystemLanguageCodes()))
+            .setPreferredTextLanguage(subtitle)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitle == null)
+        return builder
     }
 
     fun getAudioTracks(player: ExoPlayer): List<Tracks.Group> {
@@ -64,15 +73,20 @@ class TrackManager(private val context: Context) {
     }
 
     fun disableSubtitles(player: ExoPlayer) {
+        appPreferences.setPreferredSubtitleLanguage(null)
         player.trackSelectionParameters = player.trackSelectionParameters
             .buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             .build()
     }
 
+    /** Persists the language too, like [selectAudioTrack], so the next channel opens with it. */
     fun selectSubtitleTrack(player: ExoPlayer, group: Tracks.Group, trackIndex: Int) {
+        val language = group.getTrackFormat(trackIndex).language
+        if (!language.isNullOrBlank()) appPreferences.setPreferredSubtitleLanguage(language)
         player.trackSelectionParameters = player.trackSelectionParameters
             .buildUpon()
+            .apply { if (!language.isNullOrBlank()) setPreferredTextLanguage(language) }
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
             .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, trackIndex))
             .build()

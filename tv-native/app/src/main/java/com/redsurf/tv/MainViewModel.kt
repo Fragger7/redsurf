@@ -136,6 +136,9 @@ class MainViewModel : ViewModel() {
         if (_updateStatus.value is UpdateCheckStatus.Checking) return
         val now = System.currentTimeMillis()
         if (!force && now - lastUpdateCheckAtMillis < MIN_UPDATE_CHECK_INTERVAL_MS) return
+        // Settings -> About "Auto-update" off: only the manual button checks. A fresh instance,
+        // so a toggle made in Settings' own AppPreferences is read, not a stale copy.
+        if (!force && appContext?.let { AppPreferences(it).autoUpdate.value } == false) return
         lastUpdateCheckAtMillis = now
         viewModelScope.launch {
             _updateStatus.value = UpdateCheckStatus.Checking

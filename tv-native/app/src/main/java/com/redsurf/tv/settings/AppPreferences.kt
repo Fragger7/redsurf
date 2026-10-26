@@ -177,6 +177,29 @@ class AppPreferences(context: Context) {
         _preferredAudioLanguage.value = null
     }
 
+    /** Settings -> Playback "Preferred subtitles": the language of the subtitle track last picked in
+     * the player's Subtitles picker, re-applied on every channel. Null = subtitles off (the
+     * default - §2.8, subtitles are opt-in); picking "Off" in the player clears it. */
+    private val _preferredSubtitleLanguage = MutableStateFlow(prefs.getString(KEY_PREFERRED_SUBTITLE_LANGUAGE, null))
+    val preferredSubtitleLanguage: StateFlow<String?> = _preferredSubtitleLanguage.asStateFlow()
+
+    fun setPreferredSubtitleLanguage(language: String?) {
+        prefs.edit().apply {
+            if (language == null) remove(KEY_PREFERRED_SUBTITLE_LANGUAGE) else putString(KEY_PREFERRED_SUBTITLE_LANGUAGE, language)
+        }.apply()
+        _preferredSubtitleLanguage.value = language
+    }
+
+    // Settings -> About "Auto-update". Off stops the background checks (resume + periodic); the
+    // manual "Check for updates" row still works. Default on.
+    private val _autoUpdate = MutableStateFlow(prefs.getBoolean(KEY_AUTO_UPDATE, true))
+    val autoUpdate: StateFlow<Boolean> = _autoUpdate.asStateFlow()
+
+    fun setAutoUpdate(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_UPDATE, enabled).apply()
+        _autoUpdate.value = enabled
+    }
+
     // Settings -> Playback "Auto frame rate". Default off, as TiviMate ships it: each switch
     // blanks an HDMI screen for a second or two, which the user has to opt into.
     private val _afrEnabled = MutableStateFlow(prefs.getBoolean(KEY_AFR_ENABLED, false))
@@ -222,6 +245,8 @@ class AppPreferences(context: Context) {
         private const val KEY_DEFAULT_ASPECT = "default_aspect"
         private const val KEY_EPG_REFRESH = "epg_refresh"
         private const val KEY_AFR_ENABLED = "afr_enabled"
+        private const val KEY_AUTO_UPDATE = "auto_update"
+        private const val KEY_PREFERRED_SUBTITLE_LANGUAGE = "preferred_subtitle_language"
     }
 }
 

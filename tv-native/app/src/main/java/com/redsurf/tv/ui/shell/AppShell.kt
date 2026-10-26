@@ -241,6 +241,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val defaultAspect by appPreferences.defaultAspect.collectAsState()
     val afrEnabled by appPreferences.afrEnabled.collectAsState()
     val preferredAudio by appPreferences.preferredAudioLanguage.collectAsState()
+    val autoUpdate by appPreferences.autoUpdate.collectAsState()
+    val preferredSubtitles by appPreferences.preferredSubtitleLanguage.collectAsState()
     val showRawResolution by appPreferences.showRawResolution.collectAsState()
     val doubleHeightRow by appPreferences.doubleHeightRow.collectAsState()
     val publicEpgEnabled by appPreferences.publicEpgEnabled.collectAsState()
@@ -725,6 +727,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         updateStatus = updateStatus,
                         playlists = playlists,
                         onCheckForUpdates = { viewModel.checkForUpdates(force = true) },
+                        autoUpdate = autoUpdate,
+                        onToggleAutoUpdate = { appPreferences.setAutoUpdate(!autoUpdate) },
                         epgSyncStatus = epgSyncStatus,
                         onUpdateEpgNow = { viewModel.updateEpgNow() },
                         onResetPlaylist = { viewModel.resetAndAddNewPlaylist() },
@@ -746,6 +750,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         onToggleAfr = { appPreferences.setAfrEnabled(!afrEnabled) },
                         preferredAudio = preferredAudio,
                         onResetPreferredAudio = { appPreferences.clearPreferredAudioLanguage() },
+                        preferredSubtitles = preferredSubtitles,
+                        onResetPreferredSubtitles = { appPreferences.setPreferredSubtitleLanguage(null) },
                         showRawResolution = showRawResolution,
                         doubleHeightRow = doubleHeightRow,
                         onToggleDoubleHeightRow = { appPreferences.setDoubleHeightRow(!doubleHeightRow) },
