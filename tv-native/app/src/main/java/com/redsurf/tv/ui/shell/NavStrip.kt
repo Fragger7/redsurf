@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -33,6 +34,7 @@ import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
 import com.redsurf.tv.ui.theme.Surface as SurfaceColor
 import com.redsurf.tv.ui.theme.TextPrimary
+import com.redsurf.tv.ui.theme.TextSecondary
 
 /** The destinations from docs/vision/UI_SPEC.md #3, minus Guide - LIVE_TV_GUIDE_MERGE.md M.1
  * collapsed it into Live TV itself (one screen, the merged hero band + categories + EPG grid;
@@ -70,6 +72,10 @@ fun NavStrip(
     // Owned by AppShell, not `remember`ed here, since AppShell is what needs to call
     // `requestFocus()` on the right one - this composable just attaches whichever it's handed.
     focusRequesters: Map<NavDestination, FocusRequester> = emptyMap(),
+    // The one global sync indicator (nav feedback, 2026-10-26) - replaced the "Updating…" note
+    // that only Live TV's Categories header showed. Static on purpose: an animated spinner here
+    // would draw a frame every 16ms for the whole of a multi-minute guide sync.
+    guideSyncing: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -86,6 +92,18 @@ fun NavStrip(
                 selected = dest == current,
                 onClick = { onSelect(dest) },
                 modifier = focusRequesters[dest]?.let { Modifier.focusRequester(it) } ?: Modifier,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        if (guideSyncing) {
+            Spacer(Modifier.size(6.dp).background(Accent))
+            Text(
+                "Updating guide",
+                style = RedSurfType.gridMeta,
+                color = TextSecondary,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(start = 6.dp, end = 4.dp),
             )
         }
     }

@@ -123,6 +123,14 @@ class AppPreferences(context: Context) {
         _teleportMenuEnabled.value = enabled
     }
 
+    /** Nav feedback hints (2026-10-26): how many times each one-off tip has been shown, so a
+     * tip teaches a few times and then stays out of the way. Keyed by the tip's own name. */
+    fun hintCount(name: String): Int = prefs.getInt(KEY_HINT_PREFIX + name, 0)
+
+    fun countHint(name: String) {
+        prefs.edit().putInt(KEY_HINT_PREFIX + name, hintCount(name) + 1).apply()
+    }
+
     /** PLAYER_ENGINEERING_BRIEF.md §2.8 - the language of whatever audio track the user last
      * explicitly picked from the player's Audio picker, across every channel/playlist (a
      * `TrackSelectionOverride` is scoped to one track group's identity and doesn't survive a
@@ -166,6 +174,7 @@ class AppPreferences(context: Context) {
         private const val KEY_LAST_STREAM_ID = "last_watched_stream_id"
         private const val KEY_PREFERRED_AUDIO_LANGUAGE = "preferred_audio_language"
         private const val KEY_TELEPORT_MENU_ENABLED = "teleport_menu_enabled"
+        private const val KEY_HINT_PREFIX = "hint_shown_"
         private const val KEY_PREVIEW_ON_SELECT = "preview_on_select"
         private const val KEY_BUFFER_SIZE = "buffer_size"
     }

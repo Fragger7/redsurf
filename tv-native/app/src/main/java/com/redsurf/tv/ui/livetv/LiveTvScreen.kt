@@ -4,7 +4,6 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.layout
 import com.redsurf.tv.diag.tracedMeasure
 import com.redsurf.tv.ui.LogoOrLetter
-import com.redsurf.tv.sync.EpgSyncScheduler
 import androidx.compose.runtime.key
 import com.redsurf.tv.player.LiveVideoView
 import androidx.compose.ui.graphics.Color
@@ -200,7 +199,7 @@ fun LiveTvScreen(
     // PLAYER_ENGINEERING_BRIEF.md §6/§9 - resolved here, reactively, well before any fullscreen
     // entry is possible (the user has to browse/focus/press OK first), not inside PlayerScreen
     // itself - see PlayerScreen.kt's own doc comment for why the timing matters.
-    val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
+    val playlists by remember { viewModel.repository.playlists() }.collectAsState(initial = emptyList())
     // PHASE_2.md decision 14's real table now, not the old in-memory stand-in - reactive, and
     // (unlike the stand-in) survives a real relaunch, not just switching destinations within one
     // session.
@@ -320,11 +319,6 @@ fun LiveTvScreen(
     LaunchedEffect(catchupFailed) { if (catchupFailed != null) { delay(3_000); catchupFailed = null } }
     LaunchedEffect(isFullscreen) { if (!isFullscreen) catchupUrl = null }
 
-    val syncContext = androidx.compose.ui.platform.LocalContext.current
-    val playlistIds = remember(playlists) { playlists.map { it.id } }
-    val guideUpdating by remember(playlistIds) {
-        EpgSyncScheduler.anyRunningFlow(syncContext, playlistIds)
-    }.collectAsState(initial = false)
 
     // L5 (2026-10-20, TiviMate parity): ONE player for the preview pane and fullscreen. It used to
     // be two - torn down and rebuilt on every switch, re-buffering each time and briefly holding
@@ -800,7 +794,6 @@ fun LiveTvScreen(
                         claimInitialFocus = !channelsHasFocus,
                         groups = groups,
                         selectedGroup = selectedGroup,
-                        guideUpdating = guideUpdating,
                         onGroupFocused = { group ->
                             // Only focus moving *within* Categories is the user browsing. Focus that
                             // merely lands here (falling out of fullscreen or out of replaced guide

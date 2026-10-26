@@ -4,13 +4,17 @@ import com.redsurf.tv.diag.tracedMeasure
 import com.redsurf.tv.sync.UserActivity
 import com.redsurf.tv.diag.traced
 import android.app.Activity
+import android.os.SystemClock
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.graphics.graphicsLayer
 import android.util.Log
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.padding
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +43,7 @@ import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.data.FAVORITES_GROUP
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.settings.AppPreferences
+import com.redsurf.tv.sync.EpgSyncScheduler
 import com.redsurf.tv.ui.livetv.GroupKey
 import com.redsurf.tv.ui.livetv.GroupsFocusRequest
 import com.redsurf.tv.ui.livetv.key
@@ -95,6 +100,11 @@ import kotlinx.coroutines.launch
  * whichever one the user was on (state/focus discipline, `AGENTS.md`).
  */
 private const val TAG = "AppShell"
+private const val HINT_MS = 2_500L
+private const val EXIT_CONFIRM_MS = 4_000L
+private const val HINT_REPEATS = 3
+private const val HINT_TELEPORT = "teleport"
+private const val HINT_NAV_HIDDEN = "nav_hidden"
 
 @Composable
 fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
@@ -143,6 +153,20 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // matches wherever the user actually is - `NavStrip` just attaches whichever it's handed.
     val navPillFocusRequesters = remember { NavDestination.entries.associateWith { FocusRequester() } }
     var backHeldLong by remember { mutableStateOf(false) }
+
+    // Nav feedback (2026-10-26, AGENTS.md plan item 3): one transient hint at a time
+    // ([HintChip]), and TiviMate's "Confirm exit by second press Back" (TIVIMATE_LEARNINGS.md
+    // F17) - on Home, Back first reveals the strip on the Home pill and says so; only a second
+    // Back within [EXIT_CONFIRM_MS] leaves the app. Without this the first Back on Home quit.
+    var hintText by remember { mutableStateOf<String?>(null) }
+    var hintSeq by remember { mutableIntStateOf(0) }
+    fun showHint(text: String) { hintText = text; hintSeq++ }
+    LaunchedEffect(hintSeq) {
+        if (hintText == null) return@LaunchedEffect
+        delay(HINT_MS)
+        hintText = null
+    }
+    var exitArmedAt by remember { mutableLongStateOf(0L) }
 
     // Teleport Menu (docs/plans/TELEPORT_MENU.md, 2026-09-19) - the power-user layer on top of
     // the plain long-press-Back jump above: instead of one guessed destination, a short list of
@@ -199,6 +223,12 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val lastPlayedList by viewModel.repository.recentChannels(1).collectAsState(initial = emptyList())
     val lastPlayedChannel = lastPlayedList.firstOrNull()
     val scope = rememberCoroutineScope()
+    val syncContext = LocalContext.current
+    val allPlaylists by remember { viewModel.repository.playlists() }.collectAsState(initial = emptyList())
+    val playlistIds = remember(allPlaylists) { allPlaylists.map { it.id } }
+    val guideSyncing by remember(playlistIds) {
+        EpgSyncScheduler.anyRunningFlow(syncContext, playlistIds)
+    }.collectAsState(initial = false)
 
     // BACKLOG_SWEEP.md #10 - one instance for the whole shell, same lifetime as the ViewModel;
     // AppShell is the natural owner since both destinations that touch these prefs (Settings to
@@ -235,6 +265,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         if (navHidden) {
             navSlide.animateTo(0f, tween(240))
             navCollapsed = true
+            if (appPreferences.hintCount(HINT_NAV_HIDDEN) < HINT_REPEATS) {
+                appPreferences.countHint(HINT_NAV_HIDDEN)
+                showHint("Menu hidden · UP from the top brings it back")
+            }
         } else {
             navCollapsed = false
             navSlide.animateTo(1f, tween(240))
@@ -456,6 +490,17 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         teleportMenuOpen = false
     }
 
+    BackHandler(enabled = !liveTvFullscreen && !teleportMenuOpen && destination == NavDestination.Home) {
+        val now = SystemClock.uptimeMillis()
+        if (navHasFocus && now - exitArmedAt < EXIT_CONFIRM_MS) {
+            (prefsContext as? Activity)?.finish()
+        } else {
+            exitArmedAt = now
+            runCatching { navPillFocusRequesters[NavDestination.Home]?.requestFocus() }
+            showHint("Press BACK again to exit")
+        }
+    }
+
     // The safe-area padding stays on in fullscreen too: dropping it resized the whole UI on every
     // entry and exit (a full re-measure of everything); the player escapes it on its own instead
     // (LiveTvScreen's fillWindow, 2026-10-20).
@@ -501,6 +546,12 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         return@onPreviewKeyEvent true
                     }
                     backHeldLong = true
+                    // The other half of Teleport's discoverability (TELEPORT_MENU.md T.5): the
+                    // moment the plain jump fires is when the menu's extra value is obvious.
+                    if (appPreferences.hintCount(HINT_TELEPORT) < HINT_REPEATS) {
+                        appPreferences.countHint(HINT_TELEPORT)
+                        showHint("Tip: Settings › Remote control › Teleport Menu jumps anywhere")
+                    }
                     if (liveTvFullscreen) {
                         // Setting off, fullscreen: TiviMate's own long-press (user, 2026-09-30) -
                         // back to the channel's guide row, playback stopped; OK replays it. (A
@@ -586,6 +637,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         current = destination,
                         onSelect = { destination = it },
                         focusRequesters = navPillFocusRequesters,
+                        guideSyncing = guideSyncing,
                         modifier = Modifier.tracedMeasure("NavStrip:measure").onFocusChanged {
                             val arrived = it.hasFocus && !navHasFocus
                             navHasFocus = it.hasFocus
@@ -647,7 +699,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             run {
                 val updateStatus by viewModel.updateStatus.collectAsState()
                 val epgSyncStatus by viewModel.epgSyncStatus.collectAsState()
-                val playlists by viewModel.repository.playlists().collectAsState(initial = emptyList())
+                val playlists by remember { viewModel.repository.playlists() }.collectAsState(initial = emptyList())
                 val context = LocalContext.current
                 // The EPG pane's "Last updated"/"Last attempt" rows read persisted markers -
                 // refresh them whenever that category is shown, not once per process.
@@ -717,6 +769,11 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     PlaceholderScreen(destination.label, "Coming in a later phase")
             }
         }
+
+        HintChip(
+            text = if (liveTvFullscreen && !teleportMenuOpen) null else hintText,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+        )
 
         traced("TeleportMenu") {
             TeleportMenu(

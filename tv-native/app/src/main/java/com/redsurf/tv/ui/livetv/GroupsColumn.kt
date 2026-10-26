@@ -137,7 +137,6 @@ fun GroupsColumn(
     groups: List<GroupCount>,
     selectedGroup: GroupKey?,
     onGroupFocused: (GroupKey) -> Unit,
-    guideUpdating: Boolean = false,
     modifier: Modifier = Modifier,
     // false when a caller is placing focus elsewhere deliberately (ChannelListOverlay, decision
     // 11's "focus lands on the current channel row") - root-caused live, 2026-09-17: this
@@ -384,20 +383,6 @@ fun GroupsColumn(
                 softWrap = false,
                 modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
             )
-            // User bug #8a (2026-10-05): say when the guide is refreshing, so listings changing
-            // under the user (or still missing) have an explanation. Takes only the space the
-            // title leaves (it squeezed "Categories" onto two lines at first).
-            if (guideUpdating) {
-                Text(
-                    "Updating…",
-                    style = RedSurfType.gridMeta,
-                    color = TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.weight(1f).padding(start = 8.dp, end = 8.dp, bottom = 10.dp),
-                )
-            }
         }
         CompositionLocalProvider(LocalBringIntoViewSpec provides NoBringIntoView) {
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
