@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.shell
 
+import com.redsurf.tv.ui.livetv.formatGroupName
 import androidx.compose.ui.graphics.RectangleShape
 import com.redsurf.tv.settings.BufferSize
 import com.redsurf.tv.settings.DefaultAspect
@@ -154,6 +155,11 @@ fun SettingsScreen(
     startOn: StartOn,
     onCycleStartOn: () -> Unit,
     onClearWatchHistory: () -> Unit,
+    // Parental "Hidden categories": every key hidden at any point this session (so a row never
+    // disappears under focus when unhidden), which of them are hidden now, and the toggle.
+    hiddenGroupRows: List<String> = emptyList(),
+    hiddenGroups: Set<String> = emptySet(),
+    onToggleGroupHidden: (String) -> Unit = {},
     // TELEPORT_MENU.md decision 1, 2026-09-19 - same AppPreferences pattern, the first live row
     // Remote control has ever had.
     teleportMenuEnabled: Boolean,
@@ -263,7 +269,8 @@ fun SettingsScreen(
         selectedCategory == SettingsCategory.Appearance ||
         selectedCategory == SettingsCategory.General ||
         selectedCategory == SettingsCategory.RemoteControl ||
-        selectedCategory == SettingsCategory.Other
+        selectedCategory == SettingsCategory.Other ||
+        (selectedCategory == SettingsCategory.ParentalControls && hiddenGroupRows.isNotEmpty())
 
     Row(
         modifier = Modifier.hiddenButComposed(visible).fillMaxSize()
@@ -355,6 +362,9 @@ fun SettingsScreen(
             startOn = startOn,
             onCycleStartOn = onCycleStartOn,
             onClearWatchHistory = onClearWatchHistory,
+            hiddenGroupRows = hiddenGroupRows,
+            hiddenGroups = hiddenGroups,
+            onToggleGroupHidden = onToggleGroupHidden,
             teleportMenuEnabled = teleportMenuEnabled,
             onToggleTeleportMenuEnabled = onToggleTeleportMenuEnabled,
             playlistChannelCounts = playlistChannelCounts,
@@ -587,6 +597,11 @@ private fun SettingsPane(
     startOn: StartOn,
     onCycleStartOn: () -> Unit,
     onClearWatchHistory: () -> Unit,
+    // Parental "Hidden categories": every key hidden at any point this session (so a row never
+    // disappears under focus when unhidden), which of them are hidden now, and the toggle.
+    hiddenGroupRows: List<String> = emptyList(),
+    hiddenGroups: Set<String> = emptySet(),
+    onToggleGroupHidden: (String) -> Unit = {},
     teleportMenuEnabled: Boolean,
     onToggleTeleportMenuEnabled: () -> Unit,
     playlistChannelCounts: Map<String, Int>,
@@ -777,6 +792,14 @@ private fun SettingsPane(
                 SettingsCategory.RemoteControl -> remoteControlContent(
                     teleportMenuEnabled = teleportMenuEnabled,
                     onToggle = onToggleTeleportMenuEnabled,
+                    firstRowFocus = firstRowFocus,
+                )
+                SettingsCategory.ParentalControls -> parentalContent(
+                    hiddenGroupRows = hiddenGroupRows,
+                    hiddenGroups = hiddenGroups,
+                    multiplePlaylists = playlists.size > 1,
+                    playlistName = { id -> playlists.firstOrNull { it.id == id }?.name.orEmpty() },
+                    onToggle = onToggleGroupHidden,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.Other -> otherContent(
@@ -1298,6 +1321,35 @@ private fun LazyListScope.generalContent(
     }
     item { LiveRow(label = "Start on", value = startOn.label, onClick = onCycleStartOn) }
     items(SETTINGS_GREY_ROWS[SettingsCategory.General].orEmpty()) { GreyRowContent(it) }
+}
+
+/** Parental controls: "Hidden categories" - one live row per category hidden from Live TV (hold
+ * OK on a category there, TiviMate's "Hide group"). OK toggles Hidden/Shown in place; the row
+ * list is this session's union of hidden keys, so unhiding never removes the row under focus. */
+private fun LazyListScope.parentalContent(
+    hiddenGroupRows: List<String>,
+    hiddenGroups: Set<String>,
+    multiplePlaylists: Boolean,
+    playlistName: (String) -> String,
+    onToggle: (String) -> Unit,
+    firstRowFocus: FocusRequester,
+) {
+    val rows = SETTINGS_GREY_ROWS[SettingsCategory.ParentalControls].orEmpty()
+    items(rows) { GreyRowContent(it) }
+    if (hiddenGroupRows.isEmpty()) {
+        item { GreyRowContent(GreyRow("Hidden categories", "None - hold OK on a category")) }
+        return
+    }
+    itemsIndexed(hiddenGroupRows, key = { _, key -> key }) { index, key ->
+        val playlistId = key.substringBefore('\u0000')
+        val name = formatGroupName(key.substringAfter('\u0000'))
+        LiveRow(
+            label = if (multiplePlaylists) "$name · ${playlistName(playlistId)}" else name,
+            value = if (key in hiddenGroups) "Hidden" else "Shown",
+            onClick = { onToggle(key) },
+            modifier = if (index == 0) Modifier.focusRequester(firstRowFocus) else Modifier,
+        )
+    }
 }
 
 /** Other: "Clear watch history" is live - a two-press confirm done in place (the value reads

@@ -62,7 +62,7 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
     ),
     SettingsCategory.ParentalControls to listOf(
         GreyRow("PIN", "Not set"),
-        GreyRow("Hidden groups", "None"),
+        // "Hidden groups" is live - SettingsScreen.kt's parentalContent ("Hidden categories").
     ),
     SettingsCategory.Other to listOf(
         GreyRow("Backup & restore", "—"),

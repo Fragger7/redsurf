@@ -221,6 +221,17 @@ class AppPreferences(context: Context) {
         _epgTimeOffsetHours.value = next
     }
 
+    // Settings -> Parental "Hidden categories" (TiviMate's group long-press "Hide group"). Keys are
+    // "playlistId\u0000groupName", so a hidden category stays hidden across a re-import.
+    private val _hiddenGroups = MutableStateFlow(prefs.getStringSet(KEY_HIDDEN_GROUPS, emptySet())!!.toSet())
+    val hiddenGroups: StateFlow<Set<String>> = _hiddenGroups.asStateFlow()
+
+    fun setGroupHidden(key: String, hidden: Boolean) {
+        val next = if (hidden) _hiddenGroups.value + key else _hiddenGroups.value - key
+        prefs.edit().putStringSet(KEY_HIDDEN_GROUPS, next).apply()
+        _hiddenGroups.value = next
+    }
+
     /** "Home" or "LiveTv" - the destination Start on = Last used resumes; null before any. */
     fun getLastDestination(): String? = prefs.getString(KEY_LAST_DESTINATION, null)
 
@@ -287,6 +298,7 @@ class AppPreferences(context: Context) {
         private const val KEY_AFR_ENABLED = "afr_enabled"
         private const val KEY_START_ON = "start_on"
         private const val KEY_EPG_TIME_OFFSET = "epg_time_offset"
+        private const val KEY_HIDDEN_GROUPS = "hidden_groups"
         private const val KEY_LAST_DESTINATION = "last_destination"
         private const val KEY_AUTO_UPDATE = "auto_update"
         private const val KEY_PREFERRED_SUBTITLE_LANGUAGE = "preferred_subtitle_language"

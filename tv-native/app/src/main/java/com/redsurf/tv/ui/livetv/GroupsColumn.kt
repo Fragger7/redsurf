@@ -162,6 +162,8 @@ fun GroupsColumn(
     onEscapeUp: () -> Unit = {},
     focusRequest: GroupsFocusRequest? = null,
     onFocusRequestConsumed: () -> Unit = {},
+    // Hold OK on a category (TiviMate's group long-press "Hide group"). Never for Favorites.
+    onLongPressGroup: (GroupCount) -> Unit = {},
 ) {
     val multiplePlaylists = remember(groups) { groups.map { it.playlistId }.distinct().size > 1 }
     var collapsedPlaylists by remember { mutableStateOf(setOf<String>()) }
@@ -429,6 +431,7 @@ fun GroupsColumn(
                                     headedTo[0] = index
                                 },
                                 modifier = (if (selected) Modifier.focusRequester(initialFocus) else Modifier).then(targetModifier),
+                                onLongPress = { onLongPressGroup(row.group) },
                             )
                         }
                     }
@@ -513,6 +516,7 @@ private fun GroupRow(
     selected: Boolean,
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongPress: () -> Unit = {},
 ) {
     // D-pad focus, not `selected` (the active group, which can differ from where focus currently
     // is - e.g. browsing Channels while a group remains selected on the left). Marquee (BACKLOG_
@@ -535,7 +539,15 @@ private fun GroupRow(
             }
             // OK on a category does nothing (RIGHT enters the guide) - consumed, as the Surface's
             // empty onClick did, so it never reaches a handler further up.
-            .onKeyEvent { it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter }
+            .onKeyEvent {
+                val ok = it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter
+                if (ok && it.type == KeyEventType.KeyDown && it.nativeKeyEvent.isLongPress &&
+                    !isFavoritesGroup(group.groupName)
+                ) {
+                    onLongPress()
+                }
+                ok
+            }
             .focusable()
             .clearAndSetSemantics { contentDescription = "${formatGroupName(group.groupName)} ${group.count}" }
             .background(

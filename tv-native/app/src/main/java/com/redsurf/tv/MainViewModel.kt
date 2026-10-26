@@ -208,6 +208,7 @@ class MainViewModel : ViewModel() {
         appContext = context.applicationContext
         repository = ChannelRepository(db.channelDao(), db.playlistDao(), db.recentChannelDao(), db.epgDao(), db.favoriteChannelDao())
         repository.watchChannels(db.invalidationTracker)
+        repository.hiddenGroups.value = com.redsurf.tv.settings.AppPreferences(context).hiddenGroups.value
         checkLocalCache(context)
     }
 

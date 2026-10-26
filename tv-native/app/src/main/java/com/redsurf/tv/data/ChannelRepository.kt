@@ -18,6 +18,7 @@ import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.db.RecentChannelDao
 import com.redsurf.tv.db.RecentChannelEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
@@ -60,7 +61,8 @@ class ChannelRepository(
     /** Across every loaded playlist (user request, 2026-09-12 - multiple playlists can coexist
      * and all show up under Live TV, grouped by playlist name; see [GroupCount]). */
     fun liveGroups(): Flow<List<GroupCount>> =
-        combine(channelDao.getLiveGroupCounts(), favoriteDao.countsByPlaylist()) { groups, favoriteCounts ->
+        combine(channelDao.getLiveGroupCounts(), favoriteDao.countsByPlaylist(), hiddenGroups) { all, favoriteCounts, hidden ->
+            val groups = if (hidden.isEmpty()) all else all.filter { hiddenGroupKey(it.playlistId, it.groupName) !in hidden }
             if (favoriteCounts.isEmpty()) return@combine groups
             val favoritesByPlaylist = favoriteCounts.associateBy { it.playlistId }
             val seen = HashSet<String>()
@@ -75,6 +77,11 @@ class ChannelRepository(
                 }
             }
         }
+
+    /** Settings -> Parental "Hidden categories": [hiddenGroupKey]s filtered out of [liveGroups]
+     * (so out of Live TV, Teleport and zap context alike). Seeded from AppPreferences at startup,
+     * before any UI subscribes; the shell writes both on every change. */
+    val hiddenGroups = MutableStateFlow<Set<String>>(emptySet())
 
     /** Every favorite as a [favoriteKey] - one small reactive set for "is this a favorite?"
      * checks (hero star, context-menu label, zap context) without a query per channel. */
@@ -256,3 +263,5 @@ class ChannelRepository(
         windowEnd: Long,
     ): List<EpgProgramEntity> = epgDao.getProgramsForChannels(playlistId, channelIds, windowStart, windowEnd)
 }
+
+fun hiddenGroupKey(playlistId: String, groupName: String) = "$playlistId\u0000$groupName"

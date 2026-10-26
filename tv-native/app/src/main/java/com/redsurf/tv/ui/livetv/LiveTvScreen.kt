@@ -40,6 +40,9 @@ import androidx.compose.foundation.layout.width
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import com.redsurf.tv.db.GroupCount
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -199,6 +202,8 @@ fun LiveTvScreen(
     // TiviMate's long-press Back in fullscreen (user, 2026-09-30, Teleport setting off): back to
     // the playing channel's guide row with playback *stopped* - OK starts it again. Nonce, 0 = none.
     exitFullscreenStoppedRequest: Long = 0L,
+    // Settings -> Parental "Hidden categories": AppShell persists it and filters liveGroups().
+    onHideGroup: (GroupKey) -> Unit = {},
 ) {
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     // PLAYER_ENGINEERING_BRIEF.md §6/§9 - resolved here, reactively, well before any fullscreen
@@ -632,6 +637,9 @@ fun LiveTvScreen(
     // The long-press that opened the menu is still physically down; its own release must not
     // count as "OK on the menu's row". Armed by the next fresh OK press.
     var contextMenuArmed by remember { mutableStateOf(false) }
+    // Hold OK on a category: the same key-driven menu, one action - "Hide category" (TiviMate's
+    // group long-press). Focus stays on the category row underneath while it's open.
+    var contextMenuGroup by remember { mutableStateOf<GroupCount?>(null) }
     LaunchedEffect(contextMenuChannel) {
         Log.d("LiveTvScreen", "contextMenu -> ${contextMenuChannel?.name ?: "closed"}")
     }
@@ -662,6 +670,20 @@ fun LiveTvScreen(
 
     fun goToCategories() {
         selectedGroup?.let { localGroupsFocusRequest = GroupsFocusRequest.Group(it, System.nanoTime()) }
+    }
+    fun hideGroup(group: GroupCount) {
+        val key = group.key()
+        // Decided before the row disappears (same reasoning as toggleFavorite's last-favorite
+        // case): land on the next category of the same playlist, else the previous one.
+        val index = groups.indexOfFirst { it.key() == key }
+        val neighbor = (groups.getOrNull(index + 1)?.takeIf { it.playlistId == group.playlistId }
+            ?: groups.getOrNull(index - 1)?.takeIf { it.playlistId == group.playlistId })?.key()
+        Log.d("LiveTvScreen", "hide category ${group.groupName} -> land on ${neighbor?.groupName}")
+        if (neighbor != null) {
+            if (selectedGroup == key) commitGroup(neighbor)
+            localGroupsFocusRequest = GroupsFocusRequest.Group(neighbor, System.nanoTime())
+        }
+        onHideGroup(key)
     }
     fun toggleFavorite(channel: ChannelEntity) {
         val nowFavorite = !isFavorite(channel)
@@ -748,6 +770,21 @@ fun LiveTvScreen(
                     }
                     return@onPreviewKeyEvent true
                 }
+                contextMenuGroup?.let { group ->
+                    val down = event.type == KeyEventType.KeyDown
+                    when (event.key) {
+                        Key.DirectionCenter, Key.Enter -> {
+                            if (down && event.nativeKeyEvent.repeatCount == 0) contextMenuArmed = true
+                            if (!down && contextMenuArmed) {
+                                contextMenuGroup = null
+                                hideGroup(group)
+                            }
+                        }
+                        Key.Back -> if (!down) contextMenuGroup = null
+                        else -> {}
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 val channel = contextMenuChannel ?: return@onPreviewKeyEvent false
                 val isDown = event.type == KeyEventType.KeyDown
                 when (event.key) {
@@ -806,6 +843,10 @@ fun LiveTvScreen(
                         claimInitialFocus = visible && !channelsHasFocus,
                         groups = groups,
                         selectedGroup = selectedGroup,
+                        onLongPressGroup = { group ->
+                            contextMenuArmed = false
+                            contextMenuGroup = group
+                        },
                         onGroupFocused = { group ->
                             // Only focus moving *within* Categories is the user browsing. Focus that
                             // merely lands here (falling out of fullscreen or out of replaced guide
@@ -933,8 +974,20 @@ fun LiveTvScreen(
 
         contextMenuChannel?.let { channel ->
             BrowseContextMenu(
-                channelName = channel.name,
-                isFavorite = isFavorite(channel),
+                title = channel.name,
+                action = if (isFavorite(channel)) "Remove from Favorites" else "Add to Favorites",
+                icon = Icons.Filled.Star,
+                iconTint = if (isFavorite(channel)) Accent else TextSecondary,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+        contextMenuGroup?.let { group ->
+            BrowseContextMenu(
+                title = formatGroupName(group.groupName),
+                action = "Hide category",
+                icon = Icons.Filled.Clear,
+                iconTint = TextSecondary,
+                footer = "OK to hide  ·  Unhide in Settings → Parental controls",
                 modifier = Modifier.align(Alignment.Center),
             )
         }
@@ -1349,7 +1402,14 @@ internal fun ProgrammeProgressRow(programme: EpgProgramEntity, now: Long) {
  * here the same way.
  */
 @Composable
-private fun BrowseContextMenu(channelName: String, isFavorite: Boolean, modifier: Modifier = Modifier) {
+private fun BrowseContextMenu(
+    title: String,
+    action: String,
+    icon: ImageVector,
+    iconTint: Color,
+    modifier: Modifier = Modifier,
+    footer: String = "OK to confirm  ·  BACK to close",
+) {
     Column(
         modifier = modifier
             .width(300.dp)
@@ -1358,7 +1418,7 @@ private fun BrowseContextMenu(channelName: String, isFavorite: Boolean, modifier
             .padding(12.dp),
     ) {
         Text(
-            channelName,
+            title,
             style = RedSurfType.sectionTitle,
             color = TextPrimary,
             maxLines = 1,
@@ -1375,12 +1435,12 @@ private fun BrowseContextMenu(channelName: String, isFavorite: Boolean, modifier
         ) {
             Box(modifier = Modifier.width(3.dp).height(18.dp).background(Accent, RectangleShape))
             Spacer(modifier = Modifier.width(10.dp))
-            Icon(Icons.Filled.Star, contentDescription = null, tint = if (isFavorite) Accent else TextSecondary, modifier = Modifier.size(16.dp))
+            Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(if (isFavorite) "Remove from Favorites" else "Add to Favorites", style = RedSurfType.rowTitle, color = TextPrimary)
+            Text(action, style = RedSurfType.rowTitle, color = TextPrimary)
         }
         Text(
-            "OK to confirm  ·  BACK to close",
+            footer,
             style = RedSurfType.gridMeta,
             color = TextSecondary,
             modifier = Modifier.padding(start = 8.dp, top = 8.dp),

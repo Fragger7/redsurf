@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.shell
 
+import com.redsurf.tv.data.hiddenGroupKey
 import com.redsurf.tv.diag.tracedMeasure
 import com.redsurf.tv.sync.UserActivity
 import com.redsurf.tv.diag.traced
@@ -301,6 +302,13 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     }
     val autoPlayLastChannelOnLaunch by appPreferences.autoPlayLastChannelOnLaunch.collectAsState()
     val teleportMenuEnabled by appPreferences.teleportMenuEnabled.collectAsState()
+    val hiddenGroups by appPreferences.hiddenGroups.collectAsState()
+    // Settings -> Parental's rows: every category hidden at any point this session, so unhiding
+    // one flips its value in place instead of removing the row that holds focus.
+    var hiddenGroupRows by remember { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(hiddenGroups) {
+        hiddenGroupRows = hiddenGroupRows + hiddenGroups.filter { it !in hiddenGroupRows }.sorted()
+    }
 
     // Resume-last-channel-on-launch restore (AGENTS.md backlog, user decision 2026-09-15,
     // corrected same day from an earlier pass that had this gated behind the toggle - it's
@@ -703,6 +711,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     LiveTvScreen(
                         viewModel = viewModel,
                         epgTimeOffsetHours = epgTimeOffsetHours,
+                        onHideGroup = { key ->
+                            appPreferences.setGroupHidden(hiddenGroupKey(key.playlistId, key.groupName), true)
+                            viewModel.repository.hiddenGroups.value = appPreferences.hiddenGroups.value
+                        },
                         visible = destination == NavDestination.LiveTv,
                         onFullscreenChanged = { liveTvFullscreen = it },
                         onChannelsFocusChanged = { liveTvChannelsFocused = it },
@@ -804,6 +816,12 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         startOn = startOn,
                         onCycleStartOn = { appPreferences.cycleStartOn() },
                         onClearWatchHistory = { scope.launch { viewModel.repository.clearRecentChannels() } },
+                        hiddenGroupRows = hiddenGroupRows,
+                        hiddenGroups = hiddenGroups,
+                        onToggleGroupHidden = { key ->
+                            appPreferences.setGroupHidden(key, key !in hiddenGroups)
+                            viewModel.repository.hiddenGroups.value = appPreferences.hiddenGroups.value
+                        },
                         onToggleAutoPlayLastChannelOnLaunch = {
                             appPreferences.setAutoPlayLastChannelOnLaunch(!autoPlayLastChannelOnLaunch)
                         },
