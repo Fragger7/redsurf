@@ -10,13 +10,15 @@ import androidx.compose.ui.unit.dp
  * 4dp base unit throughout.
  */
 object RedSurfDensity {
-    val GridRowHeight = 40.dp
+    /** Row pitch (Crest, 2026-10-26): a 36dp row + a 2dp background gutter drawn at its foot. */
+    val GridRowHeight = 38.dp
+    val GridGutter = 2.dp
     /** Separation between grid rows is a drawn hairline, not empty space. */
     val GridRowGap = 0.dp
     /** 180, not the consultation's 150: on real provider names ("ABC 28 (KXXX)") a 74dp name slot
      * ellipsized nearly every row; 106dp holds ~18 characters at 13sp, marquee covers the rest. The
      * timeline still fits six 30-minute columns - they're just ~5dp narrower each. */
-    val GridLabelWidth = 180.dp
+    val GridLabelWidth = 176.dp
     val GridLogo = 26.dp
     val CellPadH = 6.dp
     /** Crest (design-language RESEARCH.md "A. Crest", 2026-10-26): square. 0dp also turns every
@@ -24,9 +26,10 @@ object RedSurfDensity {
     val CellRadius = 0.dp
     val PanelRadius = 0.dp
     val ColumnGap = 12.dp
-    val CategoriesWidth = 200.dp
-    val HeroExpanded = 136.dp
+    val CategoriesWidth = 168.dp
+    val CategoryRowHeight = 32.dp
+    val HeroExpanded = 152.dp
     val HeroCollapsed = 56.dp
-    val GridHeaderHeight = 24.dp
+    val GridHeaderHeight = 22.dp
     val Hairline = 1.dp
 }

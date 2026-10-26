@@ -61,12 +61,14 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.redsurf.tv.db.GroupCount
 import com.redsurf.tv.ui.theme.Accent
+import com.redsurf.tv.ui.theme.RedSurfDensity
 import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
 import com.redsurf.tv.ui.theme.Surface as SurfaceColor
 import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
+import com.redsurf.tv.ui.theme.TextTertiary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -316,8 +318,8 @@ fun GroupsColumn(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .background(SurfaceColor)
-            .padding(horizontal = 12.dp, vertical = 14.dp)
+            // Crest: no card - the column separates from the grid by tone and the gutter alone.
+            .padding(top = 4.dp)
             .onFocusChanged { state ->
                 if (state.hasFocus && !hadFocus && !landingRequest) {
                     runCatching { initialFocus.requestFocus() }
@@ -376,12 +378,12 @@ fun GroupsColumn(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Categories",
-                style = RedSurfType.sectionTitle,
-                color = TextPrimary,
+                "CATEGORIES",
+                style = RedSurfType.rowSecondary,
+                color = TextTertiary,
                 maxLines = 1,
                 softWrap = false,
-                modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
+                modifier = Modifier.padding(start = 7.dp, bottom = 6.dp),
             )
         }
         CompositionLocalProvider(LocalBringIntoViewSpec provides NoBringIntoView) {
@@ -545,7 +547,7 @@ private fun GroupRow(
             ),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(36.dp),
+            modifier = Modifier.fillMaxWidth().height(RedSurfDensity.CategoryRowHeight),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Selection marker: a 3dp accent bar, present in layout always so text doesn't shift.

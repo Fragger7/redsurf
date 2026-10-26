@@ -94,6 +94,7 @@ import com.redsurf.tv.ui.theme.Background
 import com.redsurf.tv.ui.theme.RedSurfDensity
 import com.redsurf.tv.ui.theme.RedSurfType
 import com.redsurf.tv.ui.theme.SurfaceBand
+import com.redsurf.tv.ui.theme.SurfacePanel
 import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
@@ -103,9 +104,7 @@ import java.util.Locale
 
 // Lattice colours, hoisted (EPG_GRID_REDESIGN.md G.4) - a `Color.copy` per draw op per row per
 // frame is exactly the allocation pattern a 449MB device doesn't need.
-private val RowHairline = Color.White.copy(alpha = 0.06f)
 private val HeaderHairline = Color.White.copy(alpha = 0.08f)
-private val Spine = Color.White.copy(alpha = 0.10f)
 private val TickHour = Color.White.copy(alpha = 0.10f)
 private val TickHalf = Color.White.copy(alpha = 0.045f)
 private val SlotTick = Color.White.copy(alpha = 0.14f)
@@ -546,6 +545,7 @@ private fun EpgChannelRow(
     }
     val density = LocalDensity.current
     val hairlinePx = with(density) { RedSurfDensity.Hairline.toPx() }
+    val gutterPx = with(density) { RedSurfDensity.GridGutter.toPx() }
     val halfHourPx = with(density) { (pxPerMinute * 30).toPx() }
     val pxPerMinutePx = with(density) { pxPerMinute.toPx() }
     val columns = WINDOW_MINUTES / 30
@@ -665,9 +665,11 @@ private fun EpgChannelRow(
             // marquee or a selection change re-records just this row, not the whole grid.
             .graphicsLayer()
             .drawBehind {
+                // Crest: rows separate by a background gutter, not a line.
                 drawRect(if (rowHasFocus) SurfaceBand else Background)
-                drawLine(RowHairline, Offset(0f, size.height - hairlinePx / 2f), Offset(size.width, size.height - hairlinePx / 2f), hairlinePx)
-            },
+                drawRect(Background, Offset(0f, size.height - gutterPx), Size(size.width, gutterPx))
+            }
+            .padding(bottom = RedSurfDensity.GridGutter),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         traced("EpgRow:label") {
@@ -682,9 +684,9 @@ private fun EpgChannelRow(
                 modifier = Modifier
                     .width(RedSurfDensity.GridLabelWidth)
                     .fillMaxHeight()
-                    .drawBehind {
-                        drawLine(Spine, Offset(size.width - hairlinePx / 2f, 0f), Offset(size.width - hairlinePx / 2f, size.height), hairlinePx)
-                    },
+                    // Crest: the label column is one tone (Panel) on idle rows; the focused row's
+                    // band runs straight through it.
+                    .drawBehind { if (!rowHasFocus) drawRect(SurfacePanel) },
             )
         }
         // The timeline is painted, not composed (TiviMate F14): one draw pass over the slots in

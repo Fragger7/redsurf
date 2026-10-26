@@ -1121,8 +1121,7 @@ private fun HeroPreviewBand(
     Box(
         modifier = modifier
             .height(RedSurfDensity.HeroExpanded)
-            .clip(RectangleShape)
-            .background(Surface),
+            .clip(RectangleShape),
     ) {
         if (expanded) {
             ExpandedHero(focusedChannel, previewingChannel, programme, now, player, isFavorite, previewOnSelect, onThumbBounds)
@@ -1147,7 +1146,7 @@ private object MarkBitmap {
 @Composable
 private fun CollapsedHero(groupLabel: String?, groupCount: Int?, now: Long, previewOnSelect: Boolean) {
     Row(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        modifier = Modifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Image(bitmap = rememberMarkBitmap(), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -1193,7 +1192,7 @@ private fun ExpandedHero(
     val displayChannel = focusedChannel ?: previewingChannel
 
     Row(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
