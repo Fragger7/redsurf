@@ -106,6 +106,11 @@ private const val HINT_MS = 2_500L
 private const val EXIT_CONFIRM_MS = 4_000L
 private const val HINT_REPEATS = 3
 private const val HINT_TELEPORT = "teleport"
+private const val HINT_TELEPORT_HOLD = "teleport_hold"
+// TELEPORT_MENU.md T.5's first trigger: a direction held this many key repeats (~3.5s at the
+// platform's 400ms delay + 50ms repeat) means a long list, the moment a jump would help. The
+// user's own threshold is still welcome; this is a default, not a measurement.
+private const val HOLD_REPEATS_FOR_TIP = 60
 private const val HINT_NAV_HIDDEN = "nav_hidden"
 
 @Composable
@@ -573,6 +578,17 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 lastKeyWasUp = event.key == Key.DirectionUp
                 keyPresses.tryEmit(Unit)
                 UserActivity.touch()
+                if ((event.key == Key.DirectionUp || event.key == Key.DirectionDown) &&
+                    event.nativeKeyEvent.repeatCount == HOLD_REPEATS_FOR_TIP &&
+                    !liveTvFullscreen && !teleportMenuOpen &&
+                    appPreferences.hintCount(HINT_TELEPORT_HOLD) < HINT_REPEATS
+                ) {
+                    appPreferences.countHint(HINT_TELEPORT_HOLD)
+                    showHint(
+                        if (teleportMenuEnabled) "Tip: hold BACK to teleport out of a long list"
+                        else "Tip: hold BACK to jump out of a long list"
+                    )
+                }
             }
             if (event.key == Key.Back) {
                 if (isDown && event.nativeKeyEvent.repeatCount == 0) backHeldLong = false

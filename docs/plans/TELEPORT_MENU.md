@@ -178,7 +178,7 @@ scenario and still not connect it to the other.)**
 | T.2 | Menu overlay: layout, focus, key handling, portal open/close animation | ✅ done & device-verified |
 | T.3 | Destinations (Nav-Strip, Playlist Root, Playlist Favorites, Root Category, Now Playing, Return to fullscreen, Exit; Multi-View grey) | ✅ rebuilt 2026-09-29/30 (v0.38.0) and verified on device by screenshot + focused-node bounds, not log lines alone - see "Teleport finish - what happened" below. Awaiting the user's real-remote check. |
 | T.4 | Root Category prefix-parsing | ✅ re-verified 2026-09-30 on Random Score: from "24/7 \| IND MALAY…" it landed on "24/7 \| AMAZONE", and UP from there leaves the family - it is the first. Unit-tested incl. the user's Faraz Strong example. |
-| T.5 | Discoverability tips (both named triggers, plus whatever else the brainstorm adds) | ⬜ not started - deferred, see note below |
+| T.5 | Discoverability tips (both named triggers, plus whatever else the brainstorm adds) | 🟡 both triggers built 2026-10-26 (long-press Back with the menu off; UP/DOWN held ~3.5s = 60 repeats, a default pending the user's threshold), 3 showings each, `AppShell.kt` - held-key trigger not device-verified |
 | **A** | **Checkpoint - user tests the menu on the real list** | ❌ failed 2026-09-19 → rebuilt; **re-test pending (v0.38.0)** |
 | F | Favorites (per-playlist, hold-OK add/remove, Teleport row) | ✅ built & device-verified 2026-09-30 |
 
