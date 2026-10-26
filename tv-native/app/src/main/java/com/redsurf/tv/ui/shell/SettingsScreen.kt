@@ -334,6 +334,7 @@ fun SettingsScreen(
         )
         Spacer(modifier = Modifier.width(20.dp))
         SettingsPane(
+            visible = visible,
             category = selectedCategory,
             playlists = playlists,
             updateStatus = updateStatus,
@@ -573,6 +574,7 @@ private fun CategoryTile(@androidx.annotation.DrawableRes iconRes: Int) {
  */
 @Composable
 private fun SettingsPane(
+    visible: Boolean,
     category: SettingsCategory,
     playlists: List<PlaylistEntity>,
     updateStatus: UpdateCheckStatus,
@@ -712,10 +714,16 @@ private fun SettingsPane(
         }
     }
     LaunchedEffect(category) { if (category != SettingsCategory.Playlists) resetDetail() }
-    // Parental PIN: one unlock lasts until the pane leaves Parental controls.
+    // Parental PIN: one unlock lasts until the pane leaves Parental controls or Settings.
     var pinPrompt by remember { mutableStateOf<PinPrompt?>(null) }
     var parentalUnlocked by remember { mutableStateOf(false) }
-    LaunchedEffect(category) { if (category != SettingsCategory.ParentalControls) parentalUnlocked = false }
+    // Hidden screens stay composed, so leaving Settings must close the prompt and relock by hand.
+    LaunchedEffect(category, visible) {
+        if (category != SettingsCategory.ParentalControls || !visible) {
+            parentalUnlocked = false
+            pinPrompt = null
+        }
+    }
     pinPrompt?.let { prompt ->
         PinDialog(
             title = when (prompt) {
