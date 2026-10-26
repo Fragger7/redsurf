@@ -135,3 +135,24 @@ Rows flipped live since the table above was written, all verified on the TV:
   restores the original mode otherwise.
 - **Playback → Preferred audio**: shows the remembered language (or Auto); OK clears it.
   Preferred subtitles is still grey.
+
+### Later the same morning (v0.44.31-36)
+- **Playback → Preferred subtitles**: remembered language (or Off), applied on every play; OK
+  clears it. Persistence across a relaunch not yet watched on the TV.
+- **About → Auto-update** (default On): Off stops the launch-time OTA offer; "Check for updates"
+  still works by hand.
+- **General → Start on**: Live TV / Home / Last used. Verified across a relaunch.
+- **EPG → Time offset**: global, -12h to +12h in 1h steps, shifts the guide and hero times.
+  Verified on the TV. (TiviMate's is per playlist; global is enough for one family's lists.)
+- **Other → Clear watch history**: two-press confirm in place ("Press OK again"; losing focus
+  disarms). The arm/disarm was verified; the clear itself was deliberately not run on the
+  family's TV.
+- **Parental controls → Hidden categories**: hold OK on a category in Live TV → "Hide category".
+  Focus moves to the neighbouring category. The pane lists every hidden category (with the
+  playlist name when more than one is loaded); OK toggles Hidden/Shown in place. Verified on the
+  TV, including persistence across a relaunch.
+- **Other → Diagnostics** (read-only): device, Android version, free RAM, app heap, database and
+  cache size, read off the main thread when the pane opens.
+
+Still grey: General → Language; Appearance → Show full category name on hold, Accent; Remote
+control → Long-press OK, Digit keys; Parental → PIN; Other → Backup & restore.

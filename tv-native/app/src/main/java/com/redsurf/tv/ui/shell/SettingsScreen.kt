@@ -7,6 +7,14 @@ import com.redsurf.tv.settings.DefaultAspect
 import com.redsurf.tv.settings.StartOn
 import com.redsurf.tv.settings.EpgRefresh
 import android.util.Log
+import android.app.ActivityManager
+import android.content.Context
+import android.os.Build
+import androidx.compose.ui.platform.LocalContext
+import java.io.File
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -1386,7 +1394,47 @@ private fun LazyListScope.otherContent(
                 .onFocusChanged { if (!it.isFocused) armed = false },
         )
     }
-    items(rows.drop(1)) { GreyRowContent(it) }
+    item { DiagnosticsRows() }
+}
+
+/** Other → Diagnostics: a read-only snapshot taken when the pane opens - device, Android
+ * version, RAM headroom (`HARDWARE.md`'s ~449 MB free is the number that matters on the
+ * Chromecast), this process's heap, and the on-disk size of the database and cache. Static
+ * [InfoRow]s, nothing to focus. */
+@Composable
+private fun DiagnosticsRows() {
+    val context = LocalContext.current
+    val rows by produceState(initialValue = emptyList<Pair<String, String>>()) {
+        value = withContext(Dispatchers.IO) { diagnostics(context) }
+    }
+    Column {
+        Text(
+            "Diagnostics",
+            style = RedSurfType.rowSecondary,
+            color = TextSecondary,
+            modifier = Modifier.padding(start = 8.dp, top = 20.dp, bottom = 4.dp),
+        )
+        rows.forEach { (label, value) -> InfoRow(label, value) }
+    }
+}
+
+/** Runs on IO: the cache walk touches every cached logo file. */
+private fun diagnostics(context: Context): List<Pair<String, String>> {
+    val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+    val mem = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+    val rt = Runtime.getRuntime()
+    val db = context.getDatabasePath("redsurf_tv_database")
+    val dbBytes = listOf("", "-wal", "-shm").sumOf { File(db.path + it).length() }
+    val cacheBytes = context.cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+    val mb = { bytes: Long -> "%,d MB".format(bytes / (1024 * 1024)) }
+    return listOf(
+        "Device" to "${Build.MANUFACTURER} ${Build.MODEL}",
+        "Android" to "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+        "Memory free" to "${mb(mem.availMem)} of ${mb(mem.totalMem)}" + if (mem.lowMemory) " · low" else "",
+        "App heap" to "${mb(rt.totalMemory() - rt.freeMemory())} of ${mb(rt.maxMemory())}",
+        "Database" to mb(dbBytes),
+        "Cache" to mb(cacheBytes),
+    )
 }
 
 /** Playback (`BACKLOG_SWEEP.md` #11): one live toggle - the "old cable box" black-screen-between-

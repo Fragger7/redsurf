@@ -113,3 +113,13 @@ lines**; near-square cells; cell `#1B1E21` on a cool `#131619` background, focus
 selected cell desaturated red `#753A37`. Its only bundled font is a **digits-only subset of Roboto
 Medium with tabular figures** - it makes numbers line up. (Poppins, our wordmark font, has no
 tabular figures at all - keep it off numbers.)
+
+### Settings parity notes - 2026-10-26 (overnight run)
+
+- **EPG time shift:** TiviMate keeps it per playlist (playlist settings → "EPG time shift").
+  RedSurf's Time offset is global for now - one family, providers in one zone. Moving it per
+  playlist later needs a column on `playlists`, not a new preference.
+- **Hide group:** TiviMate hides a group from its long-press menu on the group and unhides it
+  under Settings → Parental control → Hidden groups. RedSurf does the same: hold OK on a
+  category → "Hide category", unhide under Parental controls → Hidden categories. The hidden set
+  is keyed by playlist + raw group name, so it survives a re-import.

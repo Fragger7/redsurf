@@ -66,7 +66,7 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
     ),
     SettingsCategory.Other to listOf(
         GreyRow("Backup & restore", "—"),
-        GreyRow("Diagnostics & logs", "—"),
+        // "Diagnostics" is live - SettingsScreen.kt's DiagnosticsRows.
     ),
 )
 
