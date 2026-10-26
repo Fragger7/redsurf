@@ -1,0 +1,8 @@
+# Hand-written baseline profile (PERFORMANCE_SALVAGE.md, 2026-10-26). Without it only the
+# libraries' own small profiles shipped, so RedSurf's code and most of Compose ran JIT-interpreted
+# after every install: categories measured 26-29% janky, p50 34ms. Full AOT (`-m speed`) measured
+# 15-18%, p50 22ms. Wildcards ask ART to AOT the whole app (= `speed`; a package list measured 18-22%, everything else
+# R8 had merged or renamed stayed JIT) once ProfileInstaller
+# hands the profile over (first launch; background dexopt compiles it).
+HSPL**;->**(**)**
+L**;
