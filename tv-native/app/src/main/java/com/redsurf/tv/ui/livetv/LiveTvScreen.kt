@@ -9,6 +9,7 @@ import com.redsurf.tv.player.LiveVideoView
 import androidx.compose.ui.graphics.Color
 import com.redsurf.tv.player.rememberPlayerController
 import com.redsurf.tv.settings.BufferSize
+import com.redsurf.tv.settings.DefaultAspect
 import com.redsurf.tv.player.PlayerController
 import com.redsurf.tv.ui.stableCallback
 import androidx.compose.ui.res.imageResource
@@ -126,6 +127,8 @@ fun LiveTvScreen(
     blackScreenBetweenZaps: Boolean = false,
     // TiviMate's "Buffer size" (F17) - keys the shared player, so a change rebuilds it.
     bufferSize: BufferSize = BufferSize.Small,
+    defaultAspect: DefaultAspect = DefaultAspect.Fit,
+    afrEnabled: Boolean = false,
     // PREVIEW.md, 2026-09-20 - default true. When true, a single OK on the current-airing cell of
     // a focused channel starts it playing for real in the hero band instead of jumping straight
     // to fullscreen; a second OK on that same still-previewing channel promotes it. When false,
@@ -329,6 +332,11 @@ fun LiveTvScreen(
         playlists.firstOrNull { it.id == playingPlaylistId }?.userAgent
     }
     val livePlayer = key(playerUserAgent, bufferSize) { rememberPlayerController(playerUserAgent, bufferSize) }
+    // Each fullscreen session starts on the Settings default; the Aspect tile cycles from there.
+    LaunchedEffect(livePlayer, isFullscreen, defaultAspect) {
+        if (isFullscreen) livePlayer.setResizeMode(defaultAspect.resizeMode)
+    }
+    LaunchedEffect(livePlayer, afrEnabled) { livePlayer.setAfrAllowed(afrEnabled) }
     // Fullscreen's PlayerHost drives the stream (zaps, catch-up); otherwise the preview does - or
     // nothing plays and the connection is dropped.
     val previewStream = previewingChannel?.streamId

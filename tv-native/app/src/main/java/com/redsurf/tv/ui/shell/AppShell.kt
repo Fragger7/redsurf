@@ -238,9 +238,13 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val blackScreenBetweenZaps by appPreferences.blackScreenBetweenZaps.collectAsState()
     val previewOnSelect by appPreferences.previewOnSelect.collectAsState()
     val bufferSize by appPreferences.bufferSize.collectAsState()
+    val defaultAspect by appPreferences.defaultAspect.collectAsState()
+    val afrEnabled by appPreferences.afrEnabled.collectAsState()
+    val preferredAudio by appPreferences.preferredAudioLanguage.collectAsState()
     val showRawResolution by appPreferences.showRawResolution.collectAsState()
     val doubleHeightRow by appPreferences.doubleHeightRow.collectAsState()
     val publicEpgEnabled by appPreferences.publicEpgEnabled.collectAsState()
+    val epgRefresh by appPreferences.epgRefresh.collectAsState()
     val navAutoHideSeconds by appPreferences.navAutoHideSeconds.collectAsState()
     // Live TV only (2026-10-26): it hid on Home too, and Back from Live TV then landed on a Home
     // with no strip and nothing for LEFT/RIGHT to reach - it read as the remote going dead.
@@ -672,6 +676,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         onChannelsFocusChanged = { liveTvChannelsFocused = it },
                         blackScreenBetweenZaps = blackScreenBetweenZaps,
                         bufferSize = bufferSize,
+                        defaultAspect = defaultAspect,
+                        afrEnabled = afrEnabled,
                         previewOnSelect = previewOnSelect,
                         showRawResolution = showRawResolution,
                         doubleHeightRow = doubleHeightRow,
@@ -734,11 +740,23 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         },
                         bufferSize = bufferSize,
                         onCycleBufferSize = { appPreferences.cycleBufferSize() },
+                        defaultAspect = defaultAspect,
+                        onCycleDefaultAspect = { appPreferences.cycleDefaultAspect() },
+                        afrEnabled = afrEnabled,
+                        onToggleAfr = { appPreferences.setAfrEnabled(!afrEnabled) },
+                        preferredAudio = preferredAudio,
+                        onResetPreferredAudio = { appPreferences.clearPreferredAudioLanguage() },
                         showRawResolution = showRawResolution,
                         doubleHeightRow = doubleHeightRow,
                         onToggleDoubleHeightRow = { appPreferences.setDoubleHeightRow(!doubleHeightRow) },
                         publicEpgEnabled = publicEpgEnabled,
                         onTogglePublicEpg = { appPreferences.setPublicEpgEnabled(!publicEpgEnabled) },
+                        epgRefresh = epgRefresh,
+                        onCycleEpgRefresh = {
+                            appPreferences.cycleEpgRefresh()
+                            // UPDATE keeps each playlist's timer and applies the new interval.
+                            playlistIds.forEach { EpgSyncScheduler.schedule(syncContext, it, runNow = false) }
+                        },
                         navAutoHideSeconds = navAutoHideSeconds,
                         onCycleNavAutoHide = { appPreferences.cycleNavAutoHide() },
                         onToggleShowRawResolution = {

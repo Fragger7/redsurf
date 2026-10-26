@@ -41,6 +41,19 @@ class AppPreferences(context: Context) {
     // EPG_WRAPUP.md 2.1 - fill channels the provider has no guide for from public XMLTV
     // (EPGSHARE01). Default on (the user's ask: "sick of seeing empty guides"). Read by
     // EpgSyncWorker, so it's a plain preference, not only a flow.
+    // Settings -> EPG "Refresh every": the periodic guide sync's interval (EpgSyncScheduler).
+    // Read by the scheduler on every enqueue, so a change applies on the next re-enqueue.
+    private val _epgRefresh = MutableStateFlow(
+        EpgRefresh.entries.firstOrNull { it.name == prefs.getString(KEY_EPG_REFRESH, null) } ?: EpgRefresh.Daily,
+    )
+    val epgRefresh: StateFlow<EpgRefresh> = _epgRefresh.asStateFlow()
+
+    fun cycleEpgRefresh() {
+        val next = EpgRefresh.entries[(_epgRefresh.value.ordinal + 1) % EpgRefresh.entries.size]
+        prefs.edit().putString(KEY_EPG_REFRESH, next.name).apply()
+        _epgRefresh.value = next
+    }
+
     private val _publicEpgEnabled = MutableStateFlow(prefs.getBoolean(KEY_PUBLIC_EPG, true))
     val publicEpgEnabled: StateFlow<Boolean> = _publicEpgEnabled.asStateFlow()
 
@@ -103,6 +116,19 @@ class AppPreferences(context: Context) {
         _bufferSize.value = next
     }
 
+    // Settings -> Playback "Default aspect": what each fullscreen session starts on; the
+    // player's Aspect tile still cycles within the session (PHASE_2.md decision 9).
+    private val _defaultAspect = MutableStateFlow(
+        DefaultAspect.entries.firstOrNull { it.name == prefs.getString(KEY_DEFAULT_ASPECT, null) } ?: DefaultAspect.Fit,
+    )
+    val defaultAspect: StateFlow<DefaultAspect> = _defaultAspect.asStateFlow()
+
+    fun cycleDefaultAspect() {
+        val next = DefaultAspect.entries[(_defaultAspect.value.ordinal + 1) % DefaultAspect.entries.size]
+        prefs.edit().putString(KEY_DEFAULT_ASPECT, next.name).apply()
+        _defaultAspect.value = next
+    }
+
     private val _previewOnSelect = MutableStateFlow(prefs.getBoolean(KEY_PREVIEW_ON_SELECT, true))
     val previewOnSelect: StateFlow<Boolean> = _previewOnSelect.asStateFlow()
 
@@ -145,6 +171,22 @@ class AppPreferences(context: Context) {
         _preferredAudioLanguage.value = language
     }
 
+    /** Settings -> Playback "Preferred audio" -> back to Auto (the system locale list). */
+    fun clearPreferredAudioLanguage() {
+        prefs.edit().remove(KEY_PREFERRED_AUDIO_LANGUAGE).apply()
+        _preferredAudioLanguage.value = null
+    }
+
+    // Settings -> Playback "Auto frame rate". Default off, as TiviMate ships it: each switch
+    // blanks an HDMI screen for a second or two, which the user has to opt into.
+    private val _afrEnabled = MutableStateFlow(prefs.getBoolean(KEY_AFR_ENABLED, false))
+    val afrEnabled: StateFlow<Boolean> = _afrEnabled.asStateFlow()
+
+    fun setAfrEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AFR_ENABLED, enabled).apply()
+        _afrEnabled.value = enabled
+    }
+
     /** Composite (playlistId, streamId) - matches ChannelEntity's own primary key
      * (BACKLOG_SWEEP.md #13) so a stale/removed channel just fails the lookup cleanly rather than
      * resolving to the wrong provider's channel. */
@@ -177,6 +219,9 @@ class AppPreferences(context: Context) {
         private const val KEY_HINT_PREFIX = "hint_shown_"
         private const val KEY_PREVIEW_ON_SELECT = "preview_on_select"
         private const val KEY_BUFFER_SIZE = "buffer_size"
+        private const val KEY_DEFAULT_ASPECT = "default_aspect"
+        private const val KEY_EPG_REFRESH = "epg_refresh"
+        private const val KEY_AFR_ENABLED = "afr_enabled"
     }
 }
 
@@ -199,4 +244,19 @@ enum class BufferSize(
     Medium("Medium", 5_000, 25_000, 2_000, 4_000, 32 * 1024 * 1024),
     Large("Large", 10_000, 40_000, 4_000, 7_000, 48 * 1024 * 1024),
     VeryLarge("Very large", 15_000, 60_000, 8_000, 10_000, 64 * 1024 * 1024),
+}
+
+/** The player's three resize modes, in the same order its Aspect tile cycles them. */
+enum class DefaultAspect(val label: String, val resizeMode: Int) {
+    Fit("Fit", androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT),
+    Fill("Fill", androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL),
+    Zoom("Zoom", androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM),
+}
+
+/** How often each playlist's guide re-syncs. A 67MB feed on a 1.89 GB box: no shorter than 6h. */
+enum class EpgRefresh(val label: String, val hours: Long) {
+    Every6h("Every 6 hours", 6),
+    Every12h("Every 12 hours", 12),
+    Daily("Daily", 24),
+    Every2Days("Every 2 days", 48),
 }

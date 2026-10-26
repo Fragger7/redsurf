@@ -44,12 +44,10 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
         GreyRow("Start on", "Live TV"),
         GreyRow("Language", "System"),
     ),
-    // "Update EPG now" / "Last updated" are live rows in SettingsScreen.kt's epgContent
-    // (2026-09-21). The real cadence today is daily (EpgSyncScheduler), so the planned default
-    // here says so rather than promising a 12h picker that doesn't exist yet.
+    // "Update EPG now" / "Last updated" / "Sources" / "Refresh every" are live rows in
+    // SettingsScreen.kt's epgContent.
     SettingsCategory.Epg to listOf(
         GreyRow("Time offset", "0h"),
-        GreyRow("Refresh every", "Daily"),
     ),
     // "Resolution badge" flipped live (BACKLOG_SWEEP.md #12) - now AppearanceContent's own toggle
     // row in SettingsScreen.kt, not a grey row here.
@@ -60,10 +58,7 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
     // "Black screen between zaps" flipped live (BACKLOG_SWEEP.md #11) - now PlaybackContent's own
     // toggle row in SettingsScreen.kt, not a grey row here.
     SettingsCategory.Playback to listOf(
-        GreyRow("Auto frame rate", "Off"),
-        GreyRow("Preferred audio", "Auto"),
         GreyRow("Preferred subtitles", "Off"),
-        GreyRow("Default aspect", "Fit"),
     ),
     SettingsCategory.RemoteControl to listOf(
         GreyRow("Long-press OK", "Context menu"),

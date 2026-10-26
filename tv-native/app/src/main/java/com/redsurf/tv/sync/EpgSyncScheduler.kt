@@ -13,6 +13,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.redsurf.tv.settings.AppPreferences
 import java.util.concurrent.TimeUnit
 
 /**
@@ -47,8 +48,8 @@ object EpgSyncScheduler {
     private const val INITIAL_DELAY_SECONDS = 45L
     private const val STAGGER_SECONDS_PER_PLAYLIST = 5 * 60L
 
-    private fun request(playlistId: String, staggerIndex: Int) =
-        PeriodicWorkRequestBuilder<EpgSyncWorker>(24, TimeUnit.HOURS)
+    private fun request(playlistId: String, staggerIndex: Int, intervalHours: Long) =
+        PeriodicWorkRequestBuilder<EpgSyncWorker>(intervalHours, TimeUnit.HOURS)
             .setInputData(workDataOf(EPG_SYNC_INPUT_PLAYLIST_ID to playlistId))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.LINEAR, BACKOFF_MINUTES, TimeUnit.MINUTES)
@@ -73,7 +74,7 @@ object EpgSyncScheduler {
         wm.enqueueUniquePeriodicWork(
             workName(playlistId),
             if (runNow) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.UPDATE,
-            request(playlistId, staggerIndex),
+            request(playlistId, staggerIndex, AppPreferences(context).epgRefresh.value.hours),
         )
     }
 

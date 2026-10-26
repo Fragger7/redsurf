@@ -2,6 +2,8 @@ package com.redsurf.tv.ui.shell
 
 import androidx.compose.ui.graphics.RectangleShape
 import com.redsurf.tv.settings.BufferSize
+import com.redsurf.tv.settings.DefaultAspect
+import com.redsurf.tv.settings.EpgRefresh
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -123,12 +125,20 @@ fun SettingsScreen(
     onTogglePreviewOnSelect: () -> Unit,
     bufferSize: BufferSize,
     onCycleBufferSize: () -> Unit,
+    defaultAspect: DefaultAspect,
+    onCycleDefaultAspect: () -> Unit,
+    afrEnabled: Boolean,
+    onToggleAfr: () -> Unit,
+    preferredAudio: String?,
+    onResetPreferredAudio: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
     doubleHeightRow: Boolean = true,
     onToggleDoubleHeightRow: () -> Unit = {},
     publicEpgEnabled: Boolean = true,
     onTogglePublicEpg: () -> Unit = {},
+    epgRefresh: EpgRefresh = EpgRefresh.Daily,
+    onCycleEpgRefresh: () -> Unit = {},
     navAutoHideSeconds: Int = 5,
     onCycleNavAutoHide: () -> Unit = {},
     // AGENTS.md backlog, 2026-09-15 - same AppPreferences pattern as the two above.
@@ -307,12 +317,20 @@ fun SettingsScreen(
             onTogglePreviewOnSelect = onTogglePreviewOnSelect,
             bufferSize = bufferSize,
             onCycleBufferSize = onCycleBufferSize,
+            defaultAspect = defaultAspect,
+            onCycleDefaultAspect = onCycleDefaultAspect,
+            afrEnabled = afrEnabled,
+            onToggleAfr = onToggleAfr,
+            preferredAudio = preferredAudio,
+            onResetPreferredAudio = onResetPreferredAudio,
             showRawResolution = showRawResolution,
             onToggleShowRawResolution = onToggleShowRawResolution,
             doubleHeightRow = doubleHeightRow,
             onToggleDoubleHeightRow = onToggleDoubleHeightRow,
             publicEpgEnabled = publicEpgEnabled,
             onTogglePublicEpg = onTogglePublicEpg,
+            epgRefresh = epgRefresh,
+            onCycleEpgRefresh = onCycleEpgRefresh,
             navAutoHideSeconds = navAutoHideSeconds,
             onCycleNavAutoHide = onCycleNavAutoHide,
             autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
@@ -522,12 +540,20 @@ private fun SettingsPane(
     onTogglePreviewOnSelect: () -> Unit,
     bufferSize: BufferSize,
     onCycleBufferSize: () -> Unit,
+    defaultAspect: DefaultAspect,
+    onCycleDefaultAspect: () -> Unit,
+    afrEnabled: Boolean,
+    onToggleAfr: () -> Unit,
+    preferredAudio: String?,
+    onResetPreferredAudio: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
     doubleHeightRow: Boolean = true,
     onToggleDoubleHeightRow: () -> Unit = {},
     publicEpgEnabled: Boolean = true,
     onTogglePublicEpg: () -> Unit = {},
+    epgRefresh: EpgRefresh = EpgRefresh.Daily,
+    onCycleEpgRefresh: () -> Unit = {},
     navAutoHideSeconds: Int = 5,
     onCycleNavAutoHide: () -> Unit = {},
     autoPlayLastChannelOnLaunch: Boolean,
@@ -684,6 +710,8 @@ private fun SettingsPane(
                     firstRowFocus = firstRowFocus,
                     publicEpgEnabled = publicEpgEnabled,
                     onTogglePublicEpg = onTogglePublicEpg,
+                    epgRefresh = epgRefresh,
+                    onCycleEpgRefresh = onCycleEpgRefresh,
                 )
                 SettingsCategory.Playback -> playbackContent(
                     blackScreenBetweenZaps = blackScreenBetweenZaps,
@@ -692,6 +720,12 @@ private fun SettingsPane(
                     onTogglePreviewOnSelect = onTogglePreviewOnSelect,
                     bufferSize = bufferSize,
                     onCycleBufferSize = onCycleBufferSize,
+                    defaultAspect = defaultAspect,
+                    onCycleDefaultAspect = onCycleDefaultAspect,
+                    afrEnabled = afrEnabled,
+                    onToggleAfr = onToggleAfr,
+                    preferredAudio = preferredAudio,
+                    onResetPreferredAudio = onResetPreferredAudio,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.Appearance -> appearanceContent(
@@ -1075,6 +1109,8 @@ private fun LazyListScope.epgContent(
     firstRowFocus: FocusRequester,
     publicEpgEnabled: Boolean,
     onTogglePublicEpg: () -> Unit,
+    epgRefresh: EpgRefresh,
+    onCycleEpgRefresh: () -> Unit,
 ) {
     item {
         LiveRow(
@@ -1123,6 +1159,7 @@ private fun LazyListScope.epgContent(
             onClick = onTogglePublicEpg,
         )
     }
+    item { LiveRow(label = "Refresh every", value = epgRefresh.label, onClick = onCycleEpgRefresh) }
     items(SETTINGS_GREY_ROWS.getValue(SettingsCategory.Epg)) { GreyRowContent(it) }
 }
 
@@ -1218,6 +1255,12 @@ private fun LazyListScope.playbackContent(
     onTogglePreviewOnSelect: () -> Unit,
     bufferSize: BufferSize,
     onCycleBufferSize: () -> Unit,
+    defaultAspect: DefaultAspect,
+    onCycleDefaultAspect: () -> Unit,
+    afrEnabled: Boolean,
+    onToggleAfr: () -> Unit,
+    preferredAudio: String?,
+    onResetPreferredAudio: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
@@ -1241,6 +1284,16 @@ private fun LazyListScope.playbackContent(
         // TIVIMATE_LEARNINGS.md F17 - TiviMate's five steps. Bigger rides out a poor provider,
         // at the cost of a slower channel switch.
         LiveRow(label = "Buffer size", value = bufferSize.label, onClick = onCycleBufferSize)
+    }
+    item { LiveRow(label = "Default aspect", value = defaultAspect.label, onClick = onCycleDefaultAspect) }
+    item { LiveRow(label = "Auto frame rate", value = if (afrEnabled) "On" else "Off", onClick = onToggleAfr) }
+    // Remembered from the player's Audio picker (TrackManager); OK forgets it.
+    item {
+        LiveRow(
+            label = "Preferred audio",
+            value = preferredAudio?.let { java.util.Locale(it).displayLanguage.ifBlank { it } } ?: "Auto",
+            onClick = onResetPreferredAudio,
+        )
     }
     items(SETTINGS_GREY_ROWS[SettingsCategory.Playback].orEmpty()) { GreyRowContent(it) }
 }
@@ -1359,10 +1412,10 @@ private fun SectionDivider() {
 private fun ActionChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         onClick = onClick,
-        modifier = modifier.clip(RectangleShape),
-        // Crest: a square solid-red block when focused, like every row.
+        modifier = modifier,
+        // Crest: chips are pills (chrome); focus is the same solid red as a row.
         colors = RedSurfFocus.rowColors(resting = SurfaceRaised),
-        shape = RedSurfFocus.shape(),
+        shape = RedSurfFocus.pillShape(),
         scale = RedSurfFocus.scale(),
         border = RedSurfFocus.border(),
         glow = RedSurfFocus.glow(),

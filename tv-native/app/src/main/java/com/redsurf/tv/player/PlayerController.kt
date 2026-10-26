@@ -230,9 +230,23 @@ class PlayerController(
         get() = afrManager.onModeFound
         set(value) { afrManager.onModeFound = value }
 
+    private var fullscreen = false
+    private var afrAllowed = false
+
     fun setFullscreen(enabled: Boolean) {
-        afrManager.isEnabled = enabled
-        if (!enabled) afrManager.restoreOriginalMode()
+        fullscreen = enabled
+        applyAfr()
+    }
+
+    /** Settings -> Playback "Auto frame rate" (default off). */
+    fun setAfrAllowed(allowed: Boolean) {
+        afrAllowed = allowed
+        applyAfr()
+    }
+
+    private fun applyAfr() {
+        afrManager.isEnabled = fullscreen && afrAllowed
+        if (!afrManager.isEnabled) afrManager.restoreOriginalMode()
     }
 
     // PHASE_2.md decision 9's Actions row (#2.3) - the brief's own note that this needed
@@ -253,6 +267,11 @@ class PlayerController(
     // PlayerHost's own AndroidView `update` block applies whatever this says.
     private val _resizeMode = MutableStateFlow(AspectRatioFrameLayout.RESIZE_MODE_FIT)
     val resizeMode: StateFlow<Int> = _resizeMode.asStateFlow()
+
+    /** Starts a fullscreen session on the user's Settings default. */
+    fun setResizeMode(mode: Int) {
+        _resizeMode.value = mode
+    }
 
     fun cycleResizeMode() {
         _resizeMode.value = when (_resizeMode.value) {

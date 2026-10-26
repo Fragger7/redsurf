@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.redsurf.tv.data.ChannelRepository
+import com.redsurf.tv.settings.AppPreferences
 import com.redsurf.tv.db.RedSurfDatabase
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.PlaylistEntity
@@ -28,7 +29,7 @@ import kotlinx.coroutines.withContext
 import java.net.URL
 import java.util.UUID
 
-private const val EPG_STALE_AFTER_MS = 24 * 60 * 60 * 1000L
+private const val HOUR_MS = 60 * 60 * 1000L
 private const val EPG_UPDATE_POLL_INTERVAL_MS = 3_000L
 private const val EPG_UPDATE_POLL_MAX_MS = 10 * 60 * 1000L
 
@@ -257,7 +258,7 @@ class MainViewModel : ViewModel() {
                         // own staggered initial delay, not instantly).
                         val lastCompleted = EpgSyncState.lastCompleted(c, playlist.id)
                         val stale = lastCompleted == 0L ||
-                            System.currentTimeMillis() - lastCompleted > EPG_STALE_AFTER_MS
+                            System.currentTimeMillis() - lastCompleted > AppPreferences(c).epgRefresh.value.hours * HOUR_MS
                         Log.d("RedSurf", "epgBackfill playlist=${playlist.id} lastCompleted=$lastCompleted stale=$stale")
                         EpgSyncScheduler.schedule(c, playlist.id, runNow = stale, staggerIndex = index)
                     }
