@@ -1,8 +1,10 @@
 package com.redsurf.tv.data
 
+import android.util.LruCache
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
+import androidx.room.InvalidationTracker
 import com.redsurf.tv.db.ChannelDao
 import com.redsurf.tv.epg.PublicEpg
 import com.redsurf.tv.db.ChannelEntity
@@ -18,6 +20,9 @@ import com.redsurf.tv.db.RecentChannelEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+
+/** Channels held by [ChannelRepository]'s category cache (S3). */
+private const val GROUP_CACHE_CHANNELS = 4_000
 
 /**
  * The Favorites category's `groupName` (TELEPORT_MENU.md, 2026-09-29). A private-use-area
@@ -164,9 +169,39 @@ class ChannelRepository(
     /** PHASE_3.md decision 4 - the Guide grid's channel rows, non-paged (see
      * `ChannelDao.allInGroup`'s own doc comment for why this is bounded per-category, not a
      * return to loading a whole playlist into memory). */
-    suspend fun channelsInGroup(playlistId: String, groupName: String): List<ChannelEntity> =
-        if (isFavoritesGroup(groupName)) favoriteDao.allInPlaylist(playlistId)
-        else channelDao.allInGroup(playlistId, groupName)
+    suspend fun channelsInGroup(playlistId: String, groupName: String): List<ChannelEntity> {
+        if (isFavoritesGroup(groupName)) return favoriteDao.allInPlaylist(playlistId)
+        val key = "$playlistId\u0000$groupName"
+        synchronized(groupCache) { groupCache.get(key) }?.let { return it }
+        val generation = synchronized(groupCache) { cacheGeneration }
+        val rows = channelDao.allInGroup(playlistId, groupName)
+        synchronized(groupCache) { if (generation == cacheGeneration) groupCache.put(key, rows) }
+        return rows
+    }
+
+    /**
+     * Performance salvage S3 (2026-10-26): recently-browsed categories' rows, so moving between
+     * categories during an EPG sync doesn't wait on storage the sync is saturating (the query
+     * took 100-325ms then, ~5ms idle - PERFORMANCE_SALVAGE.md L6). Sized in channels, not
+     * categories (some hold 1,000), and emptied by any write to `channels` - see [watchChannels].
+     */
+    private val groupCache = object : LruCache<String, List<ChannelEntity>>(GROUP_CACHE_CHANNELS) {
+        override fun sizeOf(key: String, value: List<ChannelEntity>) = value.size.coerceAtLeast(1)
+    }
+    private var cacheGeneration = 0
+
+    /** Called once with the database: any write to `channels` (import, favourite, hide, EPG
+     * matching) drops the cache. A query already in flight then doesn't store its result. */
+    fun watchChannels(tracker: InvalidationTracker) {
+        tracker.addObserver(object : InvalidationTracker.Observer("channels") {
+            override fun onInvalidated(tables: Set<String>) {
+                synchronized(groupCache) {
+                    cacheGeneration++
+                    groupCache.evictAll()
+                }
+            }
+        })
+    }
 
     /**
      * Programmes for a set of channels, keyed by `streamId`, provider first with the public

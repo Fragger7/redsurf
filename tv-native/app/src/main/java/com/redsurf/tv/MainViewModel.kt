@@ -203,6 +203,7 @@ class MainViewModel : ViewModel() {
         localDb = db
         appContext = context.applicationContext
         repository = ChannelRepository(db.channelDao(), db.playlistDao(), db.recentChannelDao(), db.epgDao(), db.favoriteChannelDao())
+        repository.watchChannels(db.invalidationTracker)
         checkLocalCache(context)
     }
 
