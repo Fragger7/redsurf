@@ -25,6 +25,13 @@ data class PlaylistChannelCount(val playlistId: String, val count: Int)
 
 @Dao
 interface ChannelDao {
+    /** Credential edit (Settings → Playlists → <playlist>): Xtream stream ids embed
+     * `server/live/user/pass/`, so a changed login rewrites that prefix in place - the row keeps
+     * its hidden flag (and recents/favourites keep pointing at it) instead of being re-imported
+     * as a new channel. */
+    @Query("UPDATE OR REPLACE channels SET streamId = :newPrefix || substr(streamId, length(:oldPrefix) + 1) WHERE playlistId = :playlistId AND substr(streamId, 1, length(:oldPrefix)) = :oldPrefix")
+    suspend fun rewriteStreamPrefix(playlistId: String, oldPrefix: String, newPrefix: String)
+
     // Kept for other DAO consumers (favorites, hide) - NOT used for rendering Live TV. Loading
     // every channel into memory is exactly the pattern PHASE_1.md #1.2/#2 replaces; see
     // getLiveGroupCounts and getLiveChannelsInGroup below for the paged, per-group equivalents.
@@ -231,6 +238,13 @@ interface ChannelDao {
  */
 @Dao
 interface RecentChannelDao {
+    /** Credential edit (Settings → Playlists → <playlist>): Xtream stream ids embed
+     * `server/live/user/pass/`, so a changed login rewrites that prefix in place - the row keeps
+     * its hidden flag (and recents/favourites keep pointing at it) instead of being re-imported
+     * as a new channel. */
+    @Query("UPDATE OR REPLACE recent_channels SET streamId = :newPrefix || substr(streamId, length(:oldPrefix) + 1) WHERE playlistId = :playlistId AND substr(streamId, 1, length(:oldPrefix)) = :oldPrefix")
+    suspend fun rewriteStreamPrefix(playlistId: String, oldPrefix: String, newPrefix: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: RecentChannelEntity)
 
@@ -273,6 +287,13 @@ interface RecentChannelDao {
  */
 @Dao
 interface FavoriteChannelDao {
+    /** Credential edit (Settings → Playlists → <playlist>): Xtream stream ids embed
+     * `server/live/user/pass/`, so a changed login rewrites that prefix in place - the row keeps
+     * its hidden flag (and recents/favourites keep pointing at it) instead of being re-imported
+     * as a new channel. */
+    @Query("UPDATE OR REPLACE favorite_channels SET streamId = :newPrefix || substr(streamId, length(:oldPrefix) + 1) WHERE playlistId = :playlistId AND substr(streamId, 1, length(:oldPrefix)) = :oldPrefix")
+    suspend fun rewriteStreamPrefix(playlistId: String, oldPrefix: String, newPrefix: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: FavoriteChannelEntity)
 
@@ -383,6 +404,9 @@ interface PlaylistDao {
 
     @Query("UPDATE playlists SET name = :name WHERE id = :id")
     suspend fun renamePlaylist(id: String, name: String)
+
+    @Query("UPDATE playlists SET serverUrl = :serverUrl, username = :username WHERE id = :id")
+    suspend fun updateConnection(id: String, serverUrl: String, username: String)
 }
 
 @Database(entities = [

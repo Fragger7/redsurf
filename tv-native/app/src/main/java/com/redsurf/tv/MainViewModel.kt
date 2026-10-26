@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.room.withTransaction
 import java.net.URL
 import java.util.UUID
 
@@ -485,6 +486,61 @@ class MainViewModel : ViewModel() {
             }
         }
     }
+
+    /**
+     * Settings → Playlists → <playlist> → Connection: edits a loaded playlist's login in place
+     * (AGENTS.md backlog, "edit existing credentials"). Xtream: the new login is checked against
+     * the panel first, then every stored stream id's `server/live/user/pass/` prefix is rewritten
+     * so hidden channels, recents, favourites and the resume pointer all survive; a blank
+     * [password] keeps the current one. M3U: [server] is the new playlist URL. Either way the
+     * channel list is then refreshed from the provider. Returns null on success, else the reason.
+     */
+    suspend fun updatePlaylistConnection(playlistId: String, server: String, username: String, password: String): String? =
+        withContext(Dispatchers.IO) {
+            val db = localDb ?: return@withContext "Database not ready"
+            val playlist = db.playlistDao().getPlaylistById(playlistId) ?: return@withContext "Playlist not found"
+            var cleanServer = server.trim().trimEnd('/')
+            if (cleanServer.isEmpty()) return@withContext "Server can't be empty"
+            if (!cleanServer.startsWith("http://") && !cleanServer.startsWith("https://")) cleanServer = "http://$cleanServer"
+            when (playlist.type) {
+                "xtream" -> {
+                    val user = username.trim()
+                    if (user.isEmpty()) return@withContext "Username can't be empty"
+                    val old = db.channelDao().firstForPlaylist(playlistId)?.streamId
+                        ?.let { XtreamApi.parseXtreamCredentials(it) }
+                    val pass = password.trim().ifEmpty { old?.third ?: return@withContext "Enter the password" }
+                    setPlaylistSyncStatus(playlistId, "Checking login…")
+                    if (!XtreamApi.authenticates(cleanServer, user, pass, playlist.userAgent)) {
+                        setPlaylistSyncStatus(playlistId, "Login rejected - nothing changed")
+                        return@withContext "The provider rejected this login"
+                    }
+                    if (old != null) {
+                        val oldPrefix = "${old.first}/live/${old.second}/${old.third}/"
+                        val newPrefix = "$cleanServer/live/$user/$pass/"
+                        if (oldPrefix != newPrefix) {
+                            db.withTransaction {
+                                db.channelDao().rewriteStreamPrefix(playlistId, oldPrefix, newPrefix)
+                                db.recentChannelDao().rewriteStreamPrefix(playlistId, oldPrefix, newPrefix)
+                                db.favoriteChannelDao().rewriteStreamPrefix(playlistId, oldPrefix, newPrefix)
+                            }
+                            appContext?.let { ctx ->
+                                val prefs = AppPreferences(ctx)
+                                prefs.getLastWatchedChannel()?.let { (pid, sid) ->
+                                    if (pid == playlistId && sid.startsWith(oldPrefix)) {
+                                        prefs.setLastWatchedChannel(pid, newPrefix + sid.removePrefix(oldPrefix))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    db.playlistDao().updateConnection(playlistId, cleanServer, user)
+                }
+                "m3u" -> db.playlistDao().updateConnection(playlistId, cleanServer, playlist.username)
+                else -> return@withContext "Not supported for this playlist type"
+            }
+            withContext(Dispatchers.Main) { refreshPlaylistChannels(playlistId) }
+            null
+        }
 
     override fun onCleared() {
         super.onCleared()

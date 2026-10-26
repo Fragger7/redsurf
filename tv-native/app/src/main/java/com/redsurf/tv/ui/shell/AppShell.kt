@@ -861,6 +861,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         playlistChannelCounts = playlistChannelCounts,
                         playlistSyncStatus = playlistSyncStatus,
                         onRenamePlaylist = { id, name -> viewModel.renamePlaylist(id, name) },
+                        onSavePlaylistConnection = { id, server, user, pass -> viewModel.updatePlaylistConnection(id, server, user, pass) },
                         onRefreshPlaylist = { id -> viewModel.refreshPlaylistChannels(id) },
                         onUpdatePlaylistEpg = { id -> viewModel.updatePlaylistEpg(id) },
                     )

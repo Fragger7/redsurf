@@ -200,6 +200,7 @@ fun SettingsScreen(
     playlistChannelCounts: Map<String, Int> = emptyMap(),
     playlistSyncStatus: Map<String, String> = emptyMap(),
     onRenamePlaylist: (String, String) -> Unit = { _, _ -> },
+    onSavePlaylistConnection: suspend (String, String, String, String) -> String? = { _, _, _, _ -> null },
     onRefreshPlaylist: (String) -> Unit = {},
     onUpdatePlaylistEpg: (String) -> Unit = {},
 ) {
@@ -394,6 +395,7 @@ fun SettingsScreen(
             playlistChannelCounts = playlistChannelCounts,
             playlistSyncStatus = playlistSyncStatus,
             onRenamePlaylist = onRenamePlaylist,
+            onSavePlaylistConnection = onSavePlaylistConnection,
             onRefreshPlaylist = onRefreshPlaylist,
             onUpdatePlaylistEpg = onUpdatePlaylistEpg,
             onDetailOpenChanged = { playlistDetailOpen = it },
@@ -640,6 +642,7 @@ private fun SettingsPane(
     playlistChannelCounts: Map<String, Int>,
     playlistSyncStatus: Map<String, String>,
     onRenamePlaylist: (String, String) -> Unit,
+    onSavePlaylistConnection: suspend (String, String, String, String) -> String?,
     onRefreshPlaylist: (String) -> Unit,
     onUpdatePlaylistEpg: (String) -> Unit,
     onDetailOpenChanged: (Boolean) -> Unit,
@@ -893,6 +896,7 @@ private fun SettingsPane(
                 onRefresh = { onRefreshPlaylist(openPlaylist.id) },
                 onUpdateEpg = { onUpdatePlaylistEpg(openPlaylist.id) },
                 onRename = { name -> onRenamePlaylist(openPlaylist.id, name) },
+                onSaveConnection = { server, user, pass -> onSavePlaylistConnection(openPlaylist.id, server, user, pass) },
                 onDelete = { closeDetail(addPlaylistFocus) { onDeletePlaylist(openPlaylist.id) } },
                 firstRowFocus = detailFirstFocus,
                 modifier = Modifier
@@ -971,6 +975,56 @@ private fun PlaylistEntity.typeLabel(): String = when (type) {
     else -> type.uppercase()
 }
 
+/**
+ * The per-playlist page's login editor (AGENTS.md backlog: "edit existing credentials" - fixing
+ * a changed/expired login without removing and re-adding the playlist). Xtream shows server,
+ * username and a password field left blank ("keep current", so the password is never put on
+ * screen); M3U shows its URL. Save checks the login with the provider before anything is written,
+ * then refreshes the channel list (MainViewModel.updatePlaylistConnection).
+ */
+@Composable
+private fun ConnectionEditor(playlist: PlaylistEntity, onSave: suspend (String, String, String) -> String?) {
+    val xtream = playlist.type == "xtream"
+    var server by remember(playlist.id, playlist.serverUrl) { mutableStateOf(playlist.serverUrl) }
+    var user by remember(playlist.id, playlist.username) { mutableStateOf(playlist.username) }
+    var pass by remember(playlist.id) { mutableStateOf("") }
+    var result by remember(playlist.id) { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val changed = server.trim().trimEnd('/') != playlist.serverUrl || user.trim() != playlist.username || pass.isNotBlank()
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Text("Connection", style = RedSurfType.rowSecondary, color = TextSecondary, modifier = Modifier.padding(vertical = 4.dp))
+        com.redsurf.tv.ui.onboarding.TvTextField(value = server, onValueChange = { server = it }, label = if (xtream) "Server" else "Playlist URL")
+        if (xtream) {
+            com.redsurf.tv.ui.onboarding.TvTextField(value = user, onValueChange = { user = it }, label = "Username")
+            com.redsurf.tv.ui.onboarding.TvTextField(value = pass, onValueChange = { pass = it }, label = "Password (blank keeps the current one)", isPassword = true)
+        }
+        Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            ActionChip(
+                label = when {
+                    saving -> "Checking…"
+                    changed -> "Save & update"
+                    else -> "No changes"
+                },
+                onClick = {
+                    if (!changed || saving) return@ActionChip
+                    saving = true
+                    scope.launch {
+                        val error = onSave(server, user, pass)
+                        saving = false
+                        result = error ?: "Saved - updating channels"
+                        if (error == null) pass = ""
+                    }
+                },
+            )
+            result?.let {
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(it, style = RedSurfType.rowSecondary, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
 @Composable
 private fun PlaylistRow(
     playlist: PlaylistEntity,
@@ -1037,6 +1091,7 @@ private fun PlaylistDetail(
     onRefresh: () -> Unit,
     onUpdateEpg: () -> Unit,
     onRename: (String) -> Unit,
+    onSaveConnection: suspend (String, String, String) -> String?,
     onDelete: () -> Unit,
     firstRowFocus: FocusRequester,
     modifier: Modifier = Modifier,
@@ -1092,8 +1147,12 @@ private fun PlaylistDetail(
             }
         }
         item { InfoRow("Type", playlist.typeLabel()) }
-        if (playlist.serverUrl.isNotBlank()) item { InfoRow("Server", playlist.serverUrl) }
-        if (playlist.username.isNotBlank()) item { InfoRow("Username", playlist.username) }
+        if (canRefresh) {
+            item { ConnectionEditor(playlist = playlist, onSave = onSaveConnection) }
+        } else {
+            if (playlist.serverUrl.isNotBlank()) item { InfoRow("Server", playlist.serverUrl) }
+            if (playlist.username.isNotBlank()) item { InfoRow("Username", playlist.username) }
+        }
         playlist.macAddress?.takeIf { it.isNotBlank() }?.let { mac -> item { InfoRow("MAC address", mac) } }
         playlist.userAgent?.takeIf { it.isNotBlank() }?.let { ua -> item { InfoRow("User agent", ua) } }
         item { InfoRow("Channels", channelCount?.let { "%,d".format(it) } ?: "—") }

@@ -119,6 +119,19 @@ object XtreamApi {
         }.getOrNull()
     }
 
+    /** True when the panel accepts this login (`user_info.auth` is 1). A wrong password still
+     * answers 200 with `auth: 0` on most panels, so a bare HTTP success isn't enough. */
+    suspend fun authenticates(serverUrl: String, user: String, pass: String, userAgent: String? = null): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder().url("$serverUrl/player_api.php?username=$user&password=$pass").build()
+            IptvNetworkModule.getOkHttpClient(userAgent).newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use false
+                val info = JSONObject(response.body?.string() ?: return@use false).optJSONObject("user_info") ?: return@use false
+                info.optString("auth", "1") == "1"
+            }
+        }.getOrDefault(false)
+    }
+
     suspend fun getMovies(serverUrl: String, user: String, pass: String, categoryId: String? = null, userAgent: String? = null): List<VodMovie> = withContext(Dispatchers.IO) {
         val action = if (categoryId == null) "get_vod_streams" else "get_vod_streams&category_id=$categoryId"
         val url = "$serverUrl/player_api.php?username=$user&password=$pass&action=$action"
