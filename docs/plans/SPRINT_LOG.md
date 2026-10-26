@@ -991,4 +991,6 @@ Commits e1817a9..f11332c. All build clean and unit tests pass; device status per
   shows the mark + wordmark. A sweep found no tv-material3 Button/Card or rounded shapes left
   outside the theme; the only hard-coded colours left are EPG's deliberate cool supplement tint
   and dead code (`MultiViewEngine`, `VodDashboard`).
+- **EPG public-guide key** (f78c548): "● Public guide" in the grid header when supplemented
+  listings are on screen - the legend for the existing tint + corner dot. Builds clean.
 - **Device:** the TV was in family use (PBS Kids) from ~10:00. DEVICE-RESULTS-PENDING.

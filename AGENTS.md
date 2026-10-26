@@ -653,6 +653,9 @@ before the report comes in, not after.
     test data this session - EPG entirely absent everywhere so far, but that's Phase 1/2 not
     having EPG at all yet, not evidence either way about the provider's own coverage once EPG
     sync exists).
+  - **Built 2026-10-26 (f78c548, VERIFY-PENDING):** cool-blue tint + corner dot per cell (EPG_WRAPUP
+    2.2), and a "● Public guide" key in the grid's date header, shown only when such listings are
+    on screen.
   - **Supplemented-data indicator - user idea 2026-09-15, refined: a colour legend on the EPG
     grid, not a per-entry text badge.** Agreed direction - a repeated text badge on every
     supplemented cell would be visual noise across a dense multi-row/multi-column grid; a subtle
