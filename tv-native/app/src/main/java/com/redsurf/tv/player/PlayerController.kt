@@ -44,6 +44,15 @@ import kotlin.math.roundToInt
 
 private const val TAG = "PlayerController"
 
+/** Brief §4.1/item 14: how far live-edge catch-up may speed up or slow down (Media3's own fallback
+ * is 0.97-1.03, too timid to recover a late join). Only HLS/DASH streams with a live window use it;
+ * plain Xtream .ts ignores it. Passthrough audio (AC3/EAC3) is held at 1.0x by the audio sink, so
+ * catch-up simply doesn't happen there (no glitch). Unverified on device: no HLS live channel found. */
+private val LIVE_SPEED = MediaItem.LiveConfiguration.Builder()
+    .setMinPlaybackSpeed(0.95f)
+    .setMaxPlaybackSpeed(1.06f)
+    .build()
+
 /**
  * The live stream's current characteristics, for the zap-banner/info-block badges
  * (PHASE_2.md #2.2, decision 7). A field is null - never a placeholder value - whenever ExoPlayer
@@ -504,8 +513,7 @@ class PlayerController(
     private var mimeOverride: String? = null
 
     private fun mediaItemFor(url: String): MediaItem =
-        if (mimeOverride == null) MediaItem.fromUri(url)
-        else MediaItem.Builder().setUri(url).setMimeType(mimeOverride).build()
+        MediaItem.Builder().setUri(url).setMimeType(mimeOverride).setLiveConfiguration(LIVE_SPEED).build()
 
     /** Stop playing and drop the stream (and its provider connection) without releasing the
      * player - the shared Live TV player outlives any one channel (L5, 2026-10-20). */
