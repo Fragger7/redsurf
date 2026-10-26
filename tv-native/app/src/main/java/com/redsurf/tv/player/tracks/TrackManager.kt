@@ -2,10 +2,12 @@ package com.redsurf.tv.player.tracks
 
 import android.content.Context
 import androidx.media3.common.C
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.common.TrackSelectionParameters
@@ -43,6 +45,19 @@ class TrackManager(private val context: Context, maxBufferMs: Int = 15_000) {
     )
     private val appPreferences = AppPreferences(context)
 
+    // Brief §2.5/item 11: rank video codecs by what this device decodes in *hardware*, probed
+    // once at runtime rather than hardcoded. Android 14's software AV1 decoder would otherwise let
+    // ABR pick an AV1 rendition the Chromecast's A55 cores can't keep up with; a future
+    // AV1-capable box gets it ranked automatically. A preference only orders the choice - an
+    // AV1-only stream still plays (or fails honestly via PlayerErrorMapper.videoFormatUnsupported).
+    private val hardwareVideoMimes: List<String> by lazy {
+        listOf(MimeTypes.VIDEO_H265, MimeTypes.VIDEO_H264, MimeTypes.VIDEO_VP9, MimeTypes.VIDEO_AV1).filter { mime ->
+            runCatching {
+                MediaCodecUtil.getDecoderInfos(mime, false, false).any { it.hardwareAccelerated }
+            }.getOrDefault(false)
+        }.also { android.util.Log.d("RedSurf", "hardware video decoders, preferred order: $it") }
+    }
+
     init {
         trackSelector.setParameters(withPersistedLanguages(trackSelector.buildUponParameters()).build())
     }
@@ -57,6 +72,7 @@ class TrackManager(private val context: Context, maxBufferMs: Int = 15_000) {
 
     private fun <B : TrackSelectionParameters.Builder> withPersistedLanguages(builder: B): B {
         val prefs = AppPreferences(context)
+        if (hardwareVideoMimes.isNotEmpty()) builder.setPreferredVideoMimeTypes(*hardwareVideoMimes.toTypedArray())
         val audio = prefs.preferredAudioLanguage.value
         val subtitle = prefs.preferredSubtitleLanguage.value
         builder
