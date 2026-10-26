@@ -58,6 +58,16 @@ per-step account in `docs/plans/SPRINT_LOG.md`'s 2026-10-26 entry):
 - **Versions:** local verification builds were v0.44.x while CI tags v0.55.x - CI's versionCode
   is the run number, so it must be >= the installed one before an OTA/`install -r` can land.
 
+- **Crest ornaments + EPG key** (f78c548, cf0f154, dfc1d0e): "● Public guide" key in the grid
+  header, crescent cap on the now-line, a countdown bar on the exit toast, crescent cut on the hero
+  video's right edge. **Account section** (05040c0): an Xtream playlist's page shows status/trial,
+  expiry and connections in use. Builds clean.
+- **Verification state at the stop:** commits e1817a9..05040c0 are builds clean + unit tests
+  (44/44 before 05040c0), **not device-verified** - the TV was in family use from ~10:00. Pushed at
+  the stop; CI run numbers (~192) are below the installed versionCode 204, so OTA won't land - install
+  the CI APK with uninstall/reinstall or bump the run count. **Test state left on the TV:** parental
+  PIN 1234, and "US| NFHS PPV · Faraz Strong" hidden (undo in Settings → Parental controls).
+
 **Next:** the user's feel-check of this run, then Cloud Sync's interview (item 7). Still grey in
 Settings, by choice: Language (English only), Accent (themes sprint), Backup & restore (Cloud
 Sync D1). "Show full category name on hold" was retired (marquee covers it; hold-OK is Hide).

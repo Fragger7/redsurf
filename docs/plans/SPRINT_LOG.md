@@ -996,4 +996,5 @@ Commits e1817a9..f11332c. All build clean and unit tests pass; device status per
 - **Crest ornaments** (cf0f154, dfc1d0e): the guide's now-line cap is now a crescent, the
   hero video's right edge carries the crescent cut (drawn over the SurfaceView, Lite spec), and
   the exit hint stays the full 4s confirm window with a red countdown bar. Builds clean.
-- **Device:** the TV was in family use (PBS Kids) from ~10:00. DEVICE-RESULTS-PENDING.
+- **Account section** (05040c0): an Xtream playlist's page shows Account (status, trial), Expires (date + days left, or Never) and Connections (X of Y in use), from `player_api.php` `user_info`; hidden if the fetch fails. Builds clean.
+- **Device:** the TV was in family use (PBS Kids) from ~10:00 and was not re-tested before the 13:10 stop. Everything from e1817a9 to 05040c0 is builds clean / unit tests 44/44 (before 05040c0); none of it is device-verified. Test state left on the TV: parental PIN 1234, "US| NFHS PPV · Faraz Strong" hidden.
