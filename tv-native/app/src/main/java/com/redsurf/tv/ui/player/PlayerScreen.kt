@@ -12,6 +12,8 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -761,6 +763,13 @@ fun PlayerScreen(
                         onChannelChanged(channel)
                         overlay = PlayerOverlay.ZapBanner
                     },
+                    // TiviMate's "Clear history" - the same one recent_channels table the Settings
+                    // row clears. Closing the picker hands focus back to the root (the overlay
+                    // change fires the reclaim effect), since the rows it held are gone.
+                    onClear = {
+                        scope.launch { repository.clearRecentChannels() }
+                        overlay = PlayerOverlay.None
+                    },
                     modifier = Modifier.align(Alignment.BottomEnd),
                 )
                 PickerKind.Audio -> AudioPicker(
@@ -1089,7 +1098,12 @@ private fun ChannelTile(channel: ChannelEntity, onClick: () -> Unit, modifier: M
  * picker kinds (Audio/Subtitles/Info) are #2.3's next slice.
  */
 @Composable
-private fun HistoryPicker(channels: List<ChannelEntity>, onSelect: (ChannelEntity) -> Unit, modifier: Modifier = Modifier) {
+private fun HistoryPicker(
+    channels: List<ChannelEntity>,
+    onSelect: (ChannelEntity) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     // Claims focus onto the most-recently-watched row the moment this picker opens from the Tiles floor.
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -1102,7 +1116,9 @@ private fun HistoryPicker(channels: List<ChannelEntity>, onSelect: (ChannelEntit
             .width(280.dp)
             .clip(RectangleShape)
             .background(Surface)
-            .padding(12.dp),
+            .padding(12.dp)
+            // Up to 30 rows plus Clear don't fit on screen; scrolling lets focus bring each into view.
+            .verticalScroll(rememberScrollState()),
     ) {
         Text(
             "History",
@@ -1112,7 +1128,7 @@ private fun HistoryPicker(channels: List<ChannelEntity>, onSelect: (ChannelEntit
         )
         if (channels.isEmpty()) {
             Text(
-                "Nothing watched yet this session",
+                "Nothing watched yet",
                 style = RedSurfType.rowSecondary,
                 color = TextSecondary,
                 modifier = Modifier.padding(8.dp),
@@ -1141,6 +1157,25 @@ private fun HistoryPicker(channels: List<ChannelEntity>, onSelect: (ChannelEntit
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+            }
+        }
+        if (channels.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            TvSurface(
+                onClick = onClear,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RedSurfFocus.shape(8.dp),
+                colors = RedSurfFocus.rowColors(),
+                scale = RedSurfFocus.scale(),
+                border = RedSurfFocus.border(),
+                glow = RedSurfFocus.glow(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(36.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Clear history", style = RedSurfType.rowTitle, color = TextSecondary)
                 }
             }
         }
