@@ -135,7 +135,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(20.dp))
-                                Text(s.message, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
+                                Text(s.message, color = TextPrimary, style = MaterialTheme.typography.titleMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                             }
                         }
                         is AppState.Onboarding -> {

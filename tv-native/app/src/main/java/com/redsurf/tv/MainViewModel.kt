@@ -625,7 +625,13 @@ class MainViewModel : ViewModel() {
                 var skipped = 0
 
                 withContext(Dispatchers.IO) {
-                    URL(cleanUrl).openStream().use { stream ->
+                    // Parse progress, not just a stored-count (AGENTS.md backlog "Progress feedback"
+                    // item 1): on a VOD-heavy M3U the live count stops climbing while the parser
+                    // chews through ~1.2M VOD/series lines it drops - the screen looked frozen.
+                    val connection = URL(cleanUrl).openConnection()
+                    val total = connection.contentLengthLong
+                    val counting = CountingInputStream(connection.getInputStream())
+                    counting.use { stream ->
                         M3uParser.parse(stream) { batch ->
                             val liveEntities = batch.mapNotNull { channel ->
                                 if (channel.streamType != "live") {
@@ -650,7 +656,9 @@ class MainViewModel : ViewModel() {
                                 localDb?.channelDao()?.insertChannels(liveEntities)
                                 imported += liveEntities.size
                             }
-                            _state.value = AppState.Loading("Importing $imported channels...")
+                            val read = if (total > 0) " · ${counting.count * 100 / total}% read" else ""
+                            val dropped = if (skipped > 0) "\nSkipping $skipped films and series$read" else read
+                            _state.value = AppState.Loading("Importing $imported channels...$dropped")
                         }
                     }
                 }
@@ -662,4 +670,17 @@ class MainViewModel : ViewModel() {
             }
         }
     }
+}
+
+/** Counts bytes read, for the M3U import's "% read" progress. */
+private class CountingInputStream(inner: java.io.InputStream) : java.io.FilterInputStream(inner) {
+    @Volatile var count = 0L
+        private set
+
+    override fun read(): Int = super.read().also { if (it >= 0) count++ }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int =
+        super.read(b, off, len).also { if (it > 0) count += it }
+
+    override fun skip(n: Long): Long = super.skip(n).also { count += it }
 }
