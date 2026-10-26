@@ -936,3 +936,9 @@ number known not to exist, or throttle the network mid-stream) before calling th
 **Release:** not cut this sprint - the user's own explicit workflow for this session was iterate
 on local signed builds throughout, cut one real release at the very end once satisfied. See
 `AGENTS.md`/git log for whether that release has landed by the time this is read.
+
+## 2026-10-26 overnight run - S1 preview ↔ fullscreen (v0.44.6)
+
+Single shared video view placed over the hero or the full window; PlayerScreen composes no view;
+grow/shrink animation removed (snap cut). Back first frame 174 → ~85ms, OK → fullscreen unchanged
+~75-119ms. User confirmed preview video (CNN HD). Details: `PERFORMANCE_SALVAGE.md` "S1".

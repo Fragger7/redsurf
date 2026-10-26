@@ -402,10 +402,9 @@ fun PlayerScreen(
         modifier = modifier
             .tracedMeasure("Player:measure")
             .fillMaxSize()
-            // Opaque black, painted before anything else (PHASE_1 round 6 - the browse Row stays
-            // composed underneath for state preservation, so a transparent letterbox gap on a
-            // non-16:9 channel would otherwise show it through).
-            .background(Color.Black)
+            // No background of its own any more (S1, 2026-10-26): the video is LiveTvScreen's one
+            // shared view, drawn under this screen, and that layer paints the opaque black that
+            // hides the browse UI behind a non-16:9 channel's letterbox (PHASE_1 round 6).
             // Focus trap - found live, 2026-09-12, reported as focus ending up "left of Live TV"
             // with Back then landing on the channel group. LiveTvScreen keeps its browse Row
             // (Categories/Channels/Preview) composed and real - invisible, but still focusable -
@@ -556,6 +555,7 @@ fun PlayerScreen(
                 fullscreen = true,
                 modifier = Modifier.fillMaxSize(),
                 blackScreenBetweenZaps = blackScreenBetweenZaps,
+                showView = false,
             )
         }
 

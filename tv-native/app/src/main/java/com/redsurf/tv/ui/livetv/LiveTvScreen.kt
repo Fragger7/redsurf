@@ -5,7 +5,8 @@ import com.redsurf.tv.diag.tracedMeasure
 import com.redsurf.tv.ui.LogoOrLetter
 import com.redsurf.tv.sync.EpgSyncScheduler
 import androidx.compose.runtime.key
-import com.redsurf.tv.player.SharedPreviewHost
+import com.redsurf.tv.player.LiveVideoView
+import androidx.compose.ui.graphics.Color
 import com.redsurf.tv.player.rememberPlayerController
 import com.redsurf.tv.player.PlayerController
 import com.redsurf.tv.ui.stableCallback
@@ -15,14 +16,10 @@ import com.redsurf.tv.diag.traced
 import androidx.compose.runtime.SideEffect
 import kotlinx.coroutines.Job
 import android.util.Log
-import com.redsurf.tv.player.VideoFrames
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -64,7 +61,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -251,49 +247,20 @@ fun LiveTvScreen(
     // autoPlayTrigger/claimInitialFocusTrigger both want "go straight to fullscreen," never the
     // two-step preview - they're "resume where I left off," not a fresh browse-and-select action
     // (PREVIEW.md point 5).
-    // Preview ↔ fullscreen grow/shrink (EPG_WRAPUP.md 2.4) - the frame-based version: a captured
-    // frame animates between the hero box and the full screen while the other player starts
-    // underneath. See player/VideoFrames.kt for why it isn't one continuous video yet.
+    // Where the one shared video view sits (S1, 2026-10-26): the hero's box while previewing, the
+    // whole window while fullscreen. It snaps between the two - TiviMate's own cut - instead of the
+    // old PixelCopy grow/shrink, which grabbed a frame before every switch and so delayed it.
     var heroThumbBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var screenBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     val windowSize = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
-    var transitionFrame by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-    var transitionGrow by remember { mutableStateOf(true) }
-    val transitionProgress = remember { androidx.compose.animation.core.Animatable(0f) }
-    val transitionAlpha = remember { androidx.compose.animation.core.Animatable(1f) }
-    val transitionContext = androidx.compose.ui.platform.LocalContext.current
-    val animationsOn = remember {
-        runCatching {
-            android.provider.Settings.Global.getFloat(
-                transitionContext.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
-            )
-        }.getOrDefault(1f) > 0f
-    }
-    LaunchedEffect(transitionFrame) {
-        if (transitionFrame == null) return@LaunchedEffect
-        transitionAlpha.snapTo(1f)
-        transitionProgress.snapTo(0f)
-        transitionProgress.animateTo(1f, tween(320, easing = FastOutSlowInEasing))
-        transitionAlpha.animateTo(0f, tween(220))
-        transitionFrame = null
-    }
 
     fun promoteToFullscreen(channel: ChannelEntity) {
-        val growFromPreview = animationsOn && isSameChannel(previewingChannel, channel) && heroThumbBounds != null
-        scope.launch {
-            // Grab before the preview is torn down; skipped (plain cut) if it fails.
-            val frame = if (growFromPreview) VideoFrames.grabPreview() else null
-            onFocusedChannelChanged(channel)
-            previewUrl = channel.streamId
-            recordRecent(channel)
-            previewingChannel = null
-            isFullscreen = true
-            onFullscreenChanged(true)
-            if (frame != null) {
-                transitionGrow = true
-                transitionFrame = frame.asImageBitmap()
-            }
-        }
+        onFocusedChannelChanged(channel)
+        previewUrl = channel.streamId
+        recordRecent(channel)
+        previewingChannel = null
+        isFullscreen = true
+        onFullscreenChanged(true)
     }
 
     // The grid's own onTuneChannel for its current-airing cell (LIVE_TV_GUIDE_MERGE.md - the
@@ -886,6 +853,49 @@ fun LiveTvScreen(
             }
         }
 
+        // The one shared video view (S1) - above the browse UI, below PlayerScreen's overlays. While
+        // fullscreen it covers the window in black, so a letterboxed channel never shows the guide.
+        val videoError by livePlayer.errorPresentation.collectAsState()
+        val previewVideo = !isFullscreen && previewingChannel != null && videoError == null && heroThumbBounds != null
+        if (visible && (isFullscreen || previewVideo)) {
+            Box(
+                modifier = Modifier
+                    .placedAt {
+                        val origin = screenBounds?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero
+                        val hero = heroThumbBounds
+                        if (isFullscreen || hero == null) {
+                            androidx.compose.ui.unit.IntRect(-origin.x.toInt(), -origin.y.toInt(),
+                                windowSize.width - origin.x.toInt(), windowSize.height - origin.y.toInt())
+                        } else {
+                            val r = hero.translate(-origin.x, -origin.y)
+                            androidx.compose.ui.unit.IntRect(r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt())
+                        }
+                    }
+                    .background(Color.Black),
+            ) {
+                traced("LiveVideoView") {
+                    LiveVideoView(
+                        controller = livePlayer,
+                        fullscreen = isFullscreen,
+                        blackScreenBetweenZaps = blackScreenBetweenZaps,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                if (!isFullscreen) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Accent)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text("LIVE", style = RedSurfType.badge, color = TextPrimary)
+                    }
+                }
+            }
+        }
+
         catchupFailed?.let { name ->
             Box(
                 modifier = Modifier
@@ -922,8 +932,7 @@ fun LiveTvScreen(
                 PlayerScreen(
                     streamUrl = catchupUrl ?: previewUrl,
                     focusRequester = fullscreenFocus,
-                    onExitFullscreen = { scope.launch {
-                        val frame = if (animationsOn && heroThumbBounds != null) VideoFrames.grabFullscreen() else null
+                    onExitFullscreen = {
                         // TiviMate parity (user, 2026-09-30): an ordinary Back out of fullscreen keeps
                         // the channel playing in the hero's preview pane, focus on its guide row; OK
                         // on it goes straight back to fullscreen (it's the previewing channel).
@@ -932,11 +941,7 @@ fun LiveTvScreen(
                         previewingChannel = focusedChannel
                         isFullscreen = false
                         onFullscreenChanged(false)
-                        if (frame != null) {
-                            transitionGrow = false
-                            transitionFrame = frame.asImageBitmap()
-                        }
-                    } },
+                    },
                     // LIVE_TV_GUIDE_MERGE.md M.1 - the player's "Guide" quick-action used to switch
                     // AppShell's destination to a separate Guide pill; that pill no longer exists, and
                     // this screen's browse view already always shows the grid, so the action is just
@@ -975,27 +980,6 @@ fun LiveTvScreen(
             }
         }
 
-        // The grow/shrink overlay (EPG_WRAPUP.md 2.4) - drawn above the player, never focusable.
-        val frame = transitionFrame
-        val hero = heroThumbBounds
-        val screen = screenBounds
-        if (frame != null && hero != null && screen != null) {
-            val heroLocal = hero.translate(-screen.left, -screen.top)
-            val full = androidx.compose.ui.geometry.Rect(0f, 0f, screen.width, screen.height)
-            val p = transitionProgress.value
-            val rect = if (transitionGrow) androidx.compose.ui.geometry.lerp(heroLocal, full, p)
-            else androidx.compose.ui.geometry.lerp(full, heroLocal, p)
-            val density = androidx.compose.ui.platform.LocalDensity.current
-            androidx.compose.foundation.Image(
-                bitmap = frame,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .offset { androidx.compose.ui.unit.IntOffset(rect.left.toInt(), rect.top.toInt()) }
-                    .size(with(density) { rect.width.toDp() }, with(density) { rect.height.toDp() })
-                    .graphicsLayer { alpha = transitionAlpha.value },
-            )
-        }
     }
 }
 
@@ -1208,20 +1192,7 @@ private fun ExpandedHero(
             if (previewingChannel != null && player != null) {
                 val error by player.errorPresentation.collectAsState()
                 if (error == null) {
-                    SharedPreviewHost(
-                        controller = player,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(RedSurfDensity.PanelRadius)),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Accent)
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    ) {
-                        Text("LIVE", style = RedSurfType.badge, color = TextPrimary)
-                    }
+                    // The video itself is Live TV's shared view, placed over this box (S1).
                 } else if (displayChannel != null) {
                     ChannelFallbackThumbnail(displayChannel)
                 }
@@ -1404,6 +1375,17 @@ private fun BrowseContextMenu(channelName: String, isFavorite: Boolean, modifier
  * it: sized to [windowSize], placed back at the window's origin ([topLeftInRoot] is Live TV's own
  * position). Drawing past a parent's bounds is fine - nothing above clips.
  */
+/** Places the content at [rect] (this layout's own coordinates), sized to it - read at layout
+ * time, so a move is a re-layout of this one node, never a recomposition. */
+private fun Modifier.placedAt(rect: () -> androidx.compose.ui.unit.IntRect): Modifier =
+    this.layout { measurable, constraints ->
+        val r = rect()
+        val placeable = measurable.measure(
+            androidx.compose.ui.unit.Constraints.fixed(r.width.coerceAtLeast(0), r.height.coerceAtLeast(0)),
+        )
+        layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(r.left, r.top) }
+    }
+
 private fun Modifier.fillWindow(windowSize: androidx.compose.ui.unit.IntSize, topLeftInRoot: () -> androidx.compose.ui.geometry.Offset): Modifier =
     this.layout { measurable, constraints ->
         val placeable = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(windowSize.width, windowSize.height))

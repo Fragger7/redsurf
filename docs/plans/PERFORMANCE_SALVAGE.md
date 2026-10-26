@@ -38,6 +38,21 @@ it, and to question whether foundational architecture decisions are wrong.
   RedSurf's footprint.
 - Seen in passing, to check: several adjacent guide rows show the same channel number (`3205`).
 
+## S1 - preview ↔ fullscreen, 2026-10-26 (overnight run, v0.44.6)
+
+One `LiveVideoView` in `LiveTvScreen` is the only `PlayerView`; it is placed over the hero thumb in
+preview and over the whole window in fullscreen (`Modifier.placedAt`), so entering/leaving
+fullscreen re-places the same SurfaceView instead of re-parenting the player. `PlayerScreen` keeps
+its effects/overlays but no longer composes a view (`PlayerHost(showView = false)`). The grow/shrink
+transition and its PixelCopy snapshot (EPG_WRAPUP 2.4) are gone - a snap cut, TiviMate parity;
+restoring an animation is an optional follow-up. **Measured (atrace, first doFrame after the key):**
+Back → preview 174ms → **75-91ms**; OK → fullscreen **75-119ms** (unchanged - the frame is
+recompose 46ms, LiveTvScreen 16ms of it, + measure/layout 20ms). **User verified on the TV:** CNN
+video shows in the preview box. Checked by adb: SurfaceFlinger places the layer at the hero (scale
+0.31) in preview and full-window in fullscreen; zap UP in fullscreen then Back lands focus on the
+zapped channel. Note: `screencap` cannot see HW-overlay video on this device (TiviMate's playing
+preview also captures black) - never judge video from a screenshot here.
+
 ## ▶ STATUS 2026-10-20 05:55 CDT - read this first (night 2, autonomous)
 
 **Installed on the TV:** the real CI release **v0.44.5** (run 172 - same app code as v0.44.4; cut so the TV could return to a genuine release after a reverted experiment had been installed as versionCode 172). **Version names:** CI's release
@@ -55,8 +70,8 @@ further down is history.
 | Guide 20×DOWN+20×UP | 98% janky, p50 250ms | **9.2%, p50 34ms**, p90 40 (v0.44.4) | 7.6%, 29ms |
 | Guide 10×RIGHT+10×LEFT | 36%, p90 200ms | **8.4%, p50 30ms, p90 38** | 1%, p50 32, p90 36 |
 | Categories 20×DOWN+20×UP | 69%, p50 200ms | **24-25%, p50 24ms, p90 57** (v0.41.25) | 7.5%, 18ms |
-| Fullscreen → Back | 100%, p50 200ms | **first frame 174ms** (UI trace, v0.41.27; gfxinfo 39-61% / p50 34-65, few frames) | 15%, 7ms |
-| OK → fullscreen, first frame | ~290ms (v0.41.16) | **~82ms** (UI trace, v0.41.27) | preview→fullscreen p50 57ms |
+| Fullscreen → Back | 100%, p50 200ms | 174ms (v0.41.27) → **~80-90ms** (UI trace, v0.44.6, 2026-10-26) | 15%, 7ms |
+| OK → fullscreen, first frame | ~290ms (v0.41.16) | ~82ms (v0.41.27); **75-100ms** (v0.44.6, unchanged) | preview→fullscreen p50 57ms |
 
 **Done tonight:** Compose 1.7 → 1.11 + toolchain (Kotlin 2.2, AGP 8.13, compileSdk 36) + Media3
 1.10.1; guide rows own focus (TiviMate F14) with painted timeline + label; categories commit after

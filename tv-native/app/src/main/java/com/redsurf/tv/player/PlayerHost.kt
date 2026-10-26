@@ -108,6 +108,9 @@ fun PlayerHost(
     // backed) - false (default) is this composable's existing "no-black-screen zapping" trick,
     // unchanged; true skips it, matching the old-cable-box behavior the user asked for.
     blackScreenBetweenZaps: Boolean = false,
+    // False when the caller already shows the video in a view of its own (Live TV's one shared
+    // view, S1 2026-10-26): this then only drives the stream, AFR and the black-between-zaps cut.
+    showView: Boolean = true,
 ) {
     val exoPlayer = controller.exoPlayer
     val context = LocalContext.current
@@ -166,7 +169,7 @@ fun PlayerHost(
     // controller that owns the state it cycles through.
     val resizeMode by controller.resizeMode.collectAsState()
 
-    AndroidView(
+    if (showView) AndroidView(
         factory = {
             inflatePlayerView(context).apply {
                 player = exoPlayer
