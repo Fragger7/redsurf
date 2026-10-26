@@ -4,11 +4,12 @@ import com.redsurf.tv.diag.tracedMeasure
 import com.redsurf.tv.sync.UserActivity
 import com.redsurf.tv.diag.traced
 import android.app.Activity
-import kotlin.math.roundToInt
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.graphicsLayer
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -221,7 +222,22 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             }
         }
     }
-    val navReveal by animateFloatAsState(if (navHidden) 0f else 1f, tween(240), label = "navReveal")
+    // Auto-hide re-layout (performance salvage S4, 2026-10-26; TIVIMATE_LEARNINGS.md F16): the
+    // slide is a translation of the whole column, never a height animation - animating the
+    // strip's height re-measured all of Live TV underneath on every frame of the 240ms. The
+    // layout changes exactly once: after the slide up, or just before the slide down.
+    val navSlide = remember { Animatable(1f) }
+    var navCollapsed by remember { mutableStateOf(false) }
+    var navStripPx by remember { mutableIntStateOf(0) }
+    LaunchedEffect(navHidden) {
+        if (navHidden) {
+            navSlide.animateTo(0f, tween(240))
+            navCollapsed = true
+        } else {
+            navCollapsed = false
+            navSlide.animateTo(1f, tween(240))
+        }
+    }
     val autoPlayLastChannelOnLaunch by appPreferences.autoPlayLastChannelOnLaunch.collectAsState()
     val teleportMenuEnabled by appPreferences.teleportMenuEnabled.collectAsState()
 
@@ -540,7 +556,12 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // regardless of `destination` - `rootModifier` (the safe area + long-press-Back interception)
     // moves here with it; the Column inside is unchanged otherwise.
     Box(modifier = rootModifier) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                translationY = if (liveTvFullscreen) 0f
+                else navStripPx * (navSlide.value - if (navCollapsed) 0f else 1f)
+            },
+        ) {
             // Kept composed through fullscreen, collapsed to zero height (performance salvage,
             // 2026-10-20): it used to be removed and rebuilt, ~75ms of the Back-from-fullscreen
             // frame (composition, text measure, the mark's bitmap decode). The player's focus trap
@@ -550,7 +571,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             Column(
                 modifier = Modifier.clipToBounds().layout { measurable, constraints ->
                     val placeable = measurable.measure(constraints)
-                    val height = if (liveTvFullscreen) 0 else (placeable.height * navReveal).roundToInt()
+                    if (placeable.height != navStripPx) navStripPx = placeable.height
+                    val height = if (liveTvFullscreen || navCollapsed) 0 else placeable.height
                     layout(placeable.width, height) { placeable.place(0, height - placeable.height) }
                 },
             ) {
