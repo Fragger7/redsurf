@@ -204,6 +204,23 @@ class AppPreferences(context: Context) {
         _startOn.value = next
     }
 
+    // Settings -> EPG "Time offset" (TiviMate's per-playlist "EPG time shift", kept global here):
+    // whole hours added to every programme's start/end when shown, for a provider whose XMLTV
+    // carries the wrong zone. OK cycles 0, +1 .. +12, -12 .. -1, back to 0.
+    private val _epgTimeOffsetHours = MutableStateFlow(prefs.getInt(KEY_EPG_TIME_OFFSET, 0))
+    val epgTimeOffsetHours: StateFlow<Int> = _epgTimeOffsetHours.asStateFlow()
+
+    fun cycleEpgTimeOffset() {
+        val cur = _epgTimeOffsetHours.value
+        val next = when {
+            cur == 12 -> -12
+            cur == -1 -> 0
+            else -> cur + 1
+        }
+        prefs.edit().putInt(KEY_EPG_TIME_OFFSET, next).apply()
+        _epgTimeOffsetHours.value = next
+    }
+
     /** "Home" or "LiveTv" - the destination Start on = Last used resumes; null before any. */
     fun getLastDestination(): String? = prefs.getString(KEY_LAST_DESTINATION, null)
 
@@ -269,6 +286,7 @@ class AppPreferences(context: Context) {
         private const val KEY_EPG_REFRESH = "epg_refresh"
         private const val KEY_AFR_ENABLED = "afr_enabled"
         private const val KEY_START_ON = "start_on"
+        private const val KEY_EPG_TIME_OFFSET = "epg_time_offset"
         private const val KEY_LAST_DESTINATION = "last_destination"
         private const val KEY_AUTO_UPDATE = "auto_update"
         private const val KEY_PREFERRED_SUBTITLE_LANGUAGE = "preferred_subtitle_language"

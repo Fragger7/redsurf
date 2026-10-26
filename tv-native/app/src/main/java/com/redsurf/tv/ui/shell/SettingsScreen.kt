@@ -143,6 +143,8 @@ fun SettingsScreen(
     publicEpgEnabled: Boolean = true,
     onTogglePublicEpg: () -> Unit = {},
     epgRefresh: EpgRefresh = EpgRefresh.Daily,
+    epgTimeOffsetHours: Int = 0,
+    onCycleEpgTimeOffset: () -> Unit = {},
     onCycleEpgRefresh: () -> Unit = {},
     navAutoHideSeconds: Int = 5,
     onCycleNavAutoHide: () -> Unit = {},
@@ -151,6 +153,7 @@ fun SettingsScreen(
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
     startOn: StartOn,
     onCycleStartOn: () -> Unit,
+    onClearWatchHistory: () -> Unit,
     // TELEPORT_MENU.md decision 1, 2026-09-19 - same AppPreferences pattern, the first live row
     // Remote control has ever had.
     teleportMenuEnabled: Boolean,
@@ -259,7 +262,8 @@ fun SettingsScreen(
         selectedCategory == SettingsCategory.Playback ||
         selectedCategory == SettingsCategory.Appearance ||
         selectedCategory == SettingsCategory.General ||
-        selectedCategory == SettingsCategory.RemoteControl
+        selectedCategory == SettingsCategory.RemoteControl ||
+        selectedCategory == SettingsCategory.Other
 
     Row(
         modifier = Modifier.hiddenButComposed(visible).fillMaxSize()
@@ -341,6 +345,8 @@ fun SettingsScreen(
             publicEpgEnabled = publicEpgEnabled,
             onTogglePublicEpg = onTogglePublicEpg,
             epgRefresh = epgRefresh,
+            epgTimeOffsetHours = epgTimeOffsetHours,
+            onCycleEpgTimeOffset = onCycleEpgTimeOffset,
             onCycleEpgRefresh = onCycleEpgRefresh,
             navAutoHideSeconds = navAutoHideSeconds,
             onCycleNavAutoHide = onCycleNavAutoHide,
@@ -348,6 +354,7 @@ fun SettingsScreen(
             onToggleAutoPlayLastChannelOnLaunch = onToggleAutoPlayLastChannelOnLaunch,
             startOn = startOn,
             onCycleStartOn = onCycleStartOn,
+            onClearWatchHistory = onClearWatchHistory,
             teleportMenuEnabled = teleportMenuEnabled,
             onToggleTeleportMenuEnabled = onToggleTeleportMenuEnabled,
             playlistChannelCounts = playlistChannelCounts,
@@ -570,6 +577,8 @@ private fun SettingsPane(
     publicEpgEnabled: Boolean = true,
     onTogglePublicEpg: () -> Unit = {},
     epgRefresh: EpgRefresh = EpgRefresh.Daily,
+    epgTimeOffsetHours: Int = 0,
+    onCycleEpgTimeOffset: () -> Unit = {},
     onCycleEpgRefresh: () -> Unit = {},
     navAutoHideSeconds: Int = 5,
     onCycleNavAutoHide: () -> Unit = {},
@@ -577,6 +586,7 @@ private fun SettingsPane(
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
     startOn: StartOn,
     onCycleStartOn: () -> Unit,
+    onClearWatchHistory: () -> Unit,
     teleportMenuEnabled: Boolean,
     onToggleTeleportMenuEnabled: () -> Unit,
     playlistChannelCounts: Map<String, Int>,
@@ -735,6 +745,8 @@ private fun SettingsPane(
                     onTogglePublicEpg = onTogglePublicEpg,
                     epgRefresh = epgRefresh,
                     onCycleEpgRefresh = onCycleEpgRefresh,
+                    epgTimeOffsetHours = epgTimeOffsetHours,
+                    onCycleEpgTimeOffset = onCycleEpgTimeOffset,
                 )
                 SettingsCategory.Playback -> playbackContent(
                     blackScreenBetweenZaps = blackScreenBetweenZaps,
@@ -765,6 +777,10 @@ private fun SettingsPane(
                 SettingsCategory.RemoteControl -> remoteControlContent(
                     teleportMenuEnabled = teleportMenuEnabled,
                     onToggle = onToggleTeleportMenuEnabled,
+                    firstRowFocus = firstRowFocus,
+                )
+                SettingsCategory.Other -> otherContent(
+                    onClearWatchHistory = onClearWatchHistory,
                     firstRowFocus = firstRowFocus,
                 )
                 else -> items(SETTINGS_GREY_ROWS[category].orEmpty()) { row -> GreyRowContent(row) }
@@ -1136,6 +1152,8 @@ private fun LazyListScope.epgContent(
     onTogglePublicEpg: () -> Unit,
     epgRefresh: EpgRefresh,
     onCycleEpgRefresh: () -> Unit,
+    epgTimeOffsetHours: Int,
+    onCycleEpgTimeOffset: () -> Unit,
 ) {
     item {
         LiveRow(
@@ -1185,6 +1203,13 @@ private fun LazyListScope.epgContent(
         )
     }
     item { LiveRow(label = "Refresh every", value = epgRefresh.label, onClick = onCycleEpgRefresh) }
+    item {
+        LiveRow(
+            label = "Time offset",
+            value = if (epgTimeOffsetHours > 0) "+${epgTimeOffsetHours}h" else "${epgTimeOffsetHours}h",
+            onClick = onCycleEpgTimeOffset,
+        )
+    }
     items(SETTINGS_GREY_ROWS.getValue(SettingsCategory.Epg)) { GreyRowContent(it) }
 }
 
@@ -1273,6 +1298,43 @@ private fun LazyListScope.generalContent(
     }
     item { LiveRow(label = "Start on", value = startOn.label, onClick = onCycleStartOn) }
     items(SETTINGS_GREY_ROWS[SettingsCategory.General].orEmpty()) { GreyRowContent(it) }
+}
+
+/** Other: "Clear watch history" is live - a two-press confirm done in place (the value reads
+ * "Press OK again" once armed, losing focus disarms it), so no row ever appears or disappears
+ * under focus. Clears the recent-channel tiles, the History picker and RIGHT's last-channel
+ * zap together, since all three read the one `recent_channels` table. */
+private fun LazyListScope.otherContent(
+    onClearWatchHistory: () -> Unit,
+    firstRowFocus: FocusRequester,
+) {
+    val rows = SETTINGS_GREY_ROWS[SettingsCategory.Other].orEmpty()
+    items(rows.take(1)) { GreyRowContent(it) }
+    item {
+        var armed by remember { mutableStateOf(false) }
+        var cleared by remember { mutableStateOf(false) }
+        LiveRow(
+            label = "Clear watch history",
+            value = when {
+                armed -> "Press OK again"
+                cleared -> "Cleared"
+                else -> "Clear"
+            },
+            onClick = {
+                if (armed) {
+                    armed = false
+                    cleared = true
+                    onClearWatchHistory()
+                } else {
+                    armed = true
+                }
+            },
+            modifier = Modifier
+                .focusRequester(firstRowFocus)
+                .onFocusChanged { if (!it.isFocused) armed = false },
+        )
+    }
+    items(rows.drop(1)) { GreyRowContent(it) }
 }
 
 /** Playback (`BACKLOG_SWEEP.md` #11): one live toggle - the "old cable box" black-screen-between-

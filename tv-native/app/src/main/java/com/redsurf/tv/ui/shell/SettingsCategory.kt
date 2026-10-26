@@ -43,11 +43,9 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
     SettingsCategory.General to listOf(
         GreyRow("Language", "System"),
     ),
-    // "Update EPG now" / "Last updated" / "Sources" / "Refresh every" are live rows in
+    // "Update EPG now" / "Last updated" / "Sources" / "Refresh every" / "Time offset" are live rows in
     // SettingsScreen.kt's epgContent.
-    SettingsCategory.Epg to listOf(
-        GreyRow("Time offset", "0h"),
-    ),
+    SettingsCategory.Epg to emptyList(),
     // "Resolution badge" flipped live (BACKLOG_SWEEP.md #12) - now AppearanceContent's own toggle
     // row in SettingsScreen.kt, not a grey row here.
     SettingsCategory.Appearance to listOf(
@@ -68,7 +66,6 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
     ),
     SettingsCategory.Other to listOf(
         GreyRow("Backup & restore", "—"),
-        GreyRow("Clear watch history", "—"),
         GreyRow("Diagnostics & logs", "—"),
     ),
 )

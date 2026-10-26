@@ -144,6 +144,10 @@ class ChannelRepository(
     fun recentChannels(limit: Int = 30): Flow<List<ChannelEntity>> =
         recentChannelDao.getRecentChannels(limit)
 
+    /** Settings → Other → Clear watch history: empties the recency index only (`channels` is
+     * untouched). Also drops the cold-launch resume target, which reads the newest row. */
+    suspend fun clearRecentChannels() = recentChannelDao.deleteAll()
+
     /** RIGHT's last-channel zap (decision 14) - the second-newest row, since the newest one is
      * whatever's actually playing right now. */
     suspend fun secondMostRecentChannel(): ChannelEntity? = recentChannelDao.getSecondMostRecentChannel()
@@ -209,8 +213,23 @@ class ChannelRepository(
      * decision 2026-09-15): a channel whose provider has *any* listing in the window uses only
      * those; otherwise its `epgFallbackId`'s public listings. Two batched queries, not one per row.
      */
+    /** Settings -> EPG "Time offset", in ms - set by AppShell from AppPreferences. Applied here,
+     * the one choke point every guide/hero/player lookup goes through: the query window is
+     * shifted back by it and the returned times forward, so stored rows stay as the provider sent. */
+    @Volatile var epgTimeOffsetMs: Long = 0L
+
     suspend fun programmesFor(channels: List<ChannelEntity>, windowStart: Long, windowEnd: Long): Map<String, List<EpgProgramEntity>> {
         if (channels.isEmpty()) return emptyMap()
+        val offset = epgTimeOffsetMs
+        if (offset != 0L) {
+            return programmesForRaw(channels, windowStart - offset, windowEnd - offset).mapValues { (_, list) ->
+                list.map { it.copy(startTime = it.startTime + offset, endTime = it.endTime + offset) }
+            }
+        }
+        return programmesForRaw(channels, windowStart, windowEnd)
+    }
+
+    private suspend fun programmesForRaw(channels: List<ChannelEntity>, windowStart: Long, windowEnd: Long): Map<String, List<EpgProgramEntity>> {
         val out = HashMap<String, List<EpgProgramEntity>>()
         channels.groupBy { it.playlistId }.forEach { (playlistId, inPlaylist) ->
             val providerIds = inPlaylist.mapNotNull { it.epgChannelId?.takeIf { id -> id.isNotBlank() } }.distinct()

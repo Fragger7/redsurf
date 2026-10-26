@@ -260,6 +260,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val doubleHeightRow by appPreferences.doubleHeightRow.collectAsState()
     val publicEpgEnabled by appPreferences.publicEpgEnabled.collectAsState()
     val epgRefresh by appPreferences.epgRefresh.collectAsState()
+    val epgTimeOffsetHours by appPreferences.epgTimeOffsetHours.collectAsState()
+    // Pushed into the repository before anything below reads programmes; LiveTvScreen keys its
+    // fetches on the same value so a change re-queries.
+    viewModel.repository.epgTimeOffsetMs = epgTimeOffsetHours * 3_600_000L
     val navAutoHideSeconds by appPreferences.navAutoHideSeconds.collectAsState()
     // Live TV only (2026-10-26): it hid on Home too, and Back from Live TV then landed on a Home
     // with no strip and nothing for LEFT/RIGHT to reach - it read as the remote going dead.
@@ -698,6 +702,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 traced("LiveTvScreen") {
                     LiveTvScreen(
                         viewModel = viewModel,
+                        epgTimeOffsetHours = epgTimeOffsetHours,
                         visible = destination == NavDestination.LiveTv,
                         onFullscreenChanged = { liveTvFullscreen = it },
                         onChannelsFocusChanged = { liveTvChannelsFocused = it },
@@ -788,6 +793,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                             // UPDATE keeps each playlist's timer and applies the new interval.
                             playlistIds.forEach { EpgSyncScheduler.schedule(syncContext, it, runNow = false) }
                         },
+                        epgTimeOffsetHours = epgTimeOffsetHours,
+                        onCycleEpgTimeOffset = { appPreferences.cycleEpgTimeOffset() },
                         navAutoHideSeconds = navAutoHideSeconds,
                         onCycleNavAutoHide = { appPreferences.cycleNavAutoHide() },
                         onToggleShowRawResolution = {
@@ -796,6 +803,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
                         startOn = startOn,
                         onCycleStartOn = { appPreferences.cycleStartOn() },
+                        onClearWatchHistory = { scope.launch { viewModel.repository.clearRecentChannels() } },
                         onToggleAutoPlayLastChannelOnLaunch = {
                             appPreferences.setAutoPlayLastChannelOnLaunch(!autoPlayLastChannelOnLaunch)
                         },

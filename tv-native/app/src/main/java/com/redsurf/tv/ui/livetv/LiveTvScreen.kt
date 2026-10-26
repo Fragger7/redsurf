@@ -116,6 +116,8 @@ import java.util.Locale
 @Composable
 fun LiveTvScreen(
     viewModel: MainViewModel,
+    // Settings -> EPG "Time offset" - only a re-query key here; the repository applies it.
+    epgTimeOffsetHours: Int = 0,
     onFullscreenChanged: (Boolean) -> Unit,
     // BACKLOG_SWEEP.md #8: lets AppShell exclude its own Home-jump BackHandler while real focus
     // is in the grid, mirroring the existing fullscreen mutual-exclusivity mechanism (see
@@ -437,7 +439,7 @@ fun LiveTvScreen(
     // hold-OK on it re-added it) - so while Favorites is showing, the favorites set itself is
     // part of this query's key.
     val favoritesStamp = if (isFavoritesGroup(queriedGroup?.groupName)) favoriteKeys else null
-    LaunchedEffect(queriedGroup, windowStart, favoritesStamp) {
+    LaunchedEffect(queriedGroup, windowStart, favoritesStamp, epgTimeOffsetHours) {
         val group = queriedGroup
         if (group == null) {
             gridChannels = emptyList()
@@ -487,7 +489,7 @@ fun LiveTvScreen(
     // switches), so it can't read from [gridPrograms]. Fetched once per channel/window; which
     // one is "current" is derived from the ticking clock below, so it rolls over on its own.
     var heroProgrammes by remember { mutableStateOf<List<EpgProgramEntity>>(emptyList()) }
-    LaunchedEffect(previewingChannel, windowStart) {
+    LaunchedEffect(previewingChannel, windowStart, epgTimeOffsetHours) {
         val channel = previewingChannel
         heroProgrammes = if (channel == null) {
             emptyList()
