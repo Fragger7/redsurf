@@ -123,3 +123,9 @@ tabular figures at all - keep it off numbers.)
   under Settings → Parental control → Hidden groups. RedSurf does the same: hold OK on a
   category → "Hide category", unhide under Parental controls → Hidden categories. The hidden set
   is keyed by playlist + raw group name, so it survives a re-import.
+- **Remote control:** TiviMate's is a full key-remap table (resource strings: "Long OK", "Long
+  Back", "Long Up"..., "Restore to defaults", hint "Long OK: open menu"), each key bound to an
+  action ("Show menu", "Add to Favorites", "Recent channels", "TV guide", "Search", "Record",
+  "Catch-up"). RedSurf keeps Back fixed (Back-peel + long-press Teleport/jump are its own model)
+  and offers the remap only for Long-press OK, with TiviMate's three most useful actions. A full
+  remap table can come later if asked for.

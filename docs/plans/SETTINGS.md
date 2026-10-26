@@ -172,7 +172,14 @@ Rows flipped live since the table above was written, all verified on the TV:
 - Player, not Settings, but the same "clear history" ask: the History picker (player Actions row)
   has a "Clear history" row at its end and now scrolls (v0.44.41). It wipes Room's
   `recent_channels`; never pressed during testing (it would wipe the family's recents).
+- **Playlists → (a playlist) → Connection** (v0.44.42): edit the server/URL, username and password
+  of an existing playlist. The password is never shown; blank keeps the current one. "Save &
+  update" first checks the login with the provider (Xtream `player_api.php`), then rewrites the
+  stored stream URLs' prefix and re-imports. VERIFY-PENDING: renders; a real save was deliberately
+  not tried on the family's playlists.
+- **Remote control → Long-press OK** (v0.44.43): what holding OK does in the fullscreen player -
+  Context menu (default) / Add/remove favourite (with the usual toast) / Recent channels (opens the
+  History picker). TiviMate remaps every long key; this is its most-used one. VERIFY-PENDING.
 
 Still grey: General → Language (the app is English only); Appearance → Show full category name on
-hold (the focused-row marquee already shows it), Accent (themes wait for their own sprint); Remote
-control → Long-press OK; Other → Backup & restore (overlaps Cloud Sync's credentials decision D1).
+hold (the focused-row marquee already shows it), Accent (themes wait for their own sprint); Other → Backup & restore (overlaps Cloud Sync's credentials decision D1).

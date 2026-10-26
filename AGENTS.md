@@ -44,7 +44,14 @@ per-step account in `docs/plans/SPRINT_LOG.md`'s 2026-10-26 entry):
 - **Smaller fixes, same run:** Teleport crescent tick drawn white; the player's History picker
   gained "Clear history" and scrolls; recents already persist in Room's `recent_channels` (the
   old "recents survive relaunch" backlog item is done); OTA download now shows a progress chip
-  (backlog "Progress feedback" item 2 - item 1, import parse progress, is still open).
+  (backlog "Progress feedback" item 2); M3U import now shows parse progress (% read, films/series
+  skipped - item 1, 818a1b5). Both progress items are built; neither is device-verified yet.
+- **Playlist credential editor** (1455d02): a playlist's own Settings page has a "Connection"
+  section - server/URL, username, password (blank keeps the current one), "Save & update" checks
+  the login before saving. Builds clean; not saved against a real playlist on the TV (would risk
+  breaking one).
+- **Remote control → Long-press OK** (58226b9): Context menu / Add/remove favourite / Recent
+  channels, in the fullscreen player. Builds clean; VERIFY-PENDING.
 - **Versions:** local verification builds were v0.44.x while CI tags v0.55.x - CI's versionCode
   is the run number, so it must be >= the installed one before an OTA/`install -r` can land.
 
@@ -929,7 +936,8 @@ before the report comes in, not after.
   between resolved it - no longer a live concern, but if a future session hits dead streams again,
   don't assume the credentials are still good without checking first, the same caution as before.
 - **Playlist management: edit existing credentials, and a real detail view (server/user/type -
-  not just the name)** (user, 2026-09-16). Today Settings → Playlists only shows the name and a
+  not just the name)** (user, 2026-09-16). **Update 2026-10-26: built** - each playlist has its
+  own page, and its "Connection" section edits server/URL, username and password (1455d02). Today Settings → Playlists only shows the name and a
   Remove action (`PLAYLIST_GREY_ROWS` already has "Rename" as a grey row, `SETTINGS.md`) - there's
   no way to see what's actually configured for a loaded playlist, or to fix credentials that
   changed/expired (exactly the situation the dead test list above just created) without deleting
