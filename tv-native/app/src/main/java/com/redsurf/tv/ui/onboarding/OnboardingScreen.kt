@@ -356,6 +356,8 @@ fun TvTextField(
                     false
                 }
             },
+        // Crest: square corners, like every other focusable.
+        shape = RectangleShape,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Accent,
             unfocusedBorderColor = Color.DarkGray,

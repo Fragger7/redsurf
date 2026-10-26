@@ -242,8 +242,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val doubleHeightRow by appPreferences.doubleHeightRow.collectAsState()
     val publicEpgEnabled by appPreferences.publicEpgEnabled.collectAsState()
     val navAutoHideSeconds by appPreferences.navAutoHideSeconds.collectAsState()
-    LaunchedEffect(navHasFocus, navAutoHideSeconds) {
-        if (navHasFocus || navAutoHideSeconds == 0) {
+    // Live TV only (2026-10-26): it hid on Home too, and Back from Live TV then landed on a Home
+    // with no strip and nothing for LEFT/RIGHT to reach - it read as the remote going dead.
+    LaunchedEffect(navHasFocus, navAutoHideSeconds, destination) {
+        if (navHasFocus || navAutoHideSeconds == 0 || destination != NavDestination.LiveTv) {
             navHidden = false
             return@LaunchedEffect
         }
@@ -700,6 +702,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 val updateStatus by viewModel.updateStatus.collectAsState()
                 val epgSyncStatus by viewModel.epgSyncStatus.collectAsState()
                 val playlists by remember { viewModel.repository.playlists() }.collectAsState(initial = emptyList())
+                val playlistSyncStatus by viewModel.playlistSyncStatus.collectAsState()
+                val playlistChannelCounts by remember { viewModel.playlistChannelCounts() }.collectAsState(initial = emptyMap())
                 val context = LocalContext.current
                 // The EPG pane's "Last updated"/"Last attempt" rows read persisted markers -
                 // refresh them whenever that category is shown, not once per process.
@@ -749,6 +753,11 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                             appPreferences.setTeleportMenuEnabled(!teleportMenuEnabled)
                         },
                         visible = destination == NavDestination.Settings,
+                        playlistChannelCounts = playlistChannelCounts,
+                        playlistSyncStatus = playlistSyncStatus,
+                        onRenamePlaylist = { id, name -> viewModel.renamePlaylist(id, name) },
+                        onRefreshPlaylist = { id -> viewModel.refreshPlaylistChannels(id) },
+                        onUpdatePlaylistEpg = { id -> viewModel.updatePlaylistEpg(id) },
                     )
                 }
             }

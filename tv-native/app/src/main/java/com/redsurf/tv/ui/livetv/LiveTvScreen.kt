@@ -791,7 +791,9 @@ fun LiveTvScreen(
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(RedSurfDensity.ColumnGap)) {
                 traced("GroupsColumn") {
                     GroupsColumn(
-                        claimInitialFocus = !channelsHasFocus,
+                        // Hidden-but-composed (Settings open): a playlist refresh replaces `groups`
+                        // and must not let this one-shot pull focus out of the visible screen.
+                        claimInitialFocus = visible && !channelsHasFocus,
                         groups = groups,
                         selectedGroup = selectedGroup,
                         onGroupFocused = { group ->

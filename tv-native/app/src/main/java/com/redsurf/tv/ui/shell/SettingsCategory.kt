@@ -82,12 +82,6 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
 
 /** Playlists' per-playlist grey rows (`SETTINGS.md`) - shown under every loaded playlist's real
  * Remove action, not once per category. */
-val PLAYLIST_GREY_ROWS: List<GreyRow> = listOf(
-    GreyRow("Rename", "—"),
-    GreyRow("Refresh / re-sync", "—"),
-    GreyRow("Content", "Live+VOD"),
-)
-
 /** About's one grey row, alongside its live version/update rows. */
 val ABOUT_GREY_ROWS: List<GreyRow> = listOf(
     GreyRow("Auto-update", "On"),

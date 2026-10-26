@@ -373,6 +373,114 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    // Settings → Playlists → <playlist> (TiviMate's per-playlist page: Update playlist, Update EPG,
+    // rename). Status text per playlist id; jobs keyed so a second press doesn't start a parallel
+    // re-sync of the same playlist.
+    private val _playlistSyncStatus = MutableStateFlow<Map<String, String>>(emptyMap())
+    val playlistSyncStatus: StateFlow<Map<String, String>> = _playlistSyncStatus.asStateFlow()
+    private val playlistSyncJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+
+    private fun setPlaylistSyncStatus(id: String, text: String) {
+        _playlistSyncStatus.value = _playlistSyncStatus.value + (id to text)
+    }
+
+    fun playlistChannelCounts(): kotlinx.coroutines.flow.Flow<Map<String, Int>> =
+        localDb?.channelDao()?.liveCountsByPlaylist()
+            ?.let { f -> kotlinx.coroutines.flow.flow { f.collect { l -> emit(l.associate { it.playlistId to it.count }) } } }
+            ?: kotlinx.coroutines.flow.flowOf(emptyMap())
+
+    fun renamePlaylist(playlistId: String, name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) { localDb?.playlistDao()?.renamePlaylist(playlistId, clean) }
+    }
+
+    fun updatePlaylistEpg(playlistId: String) {
+        appContext?.let { EpgSyncScheduler.schedule(it, playlistId, runNow = true) }
+        setPlaylistSyncStatus(playlistId, "Guide update started")
+    }
+
+    /**
+     * Re-imports one playlist's live channels in place, without leaving Settings (no Loading
+     * screen - the rest of the app keeps working). Rows are upserted, rows the provider no longer
+     * lists are removed afterwards, and per-channel hidden flags survive the REPLACE. If the
+     * provider returns nothing, the existing list is kept untouched (a failed panel shouldn't
+     * empty the guide). Xtream re-reads its credentials from a channel URL (same as
+     * EpgSyncWorker); M3U re-reads serverUrl, which holds the M3U URL. Stalker isn't supported.
+     */
+    fun refreshPlaylistChannels(playlistId: String) {
+        if (playlistSyncJobs[playlistId]?.isActive == true) return
+        val db = localDb ?: return
+        playlistSyncJobs[playlistId] = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val playlist = db.playlistDao().getPlaylistById(playlistId) ?: return@launch
+                val dao = db.channelDao()
+                setPlaylistSyncStatus(playlistId, "Updating…")
+                val before = dao.streamIdsForPlaylist(playlistId).toHashSet()
+                val hidden = dao.hiddenIdsForPlaylist(playlistId)
+                val seen = HashSet<String>()
+                suspend fun upsert(entities: List<ChannelEntity>) {
+                    if (entities.isEmpty()) return
+                    dao.insertChannels(entities)
+                    entities.mapTo(seen) { it.streamId }
+                    setPlaylistSyncStatus(playlistId, "Updating… ${seen.size} channels")
+                }
+                when (playlist.type) {
+                    "xtream" -> {
+                        val sample = dao.firstForPlaylist(playlistId)?.streamId
+                            ?: error("No channel to read credentials from")
+                        val (server, user, pass) = XtreamApi.parseXtreamCredentials(sample)
+                            ?: error("Couldn't read credentials")
+                        XtreamApi.getLiveStreams(server, user, pass, playlist.userAgent) { batch ->
+                            upsert(batch.map { s ->
+                                ChannelEntity(
+                                    streamId = "$server/live/$user/$pass/${s.streamId}.ts",
+                                    playlistId = playlistId, groupId = "default", num = s.num,
+                                    name = s.name, streamType = "live", streamIcon = s.streamIcon,
+                                    epgChannelId = s.epgChannelId, groupName = s.groupName,
+                                    tvArchiveDays = s.archiveDays,
+                                )
+                            })
+                        }
+                    }
+                    "m3u" -> {
+                        val counters = mutableMapOf<String, Int>()
+                        URL(playlist.serverUrl.trim()).openStream().use { stream ->
+                            M3uParser.parse(stream) { batch ->
+                                upsert(batch.mapNotNull { c ->
+                                    if (c.streamType != "live") return@mapNotNull null
+                                    val fallback = counters.getOrDefault(c.group, 0)
+                                    counters[c.group] = fallback + 1
+                                    ChannelEntity(
+                                        streamId = c.streamUrl, playlistId = playlistId,
+                                        groupId = "default", num = c.chno ?: fallback, name = c.name,
+                                        streamType = "live", streamIcon = c.logoUrl,
+                                        epgChannelId = c.epgId, groupName = c.group,
+                                    )
+                                })
+                            }
+                        }
+                    }
+                    else -> { setPlaylistSyncStatus(playlistId, "Not supported for this playlist type"); return@launch }
+                }
+                if (seen.isEmpty()) {
+                    setPlaylistSyncStatus(playlistId, "Provider returned no channels - kept the current list")
+                    return@launch
+                }
+                val stale = before.filter { it !in seen }
+                stale.chunked(500).forEach { dao.deleteChannels(playlistId, it) }
+                hidden.filter { it in seen }.chunked(500).forEach { dao.markHidden(playlistId, it) }
+                // REPLACE dropped each row's public-EPG match; the guide sync recomputes it.
+                appContext?.let { EpgSyncScheduler.schedule(it, playlistId, runNow = true) }
+                val removed = if (stale.isNotEmpty()) " · ${stale.size} removed" else ""
+                setPlaylistSyncStatus(playlistId, "Updated · ${"%,d".format(seen.size)} channels$removed")
+            } catch (e: Exception) {
+                Log.w("RedSurf", "playlist refresh failed: $playlistId", e)
+                setPlaylistSyncStatus(playlistId, "Failed: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         pairingServer?.stop()

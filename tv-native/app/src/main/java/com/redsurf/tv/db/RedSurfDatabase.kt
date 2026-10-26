@@ -20,6 +20,9 @@ data class StreamValue(val streamId: String, val value: String)
 
 data class GroupCount(val playlistId: String, val playlistName: String, val groupName: String, val count: Int)
 
+/** Settings → Playlists: live channel count per playlist. */
+data class PlaylistChannelCount(val playlistId: String, val count: Int)
+
 @Dao
 interface ChannelDao {
     // Kept for other DAO consumers (favorites, hide) - NOT used for rendering Live TV. Loading
@@ -139,6 +142,24 @@ interface ChannelDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChannels(channels: List<ChannelEntity>)
+
+    /** Settings → Playlists rows ("XTREAM · 28,412 channels"). */
+    @Query("SELECT playlistId, COUNT(*) AS count FROM channels WHERE streamType = 'live' GROUP BY playlistId")
+    fun liveCountsByPlaylist(): Flow<List<PlaylistChannelCount>>
+
+    /** Re-sync ("Update channels"): what the playlist held before, so rows the provider dropped
+     * can be removed and per-channel user flags survive insertChannels' REPLACE. */
+    @Query("SELECT streamId FROM channels WHERE playlistId = :playlistId")
+    suspend fun streamIdsForPlaylist(playlistId: String): List<String>
+
+    @Query("SELECT streamId FROM channels WHERE playlistId = :playlistId AND isHidden = 1")
+    suspend fun hiddenIdsForPlaylist(playlistId: String): List<String>
+
+    @Query("DELETE FROM channels WHERE playlistId = :playlistId AND streamId IN (:streamIds)")
+    suspend fun deleteChannels(playlistId: String, streamIds: List<String>)
+
+    @Query("UPDATE channels SET isHidden = 1 WHERE playlistId = :playlistId AND streamId IN (:streamIds)")
+    suspend fun markHidden(playlistId: String, streamIds: List<String>)
 
     // Scoped by playlistId too (BACKLOG_SWEEP.md #13) - streamId alone is only unique within one
     // provider, matching ChannelEntity's own composite primary key.
@@ -351,6 +372,9 @@ interface PlaylistDao {
      * behind, the same reasoning as deleteAllChannels/deleteAllPlaylists above. */
     @Query("DELETE FROM playlists WHERE id = :id")
     suspend fun deletePlaylist(id: String)
+
+    @Query("UPDATE playlists SET name = :name WHERE id = :id")
+    suspend fun renamePlaylist(id: String, name: String)
 }
 
 @Database(entities = [

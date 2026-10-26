@@ -34,6 +34,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -153,8 +154,17 @@ fun SettingsScreen(
     // DOWN from the Settings pill (AppShell sends a new nonce): land on the selected category's
     // rail row - spatial search dropped into the pane, which sits directly under that pill.
     railEntryRequest: Long = 0L,
+    // Settings → Playlists → <playlist> (TiviMate's per-playlist page), owned by MainViewModel.
+    playlistChannelCounts: Map<String, Int> = emptyMap(),
+    playlistSyncStatus: Map<String, String> = emptyMap(),
+    onRenamePlaylist: (String, String) -> Unit = { _, _ -> },
+    onRefreshPlaylist: (String) -> Unit = {},
+    onUpdatePlaylistEpg: (String) -> Unit = {},
 ) {
     val railFocus = remember { FocusRequester() }
+    // A playlist's own page is open in the pane - Back closes it (the pane's own BackHandler)
+    // instead of jumping to the rail.
+    var playlistDetailOpen by remember { mutableStateOf(false) }
     val paneFirstRowFocus = remember { FocusRequester() }
     var focusInPane by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -210,7 +220,7 @@ fun SettingsScreen(
     // focus just doesn't move) - a real Compose quirk this session hit twice trying to use it for
     // exactly this rail-return case (see [SettingsPane]'s doc comment for the fuller account).
     // Plain arrow-key-driven `moveFocus()` never has this problem, so Back uses it too.
-    BackHandler(enabled = focusInPane) {
+    BackHandler(enabled = focusInPane && !playlistDetailOpen) {
         focusManager.moveFocus(FocusDirection.Left)
     }
 
@@ -309,6 +319,12 @@ fun SettingsScreen(
             onToggleAutoPlayLastChannelOnLaunch = onToggleAutoPlayLastChannelOnLaunch,
             teleportMenuEnabled = teleportMenuEnabled,
             onToggleTeleportMenuEnabled = onToggleTeleportMenuEnabled,
+            playlistChannelCounts = playlistChannelCounts,
+            playlistSyncStatus = playlistSyncStatus,
+            onRenamePlaylist = onRenamePlaylist,
+            onRefreshPlaylist = onRefreshPlaylist,
+            onUpdatePlaylistEpg = onUpdatePlaylistEpg,
+            onDetailOpenChanged = { playlistDetailOpen = it },
             firstRowFocus = paneFirstRowFocus,
             onFocusChanged = { focusInPane = it },
             modifier = Modifier.weight(1.8f),
@@ -518,6 +534,12 @@ private fun SettingsPane(
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
     teleportMenuEnabled: Boolean,
     onToggleTeleportMenuEnabled: () -> Unit,
+    playlistChannelCounts: Map<String, Int>,
+    playlistSyncStatus: Map<String, String>,
+    onRenamePlaylist: (String, String) -> Unit,
+    onRefreshPlaylist: (String) -> Unit,
+    onUpdatePlaylistEpg: (String) -> Unit,
+    onDetailOpenChanged: (Boolean) -> Unit,
     firstRowFocus: FocusRequester,
     onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -527,25 +549,114 @@ private fun SettingsPane(
     // see PlaylistBlock's "Confirm remove" handler.
     val addPlaylistFocus = remember { FocusRequester() }
 
+    // Playlists → <playlist>: a third level, drilled into from the list (TiviMate's per-playlist
+    // page). FOCUS_MODEL.md choreography - a focused node is never structurally removed or
+    // unplaced. Open: the page composes *over* the still-placed list (list at alpha 0), focus
+    // moves onto the page's first row (bounded retry), and only then is the list unplaced.
+    // Close: the list is placed again under the page, focus moves back onto the exact row that
+    // opened it (deterministic return, bounded retry - its lazy item recomposes first), and only
+    // then is the page removed. A delete closes onto "Add another playlist" and deletes after.
+    var detailId by remember { mutableStateOf<String?>(null) }
+    var listHidden by remember { mutableStateOf(false) }
+    var closeTarget by remember { mutableStateOf<FocusRequester?>(null) }
+    var afterClose by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var detailHasFocus by remember { mutableStateOf(false) }
+    var listHasFocus by remember { mutableStateOf(false) }
+    val detailFirstFocus = remember { FocusRequester() }
+    val playlistRowFocus = remember { mutableMapOf<String, FocusRequester>() }
+    val closeDetail: (FocusRequester?, (() -> Unit)?) -> Unit = { target, then ->
+        if (detailId != null && closeTarget == null) {
+            listHidden = false
+            afterClose = then
+            closeTarget = target ?: firstRowFocus
+        }
+    }
+    val resetDetail = {
+        detailId = null
+        listHidden = false
+        closeTarget = null
+        afterClose = null
+    }
+    LaunchedEffect(detailId != null) { onDetailOpenChanged(detailId != null) }
+    LaunchedEffect(detailId) {
+        if (detailId == null || closeTarget != null) return@LaunchedEffect
+        repeat(20) {
+            runCatching { detailFirstFocus.requestFocus() }
+            delay(50)
+            if (detailHasFocus) {
+                listHidden = true
+                return@LaunchedEffect
+            }
+            delay(100)
+        }
+        Log.w(TAG, "playlist page never got focus - back to the list")
+        resetDetail() // never got focus - stay on the list rather than strand the user
+    }
+    LaunchedEffect(closeTarget) {
+        val target = closeTarget ?: return@LaunchedEffect
+        for (attempt in 0 until 20) {
+            runCatching { target.requestFocus() }
+            delay(50)
+            if (listHasFocus) break
+            delay(100)
+        }
+        val then = afterClose
+        resetDetail()
+        then?.invoke()
+    }
+    // LEFT out of a playlist's page lands on the rail; the page doesn't wait there for a return
+    // - the list is back. Debounced: the open handoff (list -> page) briefly reports no focus in
+    // the pane, and an immediate reset there closed the page the moment it opened.
+    var paneHasFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(paneHasFocus) {
+        if (paneHasFocus) return@LaunchedEffect
+        delay(250)
+        if (detailId != null && closeTarget == null) {
+            Log.d(TAG, "playlist page reset: focus left the pane")
+            resetDetail()
+        }
+    }
+    LaunchedEffect(category) { if (category != SettingsCategory.Playlists) resetDetail() }
+    LaunchedEffect(playlists, detailId) {
+        if (detailId != null && closeTarget == null && playlists.none { it.id == detailId }) resetDetail()
+    }
+    BackHandler(enabled = detailId != null && closeTarget == null) {
+        closeDetail(detailId?.let { playlistRowFocus[it] }, null)
+    }
+    val openPlaylist = playlists.firstOrNull { it.id == detailId }
+
     Column(
         modifier = modifier
             .fillMaxHeight()
             .padding(top = 14.dp)
             .onFocusChanged { state ->
-                if (state.hasFocus && !hadFocus) {
+                // Not while a playlist's page is open: moving focus from the list onto the page
+                // reports a transient pane focus loss (found live, v0.44.22), and redirecting
+                // here bounced focus back onto the list's first row.
+                if (state.hasFocus && !hadFocus && detailId == null) {
                     runCatching { firstRowFocus.requestFocus() }
                 }
+                paneHasFocus = state.hasFocus
                 hadFocus = state.hasFocus
                 onFocusChanged(state.hasFocus)
             },
     ) {
         Text(
-            category.label,
+            if (openPlaylist != null) "${category.label}  ›  ${openPlaylist.name}" else category.label,
             style = RedSurfType.sectionTitle,
             color = TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(bottom = 10.dp, start = 4.dp),
         )
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier
+                .hiddenButComposed(!listHidden)
+                .graphicsLayer { alpha = if (detailId != null && closeTarget == null) 0f else 1f }
+                .onFocusChanged { listHasFocus = it.hasFocus },
+        ) {
             when (category) {
                 SettingsCategory.General -> generalContent(
                     autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
@@ -554,9 +665,11 @@ private fun SettingsPane(
                 )
                 SettingsCategory.Playlists -> playlistsContent(
                     playlists = playlists,
+                    channelCounts = playlistChannelCounts,
+                    onOpen = { id -> if (detailId == null) detailId = id },
+                    rowFocus = { id -> playlistRowFocus.getOrPut(id) { FocusRequester() } },
                     onAddPlaylist = onAddPlaylist,
                     onResetPlaylist = onResetPlaylist,
-                    onDeletePlaylist = onDeletePlaylist,
                     firstRowFocus = firstRowFocus,
                     addPlaylistFocus = addPlaylistFocus,
                 )
@@ -598,19 +711,40 @@ private fun SettingsPane(
                 else -> items(SETTINGS_GREY_ROWS[category].orEmpty()) { row -> GreyRowContent(row) }
             }
         }
+        if (openPlaylist != null) {
+            PlaylistDetail(
+                playlist = openPlaylist,
+                isLast = playlists.size == 1,
+                channelCount = playlistChannelCounts[openPlaylist.id],
+                syncStatus = playlistSyncStatus[openPlaylist.id],
+                onRefresh = { onRefreshPlaylist(openPlaylist.id) },
+                onUpdateEpg = { onUpdatePlaylistEpg(openPlaylist.id) },
+                onRename = { name -> onRenamePlaylist(openPlaylist.id, name) },
+                onDelete = { closeDetail(addPlaylistFocus) { onDeletePlaylist(openPlaylist.id) } },
+                firstRowFocus = detailFirstFocus,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = if (closeTarget != null) 0f else 1f }
+                    .onFocusChanged { detailHasFocus = it.hasFocus },
+            )
+        }
+        }
     }
 }
 
 /**
- * Order from `SETTINGS.md`: loaded playlists (each with its own real Remove), then Add playlist,
- * then the Reset danger zone - unchanged from the pre-shell `SettingsScreen`'s behavior
- * (`MainViewModel.deletePlaylist`/`resetAndAddNewPlaylist`), just re-hosted in the new shell.
+ * Order from `SETTINGS.md`: loaded playlists, then Add playlist, then the Reset danger zone.
+ * Each playlist is one row that drills into its own page ([PlaylistDetail]) - TiviMate's
+ * Settings → Playlists → <playlist> pattern - instead of crowding rename/refresh/remove into
+ * the list itself.
  */
 private fun LazyListScope.playlistsContent(
     playlists: List<PlaylistEntity>,
+    channelCounts: Map<String, Int>,
+    onOpen: (String) -> Unit,
+    rowFocus: (String) -> FocusRequester,
     onAddPlaylist: () -> Unit,
     onResetPlaylist: () -> Unit,
-    onDeletePlaylist: (String) -> Unit,
     firstRowFocus: FocusRequester,
     addPlaylistFocus: FocusRequester,
 ) {
@@ -625,12 +759,13 @@ private fun LazyListScope.playlistsContent(
         }
     } else {
         itemsIndexed(playlists, key = { _, p -> p.id }) { index, playlist ->
-            PlaylistBlock(
+            PlaylistRow(
                 playlist = playlist,
-                isLast = playlists.size == 1,
-                onDelete = { onDeletePlaylist(playlist.id) },
-                removeFocus = if (index == 0) firstRowFocus else null,
-                afterDeleteFocus = addPlaylistFocus,
+                channelCount = channelCounts[playlist.id],
+                onClick = { onOpen(playlist.id) },
+                modifier = Modifier
+                    .then(if (index == 0) Modifier.focusRequester(firstRowFocus) else Modifier)
+                    .focusRequester(rowFocus(playlist.id)),
             )
         }
         item {
@@ -656,81 +791,173 @@ private fun LazyListScope.playlistsContent(
     item { ResetRow(onReset = onResetPlaylist) }
 }
 
-@Composable
-private fun PlaylistBlock(
-    playlist: PlaylistEntity,
-    isLast: Boolean,
-    onDelete: () -> Unit,
-    removeFocus: FocusRequester?,
-    afterDeleteFocus: FocusRequester,
-) {
-    var confirming by remember { mutableStateOf(false) }
-    val confirmFocus = remember { FocusRequester() }
-    val removeChipFocus = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
+private fun PlaylistEntity.typeLabel(): String = when (type) {
+    "xtream" -> "Xtream Codes"
+    "m3u" -> "M3U"
+    "stalker" -> "Stalker portal"
+    else -> type.uppercase()
+}
 
-    // CORRECTION, 2026-09-28: the crash described below was NOT caused by this confirm block.
-    // Its real root cause was hidden-but-placed screens staying in focus search - see
-    // `Modifier.hiddenButComposed` in `ui/theme/Focus.kt`. The old Cancel path did contribute:
-    // it dropped focus entirely, so the next key made Compose re-acquire focus from scratch and
-    // it could wander into those hidden screens. The synchronous handoff below fixes that part
-    // and stays; the round-by-round history is kept only as provenance.
-    //
-    // Real crash, found and confirmed live 2026-09-23 through THREE separate repro/fix/stress-
-    // test rounds, all with full identical stack traces (`docs/vision/FOCUS_MODEL.md`):
-    // `ContentInViewNode.calculateRectForParent`, "Expected BringIntoViewRequester to not be used
-    // before parents are placed" - Compose Foundation's own default focus-search + BringIntoView
-    // chain, not app code, racing this list's re-layout whenever the confirm block's rows are
-    // structurally inserted/removed while something in this item holds focus.
-    //   Round 1 - `focusManager.clearFocus(force=true)` then a delayed reclaim: NOT sufficient,
-    //     still crashed - the very next key press after focus is cleared can itself trigger
-    //     Compose's own default focus-*acquisition* before the reclaim lands.
-    //   Round 2 - block directional input via `onPreviewKeyEvent` while "settling": ALSO not
-    //     sufficient, still crashed - `onPreviewKeyEvent` only participates in dispatch that
-    //     starts from an already-focused leaf; with focus genuinely absent, Compose's default
-    //     focus-acquisition happens at a lower level that a composable's own interceptor never
-    //     gets a chance to see at all.
-    //   Round 3 (this one) - the actual fix: never let focus become absent in the first place, by
-    //     keeping BOTH the "Remove" chip and the confirm block permanently composed (never
-    //     structurally inserted/removed - only resized to `Modifier.size(0.dp)` when inactive,
-    //     the same `visible`-param idiom Sprint 1 already proved for `LiveTvScreen`), and moving
-    //     focus onto the other, already-existing target *synchronously, in the same onClick* that
-    //     flips `confirming` - so the resize Compose sees is an ordinary remeasure of an already-
-    //     focused node (the routine, well-tested path), never a structural removal of the focused
-    //     node (the path that crashes). No `LaunchedEffect`, no delay, no window of vulnerability.
-    // `Modifier.size(0.dp)` alone does NOT make a node unfocusable - without the `canFocus`
-    // gates below, D-pad DOWN from "Remove" could land on an invisible 0dp "Confirm remove", one
-    // OK away from deleting a real playlist. The gates read `confirming` lazily (focusProperties
-    // re-evaluates its block whenever focus is resolved), so the synchronous handoffs still see
-    // the value just written in the same onClick.
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+@Composable
+private fun PlaylistRow(
+    playlist: PlaylistEntity,
+    channelCount: Int?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    Surface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+        shape = RedSurfFocus.shape(8.dp),
+        colors = RedSurfFocus.rowColors(),
+        scale = RedSurfFocus.scale(),
+        border = RedSurfFocus.border(),
+        glow = RedSurfFocus.glow(),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(playlist.name, style = RedSurfType.rowTitle, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(playlist.type.uppercase(), style = RedSurfType.rowSecondary, color = TextSecondary)
+                Text(
+                    playlist.typeLabel() + (channelCount?.let { " · %,d channels".format(it) } ?: ""),
+                    style = RedSurfType.rowSecondary,
+                    color = if (focused) TextPrimary else TextSecondary,
+                    maxLines = 1,
+                )
             }
-            ActionChip(
-                label = "Remove",
-                onClick = {
-                    confirming = true
-                    // Synchronous - confirmFocus already exists (0dp below, about to grow), so
-                    // this is a same-frame focus move onto a real node, not an acquisition search.
-                    runCatching { confirmFocus.requestFocus() }
+            Text("›", style = RedSurfType.rowSecondary, color = if (focused) TextPrimary else Accent)
+        }
+    }
+}
+
+/** A static `Label ······ Value` info row - About's "Version" shape. */
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = RedSurfType.rowTitle, color = TextPrimary)
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(value, style = RedSurfType.rowSecondary, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * Settings → Playlists → <playlist> (2026-10-26, `AGENTS.md`'s "real third-level page per
+ * playlist", decided 2026-09-17). TiviMate's per-playlist page carries update-now actions, name,
+ * connection details and Remove; this is that set for what RedSurf can genuinely do today - no
+ * grey placeholders for things that don't exist. Actions sit first so entering the page never
+ * lands on the text field (which would pop the IME). Server is shown without the password.
+ */
+@Composable
+private fun PlaylistDetail(
+    playlist: PlaylistEntity,
+    isLast: Boolean,
+    channelCount: Int?,
+    syncStatus: String?,
+    onRefresh: () -> Unit,
+    onUpdateEpg: () -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+    firstRowFocus: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    var name by remember(playlist.id) { mutableStateOf(playlist.name) }
+    val saveFocus = remember { FocusRequester() }
+    val canRefresh = playlist.type == "xtream" || playlist.type == "m3u"
+    LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        item {
+            LiveRow(
+                label = "Update channels",
+                value = when {
+                    !canRefresh -> "Not available for this type"
+                    syncStatus != null && !syncStatus.startsWith("Guide") -> syncStatus
+                    else -> "Update now"
                 },
-                // Two FocusRequesters on one node is a supported Compose pattern - removeFocus
-                // (index-0-only) is the pane's own entry-redirect target; removeChipFocus is this
-                // row's own stable reclaim target after a cancel, regardless of index.
-                modifier = Modifier
-                    .focusProperties { canFocus = !confirming }
-                    .then(if (removeFocus != null) Modifier.focusRequester(removeFocus) else Modifier)
-                    .focusRequester(removeChipFocus)
-                    .then(if (confirming) Modifier.size(0.dp).clipToBounds() else Modifier),
+                onClick = { if (canRefresh) onRefresh() },
+                modifier = Modifier.focusRequester(firstRowFocus),
             )
         }
+        item {
+            LiveRow(
+                label = "Update EPG",
+                value = if (syncStatus != null && syncStatus.startsWith("Guide")) syncStatus else "Update now",
+                onClick = onUpdateEpg,
+            )
+        }
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+            SectionDivider()
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // TvTextField leaves LEFT/RIGHT to the text cursor, which strands a D-pad user in
+                // the field. The TV keyboard has its own cursor keys, so RIGHT here means "go to Save".
+                Box(
+                    modifier = Modifier.weight(1f).onPreviewKeyEvent { event ->
+                        event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight &&
+                            runCatching { saveFocus.requestFocus() }.isSuccess
+                    },
+                ) {
+                    com.redsurf.tv.ui.onboarding.TvTextField(value = name, onValueChange = { name = it }, label = "Name")
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                ActionChip(
+                    label = if (name.trim() == playlist.name) "Saved" else "Save",
+                    onClick = { onRename(name) },
+                    modifier = Modifier.focusRequester(saveFocus),
+                )
+            }
+        }
+        item { InfoRow("Type", playlist.typeLabel()) }
+        if (playlist.serverUrl.isNotBlank()) item { InfoRow("Server", playlist.serverUrl) }
+        if (playlist.username.isNotBlank()) item { InfoRow("Username", playlist.username) }
+        playlist.macAddress?.takeIf { it.isNotBlank() }?.let { mac -> item { InfoRow("MAC address", mac) } }
+        playlist.userAgent?.takeIf { it.isNotBlank() }?.let { ua -> item { InfoRow("User agent", ua) } }
+        item { InfoRow("Channels", channelCount?.let { "%,d".format(it) } ?: "—") }
+        item { InfoRow("Content", "Live TV") }
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+            SectionDivider()
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+        item { RemovePlaylistRow(isLast = isLast, onDelete = onDelete) }
+    }
+}
+
+@Composable
+private fun RemovePlaylistRow(isLast: Boolean, onDelete: () -> Unit) {
+    var confirming by remember { mutableStateOf(false) }
+    val confirmFocus = remember { FocusRequester() }
+    val removeRowFocus = remember { FocusRequester() }
+
+    // ResetRow's crash-safe shape (see the history in git for the old PlaylistBlock comment and
+    // FOCUS_MODEL.md): both the row and the confirm block stay composed, the inactive one 0dp,
+    // clipped and unfocusable, and every transition moves focus synchronously onto an existing
+    // node. "Confirm remove" doesn't touch focus itself - the pane closes this page onto
+    // "Add another playlist" first and only deletes once focus has landed there.
+    Column(modifier = Modifier.fillMaxWidth()) {
+        LiveRow(
+            label = "Remove playlist",
+            value = "›",
+            onClick = {
+                confirming = true
+                runCatching { confirmFocus.requestFocus() }
+            },
+            modifier = Modifier
+                .focusProperties { canFocus = !confirming }
+                .focusRequester(removeRowFocus)
+                .then(if (confirming) Modifier.size(0.dp).clipToBounds() else Modifier),
+        )
         Column(
             modifier = Modifier.then(
                 if (confirming) {
@@ -753,19 +980,7 @@ private fun PlaylistBlock(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionChip(
                     label = "Confirm remove",
-                    // A real delete removes this whole block from the outer list, so handing focus
-                    // back to our own Remove chip would still leave it on a structurally-removed
-                    // node. Move it synchronously to "Add another playlist" instead - a row that
-                    // survives the delete. If that lazy row isn't composed (scrolled far off), fall
-                    // back to clearFocus - the path Round 1 showed can still race, so this is
-                    // best-effort; not stress-tested live (would mean deleting a real playlist).
-                    onClick = {
-                        if (runCatching { afterDeleteFocus.requestFocus() }.isFailure) {
-                            focusManager.clearFocus(force = true)
-                        }
-                        confirming = false
-                        onDelete()
-                    },
+                    onClick = onDelete,
                     modifier = Modifier
                         .focusProperties { canFocus = confirming }
                         .focusRequester(confirmFocus),
@@ -775,16 +990,11 @@ private fun PlaylistBlock(
                     modifier = Modifier.focusProperties { canFocus = confirming },
                     onClick = {
                         confirming = false
-                        // Synchronous - removeChipFocus already exists (about to grow from 0dp),
-                        // same safe same-frame-remeasure move as the Remove chip's own handler.
-                        runCatching { removeChipFocus.requestFocus() }
+                        runCatching { removeRowFocus.requestFocus() }
                     },
                 )
             }
         }
-        // Per-playlist grey rows (SETTINGS.md) - real names, unfocusable, previewing
-        // per-playlist management that doesn't exist yet (rename, re-sync, content type).
-        PLAYLIST_GREY_ROWS.forEach { GreyRowContent(it, indent = true) }
     }
 }
 
@@ -1102,9 +1312,11 @@ private fun LiveRow(
     modifier: Modifier = Modifier,
     valueColor: Color = Accent,
 ) {
+    // The focused row is a solid Accent block, so an Accent value would vanish into it.
+    var focused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
         shape = RedSurfFocus.shape(8.dp),
         colors = RedSurfFocus.rowColors(),
         scale = RedSurfFocus.scale(),
@@ -1117,7 +1329,7 @@ private fun LiveRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(label, style = RedSurfType.rowTitle, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(value, style = RedSurfType.rowSecondary, color = valueColor, maxLines = 1)
+            Text(value, style = RedSurfType.rowSecondary, color = if (focused && valueColor == Accent) TextPrimary else valueColor, maxLines = 1)
         }
     }
 }
@@ -1148,9 +1360,11 @@ private fun ActionChip(label: String, onClick: () -> Unit, modifier: Modifier = 
     Surface(
         onClick = onClick,
         modifier = modifier.clip(RectangleShape),
-        colors = RedSurfFocus.colors(),
+        // Crest: a square solid-red block when focused, like every row.
+        colors = RedSurfFocus.rowColors(resting = SurfaceRaised),
+        shape = RedSurfFocus.shape(),
         scale = RedSurfFocus.scale(),
-        border = RedSurfFocus.pillBorder(),
+        border = RedSurfFocus.border(),
         glow = RedSurfFocus.glow(),
     ) {
         Text(
