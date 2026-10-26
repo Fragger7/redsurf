@@ -147,7 +147,7 @@ class PlayerController(
     // violating.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private val trackManager = TrackManager(context)
+    private val trackManager = TrackManager(context, bufferSize.maxMs)
 
     // Video info screen's "network speed" (decision 9, redesigned 2026-09-17, fixed 2026-09-18 -
     // user found it "sticks to when the channel is changed and remains there," not dynamic like

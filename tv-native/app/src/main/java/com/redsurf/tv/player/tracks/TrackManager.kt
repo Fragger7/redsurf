@@ -6,6 +6,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.common.TrackSelectionParameters
 import com.redsurf.tv.settings.AppPreferences
@@ -25,8 +26,21 @@ import com.redsurf.tv.settings.AppPreferences
  * channel change - without persisting the *language*, "give me the English feed" would need
  * re-picking after every single zap).
  */
-class TrackManager(private val context: Context) {
-    val trackSelector = DefaultTrackSelector(context)
+class TrackManager(private val context: Context, maxBufferMs: Int = 15_000) {
+    // Brief §4.2/item 10: Media3's ABR defaults (10s up / 25s down / 25s retain) assume a buffer
+    // deeper than most Buffer size choices here, so two of the three thresholds could never be
+    // reached and step-downs under jitter fired late or not at all. Each threshold now sits
+    // strictly inside the chosen maxBufferMs (Small's 15s gives the brief's own 6s/10s/10s), and
+    // never exceeds Media3's defaults on the deep buffers.
+    val trackSelector = DefaultTrackSelector(
+        context,
+        AdaptiveTrackSelection.Factory(
+            /* minDurationForQualityIncreaseMs = */ minOf(10_000, maxBufferMs * 2 / 5),
+            /* maxDurationForQualityDecreaseMs = */ minOf(25_000, maxBufferMs * 2 / 3),
+            /* minDurationToRetainAfterDiscardMs = */ minOf(25_000, maxBufferMs * 2 / 3),
+            /* bandwidthFraction = */ 0.7f,
+        ),
+    )
     private val appPreferences = AppPreferences(context)
 
     init {
