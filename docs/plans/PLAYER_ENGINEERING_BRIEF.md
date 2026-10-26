@@ -667,16 +667,16 @@ firing against a real failure - no dead/blocked channel was hit live this sessio
 
 **P1 — performance and format reach**
 
-10. ABR thresholds sized to the actual buffer; seeded 20 Mbps initial bandwidth estimate (§4.2).
-11. Runtime hardware-decoder probe → `setPreferredVideoMimeTypes`, excluding AV1 on this SoC;
+10. ✅ (2026-10-26, builds clean) ABR thresholds sized to the actual buffer; seeded 20 Mbps initial bandwidth estimate (§4.2).
+11. ✅ (2026-10-26, builds clean; logs `hardware video decoders, preferred order`) Runtime hardware-decoder probe → `setPreferredVideoMimeTypes`, excluding AV1 on this SoC;
     explicit "can't decode AV1" message when AV1 is the only track (§2.5).
-12. MIME fallback ladder on `UnrecognizedInputFormatException` (§2.6).
-13. `setAudioAttributes(..., handleAudioFocus = true)`; Settings → Playback → "Audio output: Auto /
+12. ✅ (one-step HLS↔TS retry in `PlayerController.handlePlaybackError`) MIME fallback ladder on `UnrecognizedInputFormatException` (§2.6).
+13. ✅ (Force stereo row 2026-10-26) `setAudioAttributes(..., handleAudioFocus = true)`; Settings → Playback → "Audio output: Auto /
     Force stereo" (§2.4).
-14. Live knobs: `setLiveMinSpeed(0.95f)` / `setLiveMaxSpeed(1.06f)`, explicit
+14. ✅ (2026-10-26, builds clean; speed bounds via `MediaItem.LiveConfiguration`; chunkless is Media3 1.10's default, not re-set) Live knobs: `setLiveMinSpeed(0.95f)` / `setLiveMaxSpeed(1.06f)`, explicit
     `setAllowChunklessPreparation(true)` (§4.1).
-15. Buffering/"tuning" indicator fed by the same listener (AGENTS.md backlog item 3; §4.4).
-16. Media3 version bisect-upgrade within `compileSdk 34`; add `media3-exoplayer-dash` (§7).
+15. ✅ Buffering/"tuning" indicator fed by the same listener (AGENTS.md backlog item 3; §4.4).
+16. ✅ (Media3 1.10.1, 2026-10-20; DASH deliberately not added - no DASH source in any loaded playlist, revisit with item 19) Media3 version bisect-upgrade within `compileSdk 34`; add `media3-exoplayer-dash` (§7).
 
 **P2 — the extension and the housekeeping**
 
