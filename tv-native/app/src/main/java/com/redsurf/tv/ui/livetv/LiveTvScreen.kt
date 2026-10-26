@@ -966,6 +966,7 @@ fun LiveTvScreen(
                     ) {
                         Text("LIVE", style = RedSurfType.badge, color = TextPrimary)
                     }
+                    CrestCut(Modifier.align(Alignment.CenterEnd))
                 }
             }
         }
@@ -1286,6 +1287,7 @@ private fun ExpandedHero(
             } else if (displayChannel != null) {
                 ChannelFallbackThumbnail(displayChannel)
             }
+            CrestCut(Modifier.align(Alignment.CenterEnd))
         }
 
         Spacer(modifier = Modifier.width(14.dp))
@@ -1488,3 +1490,31 @@ private fun Modifier.fillWindow(windowSize: androidx.compose.ui.unit.IntSize, to
             placeable.place(-origin.x.toInt(), -origin.y.toInt())
         }
     }
+
+/**
+ * Crest's hero cut (`design-language/RESEARCH.md` A, Lite): the video's right edge is the mark's
+ * crescent. A SurfaceView can't be clipped, so this draws one static background-coloured crescent
+ * over the edge with a thin red rim - the second of Crest's two crescents (the now-line cap is the
+ * other). Drawn twice in the hero: over the shared video and over the fallback thumbnail beneath.
+ */
+@Composable
+private fun CrestCut(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier.fillMaxHeight().width(CrestCutDepth)) {
+        val w = size.width
+        val h = size.height
+        // A quadratic whose control sits 2x the depth in from the edge bows exactly `w` deep mid-height.
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w, 0f)
+            quadraticBezierTo(w - 2 * w, h / 2, w, h)
+            close()
+        }
+        drawPath(path, com.redsurf.tv.ui.theme.Background)
+        val rim = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w, 0f)
+            quadraticBezierTo(w - 2 * w, h / 2, w, h)
+        }
+        drawPath(rim, Accent, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+    }
+}
+
+private val CrestCutDepth = 10.dp
