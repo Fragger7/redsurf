@@ -68,6 +68,3 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
         // "Diagnostics" is live - SettingsScreen.kt's DiagnosticsRows.
     ),
 )
-
-/** Playlists' per-playlist grey rows (`SETTINGS.md`) - shown under every loaded playlist's real
- * Remove action, not once per category. */

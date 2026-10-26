@@ -956,8 +956,11 @@ grow/shrink animation removed (snap cut). Back first frame 174 → ~85ms, OK →
   the APK GPLv3. Options: accept GPLv3, build our own FFmpeg extension (LGPL build) against 1.10.1,
   or skip.
 - **S7 Crest + Surf tokens** (896652b): Barlow type, square solid-red focus, surf backdrop on calm
-  screens. Verified on device by screenshots (guide, Home, Settings). Leftovers: OTA dialog buttons
-  and nav pills still pill-shaped.
+  screens. Verified on device by screenshots (guide, Home, Settings). Pills for nav, chips and buttons
+  are Crest by design (`RESEARCH.md` "A. Crest": chrome stays pill, content goes square). The OTA
+  dialogs' real gap was tv-material3 `Button` defaults (1.1 scale, white focus) - fixed by
+  `CrestButton` (bae67ca), also used by onboarding and Settings' action chips; onboarding now
+  shows the real mark + wordmark.
 - **S8 nav feedback** (b297f66, v0.44.21): final Back on Home reveals the nav on the Home pill and
   arms exit; second Back within 4s exits (TiviMate "Confirm exit by second press Back"). Crest
   HintChip toast ("Press BACK again to exit"; nav-hidden hint and Teleport tip, each ≤3 times).
