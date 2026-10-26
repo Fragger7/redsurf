@@ -993,4 +993,7 @@ Commits e1817a9..f11332c. All build clean and unit tests pass; device status per
   and dead code (`MultiViewEngine`, `VodDashboard`).
 - **EPG public-guide key** (f78c548): "● Public guide" in the grid header when supplemented
   listings are on screen - the legend for the existing tint + corner dot. Builds clean.
+- **Crest ornaments** (cf0f154, dfc1d0e): the guide's now-line cap is now a crescent, the
+  hero video's right edge carries the crescent cut (drawn over the SurfaceView, Lite spec), and
+  the exit hint stays the full 4s confirm window with a red countdown bar. Builds clean.
 - **Device:** the TV was in family use (PBS Kids) from ~10:00. DEVICE-RESULTS-PENDING.
