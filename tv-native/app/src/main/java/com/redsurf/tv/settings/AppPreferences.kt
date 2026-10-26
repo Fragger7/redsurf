@@ -90,6 +90,19 @@ class AppPreferences(context: Context) {
     // TiviMate-parity default behavior (first OK previews in the browse view, second OK on the
     // same channel fullscreens it). Off restores the old single-OK-jumps-straight-to-fullscreen
     // behavior exactly, for anyone who'd rather not have the extra decoder/step.
+    // TIVIMATE_LEARNINGS.md F17: TiviMate's answer to a poor provider is a user-chosen startup
+    // buffer. Read once when the player is built; a change rebuilds it (LiveTvScreen's key).
+    private val _bufferSize = MutableStateFlow(
+        BufferSize.entries.firstOrNull { it.name == prefs.getString(KEY_BUFFER_SIZE, null) } ?: BufferSize.Small,
+    )
+    val bufferSize: StateFlow<BufferSize> = _bufferSize.asStateFlow()
+
+    fun cycleBufferSize() {
+        val next = BufferSize.entries[(_bufferSize.value.ordinal + 1) % BufferSize.entries.size]
+        prefs.edit().putString(KEY_BUFFER_SIZE, next.name).apply()
+        _bufferSize.value = next
+    }
+
     private val _previewOnSelect = MutableStateFlow(prefs.getBoolean(KEY_PREVIEW_ON_SELECT, true))
     val previewOnSelect: StateFlow<Boolean> = _previewOnSelect.asStateFlow()
 
@@ -154,5 +167,27 @@ class AppPreferences(context: Context) {
         private const val KEY_PREFERRED_AUDIO_LANGUAGE = "preferred_audio_language"
         private const val KEY_TELEPORT_MENU_ENABLED = "teleport_menu_enabled"
         private const val KEY_PREVIEW_ON_SELECT = "preview_on_select"
+        private const val KEY_BUFFER_SIZE = "buffer_size"
     }
+}
+
+/**
+ * TiviMate's five "Buffer size" steps (F17). Small is the buffer RedSurf always shipped, so the
+ * default changes nothing. [startMs] is how much video must be downloaded before playback starts
+ * (the channel-switch cost), [rebufferMs] the same after a stall; [maxMs] and [maxBytes] rise
+ * together so the byte ceiling stays a real ceiling on a 1.89 GB device (HARDWARE.md).
+ */
+enum class BufferSize(
+    val label: String,
+    val minMs: Int,
+    val maxMs: Int,
+    val startMs: Int,
+    val rebufferMs: Int,
+    val maxBytes: Int,
+) {
+    None("None", 1_000, 8_000, 250, 1_000, 12 * 1024 * 1024),
+    Small("Small", 2_500, 15_000, 500, 2_500, 20 * 1024 * 1024),
+    Medium("Medium", 5_000, 25_000, 2_000, 4_000, 32 * 1024 * 1024),
+    Large("Large", 10_000, 40_000, 4_000, 7_000, 48 * 1024 * 1024),
+    VeryLarge("Very large", 15_000, 60_000, 8_000, 10_000, 64 * 1024 * 1024),
 }

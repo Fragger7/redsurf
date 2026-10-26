@@ -5,6 +5,8 @@ import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import com.redsurf.tv.settings.BufferSize
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -130,6 +132,7 @@ private fun videoCodecOf(mimeType: String?): String? = when (mimeType) {
 class PlayerController(
     context: Context,
     playlistUserAgent: String? = null,
+    bufferSize: BufferSize = BufferSize.Small,
 ) {
     // Main.immediate, not the default background dispatcher (user-found crash, 2026-09-17):
     // every retry path below (the stall watchdog, error backoff, the 456 race retry) eventually
@@ -194,8 +197,8 @@ class PlayerController(
         // ceiling on a device with only ~449MB free - ~6x too loose to be a real ceiling at all.
         // If maxBufferMs is ever raised, this byte ceiling must rise with it.
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(2_500, 15_000, 500, 2_500)
-            .setTargetBufferBytes(20 * 1024 * 1024)
+            .setBufferDurationsMs(bufferSize.minMs, bufferSize.maxMs, bufferSize.startMs, bufferSize.rebufferMs)
+            .setTargetBufferBytes(bufferSize.maxBytes)
             .build()
 
         ExoPlayer.Builder(context)
@@ -203,6 +206,9 @@ class PlayerController(
             .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackManager.trackSelector)
             .setLoadControl(loadControl)
+            // Multi-variant HLS starts on whatever variant the bandwidth estimate allows; Media3's
+            // default guess is phone-network cautious. A wired/Wi-Fi TV starts on a sharp variant.
+            .setBandwidthMeter(DefaultBandwidthMeter.Builder(context).setInitialBitrateEstimate(20_000_000L).build())
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -445,10 +451,21 @@ class PlayerController(
         lastObservedPositionMs = 0L // a fresh channel's position must not compare against the last one's
         smoothedBitrateEstimateBps = null // nor its network-speed estimate
         consecutiveEmptyWindows = 0
+        mimeOverride = null
         exoPlayer.stop()
-        exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
+        exoPlayer.setMediaItem(mediaItemFor(streamUrl))
         exoPlayer.prepare()
     }
+
+    // MIME fallback (AGENTS.md roadmap item 5): IPTV URLs lie about their container - an
+    // extensionless Xtream URL that's really HLS, or a `.m3u8` that serves raw TS. Media3 sniffs
+    // progressive containers fine but never sniffs its way *into* HLS, so a wrong guess ends as
+    // "container unsupported". One retry with the other type forced, then the terminal message.
+    private var mimeOverride: String? = null
+
+    private fun mediaItemFor(url: String): MediaItem =
+        if (mimeOverride == null) MediaItem.fromUri(url)
+        else MediaItem.Builder().setUri(url).setMimeType(mimeOverride).build()
 
     /** Stop playing and drop the stream (and its provider connection) without releasing the
      * player - the shared Live TV player outlives any one channel (L5, 2026-10-20). */
@@ -484,6 +501,17 @@ class PlayerController(
                 delay(1_200)
                 exoPlayer.prepare()
             }
+            return
+        }
+
+        val unrecognised = error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED
+        val url = lastUrl
+        if (unrecognised && mimeOverride == null && url != null) {
+            mimeOverride = if (url.contains(".m3u8", ignoreCase = true)) MimeTypes.VIDEO_MP2T else MimeTypes.APPLICATION_M3U8
+            Log.d(TAG, "container unsupported - retrying once as $mimeOverride")
+            exoPlayer.stop()
+            exoPlayer.setMediaItem(mediaItemFor(url))
+            exoPlayer.prepare()
             return
         }
 
@@ -569,7 +597,7 @@ class PlayerController(
     private fun forceReconnect() {
         val url = lastUrl ?: return
         exoPlayer.stop()
-        exoPlayer.setMediaItem(MediaItem.fromUri(url))
+        exoPlayer.setMediaItem(mediaItemFor(url))
         exoPlayer.prepare()
     }
 

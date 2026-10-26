@@ -1,5 +1,7 @@
 package com.redsurf.tv.player
 
+import com.redsurf.tv.settings.BufferSize
+
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -45,7 +47,10 @@ fun Context.findActivity(): Activity? = when (this) {
  * [PlayerController] itself.
  */
 @Composable
-fun rememberPlayerController(playlistUserAgent: String? = null): PlayerController {
+fun rememberPlayerController(
+    playlistUserAgent: String? = null,
+    bufferSize: BufferSize = BufferSize.Small,
+): PlayerController {
     val context = LocalContext.current
     // Deliberately keyed on nothing but Unit (brief §3.3: one controller per fullscreen session,
     // never recreated within it) - [playlistUserAgent] is usually resolved from an async Room
@@ -54,7 +59,7 @@ fun rememberPlayerController(playlistUserAgent: String? = null): PlayerControlle
     // instant that lookup resolves. Whatever value is current on the *first* call is what this
     // session's data source uses - matches the pre-hoist behavior's own risk profile (which had
     // no per-playlist User-Agent support for the media path at all), just narrower now.
-    val controller = remember { PlayerController(context, playlistUserAgent) }
+    val controller = remember { PlayerController(context, playlistUserAgent, bufferSize) }
 
     DisposableEffect(controller) {
         val activity = context.findActivity()

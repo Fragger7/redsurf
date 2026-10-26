@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.shell
 
+import com.redsurf.tv.settings.BufferSize
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -119,6 +120,8 @@ fun SettingsScreen(
     // PREVIEW.md, 2026-09-20 - same AppPreferences pattern as the row above.
     previewOnSelect: Boolean,
     onTogglePreviewOnSelect: () -> Unit,
+    bufferSize: BufferSize,
+    onCycleBufferSize: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
     doubleHeightRow: Boolean = true,
@@ -292,6 +295,8 @@ fun SettingsScreen(
             onToggleBlackScreenBetweenZaps = onToggleBlackScreenBetweenZaps,
             previewOnSelect = previewOnSelect,
             onTogglePreviewOnSelect = onTogglePreviewOnSelect,
+            bufferSize = bufferSize,
+            onCycleBufferSize = onCycleBufferSize,
             showRawResolution = showRawResolution,
             onToggleShowRawResolution = onToggleShowRawResolution,
             doubleHeightRow = doubleHeightRow,
@@ -499,6 +504,8 @@ private fun SettingsPane(
     // PREVIEW.md, 2026-09-20 - same AppPreferences pattern as the row above.
     previewOnSelect: Boolean,
     onTogglePreviewOnSelect: () -> Unit,
+    bufferSize: BufferSize,
+    onCycleBufferSize: () -> Unit,
     showRawResolution: Boolean,
     onToggleShowRawResolution: () -> Unit,
     doubleHeightRow: Boolean = true,
@@ -570,6 +577,8 @@ private fun SettingsPane(
                     onToggle = onToggleBlackScreenBetweenZaps,
                     previewOnSelect = previewOnSelect,
                     onTogglePreviewOnSelect = onTogglePreviewOnSelect,
+                    bufferSize = bufferSize,
+                    onCycleBufferSize = onCycleBufferSize,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.Appearance -> appearanceContent(
@@ -997,6 +1006,8 @@ private fun LazyListScope.playbackContent(
     onToggle: () -> Unit,
     previewOnSelect: Boolean,
     onTogglePreviewOnSelect: () -> Unit,
+    bufferSize: BufferSize,
+    onCycleBufferSize: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
@@ -1015,6 +1026,11 @@ private fun LazyListScope.playbackContent(
             value = if (previewOnSelect) "On" else "Off",
             onClick = onTogglePreviewOnSelect,
         )
+    }
+    item {
+        // TIVIMATE_LEARNINGS.md F17 - TiviMate's five steps. Bigger rides out a poor provider,
+        // at the cost of a slower channel switch.
+        LiveRow(label = "Buffer size", value = bufferSize.label, onClick = onCycleBufferSize)
     }
     items(SETTINGS_GREY_ROWS[SettingsCategory.Playback].orEmpty()) { GreyRowContent(it) }
 }

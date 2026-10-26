@@ -206,6 +206,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val appPreferences = remember { AppPreferences(prefsContext) }
     val blackScreenBetweenZaps by appPreferences.blackScreenBetweenZaps.collectAsState()
     val previewOnSelect by appPreferences.previewOnSelect.collectAsState()
+    val bufferSize by appPreferences.bufferSize.collectAsState()
     val showRawResolution by appPreferences.showRawResolution.collectAsState()
     val doubleHeightRow by appPreferences.doubleHeightRow.collectAsState()
     val publicEpgEnabled by appPreferences.publicEpgEnabled.collectAsState()
@@ -612,6 +613,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         onFullscreenChanged = { liveTvFullscreen = it },
                         onChannelsFocusChanged = { liveTvChannelsFocused = it },
                         blackScreenBetweenZaps = blackScreenBetweenZaps,
+                        bufferSize = bufferSize,
                         previewOnSelect = previewOnSelect,
                         showRawResolution = showRawResolution,
                         doubleHeightRow = doubleHeightRow,
@@ -670,6 +672,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         onTogglePreviewOnSelect = {
                             appPreferences.setPreviewOnSelect(!previewOnSelect)
                         },
+                        bufferSize = bufferSize,
+                        onCycleBufferSize = { appPreferences.cycleBufferSize() },
                         showRawResolution = showRawResolution,
                         doubleHeightRow = doubleHeightRow,
                         onToggleDoubleHeightRow = { appPreferences.setDoubleHeightRow(!doubleHeightRow) },

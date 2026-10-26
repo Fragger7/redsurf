@@ -53,6 +53,25 @@ video shows in the preview box. Checked by adb: SurfaceFlinger places the layer 
 zapped channel. Note: `screencap` cannot see HW-overlay video on this device (TiviMate's playing
 preview also captures black) - never judge video from a screenshot here.
 
+## ▶ STATUS 2026-10-26 04:15 CDT - night 3 (autonomous), newest first
+
+- **Projectivy's accessibility service costs ~4.5 points of jank.** The user's launcher binds an
+  a11y service, so Compose runs `checkForSemanticsChanges`/`sendAccessibilitySemanticsStructureChangeEvents`
+  on many frames (8-16ms each). A/B on v0.44.14 with the profile compiled, categories 20xDOWN+20xUP,
+  no preview: service on **17.4-18.3%**, off **13.4-13.5%** (p90 38 -> 34-36). The service was restored. This is
+  real for users with this launcher. Rows already use `clearAndSetSemantics`; the remaining cost is the diff on lazy-list
+  row add/remove while scrolling - no cheap cut found. Not worth disabling a11y over.
+- **S4 nav auto-hide (a5247f3):** slides by `graphicsLayer` translation (~12ms frames, no layout) and
+  re-lays out once at the end (~51ms frame). The old version re-laid out the screen every frame of the animation.
+- **S3 per-category channel cache (64988f2):** an LRU of 4,000 channels, evicted on any channel-table write.
+  A repeat category visit takes 0ms vs 6-18ms on the first visit.
+- **S2 whole-app baseline profile (4ad79ba):** our code had run JIT-interpreted; a wildcard profile ~ full AOT.
+  Categories ~15-18% janky (target <=12% not yet reached). **Measure only after `compile_app`**: a fresh
+  install sits at `status=verify` until then, and a measurement taken in that state reads ~10 points worse.
+- **Crest guide drawing (1a1347a), cold-launch focus fix (4aca129):** both verified on device.
+- **Measurement noise:** SmartTube running in the background (~12% CPU) doubled the numbers (25-36%).
+  Check `top` before measuring.
+
 ## ▶ STATUS 2026-10-20 05:55 CDT - read this first (night 2, autonomous)
 
 **Installed on the TV:** the real CI release **v0.44.5** (run 172 - same app code as v0.44.4; cut so the TV could return to a genuine release after a reverted experiment had been installed as versionCode 172). **Version names:** CI's release

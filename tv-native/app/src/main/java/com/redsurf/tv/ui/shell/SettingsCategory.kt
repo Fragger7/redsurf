@@ -61,7 +61,6 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
     // toggle row in SettingsScreen.kt, not a grey row here.
     SettingsCategory.Playback to listOf(
         GreyRow("Auto frame rate", "Off"),
-        GreyRow("Buffer", "Default"),
         GreyRow("Preferred audio", "Auto"),
         GreyRow("Preferred subtitles", "Off"),
         GreyRow("Default aspect", "Fit"),
