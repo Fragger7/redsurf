@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.shell
 
+import androidx.compose.ui.graphics.RectangleShape
 import com.redsurf.tv.settings.BufferSize
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -377,7 +377,7 @@ private fun CategoryRail(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .background(SurfaceColor, RoundedCornerShape(16.dp))
+            .background(SurfaceColor, RectangleShape)
             .padding(horizontal = 12.dp, vertical = 14.dp)
             .onFocusChanged { state ->
                 if (!state.hasFocus) focusedRow = null
@@ -456,7 +456,7 @@ private fun CategoryRow(
 @Composable
 private fun CategoryTile(@androidx.annotation.DrawableRes iconRes: Int) {
     Box(
-        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(SurfaceRaised),
+        modifier = Modifier.size(28.dp).clip(RectangleShape).background(SurfaceRaised),
         contentAlignment = Alignment.Center,
     ) {
         Image(
@@ -734,7 +734,7 @@ private fun PlaylistBlock(
         Column(
             modifier = Modifier.then(
                 if (confirming) {
-                    Modifier.fillMaxWidth().background(SurfaceRaised, RoundedCornerShape(8.dp)).padding(12.dp)
+                    Modifier.fillMaxWidth().background(SurfaceRaised, RectangleShape).padding(12.dp)
                 } else {
                     Modifier.size(0.dp).clipToBounds()
                 },
@@ -813,7 +813,7 @@ private fun ResetRow(onReset: () -> Unit) {
         Column(
             modifier = Modifier.then(
                 if (confirming) {
-                    Modifier.fillMaxWidth().background(SurfaceRaised, RoundedCornerShape(8.dp)).padding(12.dp)
+                    Modifier.fillMaxWidth().background(SurfaceRaised, RectangleShape).padding(12.dp)
                 } else {
                     Modifier.size(0.dp).clipToBounds()
                 },
@@ -1147,10 +1147,10 @@ private fun SectionDivider() {
 private fun ActionChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         onClick = onClick,
-        modifier = modifier.clip(RoundedCornerShape(8.dp)),
+        modifier = modifier.clip(RectangleShape),
         colors = RedSurfFocus.colors(),
         scale = RedSurfFocus.scale(),
-        border = RedSurfFocus.border(),
+        border = RedSurfFocus.pillBorder(),
         glow = RedSurfFocus.glow(),
     ) {
         Text(

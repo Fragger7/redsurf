@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
@@ -50,7 +51,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -999,9 +999,9 @@ private fun ProgrammeInfoCard(programme: EpgProgramEntity) {
         Column(
             modifier = Modifier
                 .widthIn(max = 420.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RectangleShape)
                 .background(SurfaceRaised)
-                .border(1.5.dp, Accent, RoundedCornerShape(16.dp))
+                .border(1.5.dp, Accent, RectangleShape)
                 .padding(20.dp),
         ) {
             Text(programme.title.ifBlank { "Untitled" }, style = RedSurfType.sectionTitle, color = TextPrimary)

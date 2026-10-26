@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.player
 
+import androidx.compose.ui.graphics.RectangleShape
 import com.redsurf.tv.diag.tracedMeasure
 import com.redsurf.tv.diag.traced
 import com.redsurf.tv.ui.LogoOrLetter
@@ -23,7 +24,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Call
@@ -570,7 +570,7 @@ fun PlayerScreen(
                 Column(
                     modifier = Modifier
                         .width(360.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RectangleShape)
                         .background(Surface.copy(alpha = 0.95f))
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -776,7 +776,7 @@ fun PlayerScreen(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(24.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(RectangleShape)
                     .background(Surface.copy(alpha = 0.9f))
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
@@ -815,7 +815,7 @@ private fun ContextMenuPanel(
     Column(
         modifier = modifier
             .width(240.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RectangleShape)
             // Transparent, matching TiviMate (user request, 2026-09-17) - was a fully opaque
             // Surface, hiding the video behind it entirely.
             .background(Surface.copy(alpha = 0.85f))
@@ -1011,7 +1011,7 @@ private fun ChannelTile(channel: ChannelEntity, onClick: () -> Unit, modifier: M
             verticalArrangement = Arrangement.Center,
         ) {
             Box(
-                modifier = Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)).background(Surface),
+                modifier = Modifier.size(24.dp).clip(RectangleShape).background(Surface),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(channel.name.take(1).uppercase(), style = RedSurfType.badge, color = TextPrimary)
@@ -1038,7 +1038,7 @@ private fun HistoryPicker(channels: List<ChannelEntity>, onSelect: (ChannelEntit
         modifier = modifier
             .padding(24.dp)
             .width(280.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RectangleShape)
             .background(Surface)
             .padding(12.dp),
     ) {
@@ -1123,7 +1123,7 @@ private fun AudioPicker(controller: com.redsurf.tv.player.PlayerController, modi
         modifier = modifier
             .padding(24.dp)
             .width(280.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RectangleShape)
             .background(Surface)
             .padding(12.dp),
     ) {
@@ -1191,7 +1191,7 @@ private fun SubtitlePicker(controller: com.redsurf.tv.player.PlayerController, m
         modifier = modifier
             .padding(24.dp)
             .width(280.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RectangleShape)
             .background(Surface)
             .padding(12.dp),
     ) {
@@ -1390,7 +1390,7 @@ private fun PlayerInfoBlock(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)).background(SurfaceRaised),
+            modifier = Modifier.size(64.dp).clip(RectangleShape).background(SurfaceRaised),
             contentAlignment = Alignment.Center,
         ) {
             LogoOrLetter(channel.streamIcon, channel.name, RedSurfType.heroTitle, TextPrimary, Modifier.fillMaxSize().padding(8.dp))
@@ -1430,7 +1430,7 @@ private fun PlayerInfoBlock(
                     badges.forEach { label ->
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
+                                .clip(RectangleShape)
                                 .background(Surface)
                                 .padding(horizontal = 8.dp, vertical = 3.dp),
                         ) {

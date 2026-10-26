@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.vod
 
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
@@ -103,7 +104,7 @@ fun MovieCard(movie: VodMovie) {
         modifier = Modifier
             .width(180.dp)
             .height(270.dp),
-        shape = ClickableSurfaceDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+        shape = ClickableSurfaceDefaults.shape(shape = RectangleShape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color(0xFF2A2A2A),
             focusedContainerColor = MaterialTheme.colorScheme.primaryContainer

@@ -1,10 +1,10 @@
 package com.redsurf.tv.ui.onboarding
 
+import androidx.compose.ui.graphics.RectangleShape
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.*
@@ -34,7 +34,6 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.redsurf.tv.ui.theme.Accent
-import com.redsurf.tv.ui.theme.Background
 import com.redsurf.tv.ui.theme.Surface as SurfaceColor
 import com.redsurf.tv.ui.theme.TextSecondary
 
@@ -57,8 +56,9 @@ fun OnboardingScreen(
         onCancel?.invoke()
     }
 
+    // No background of its own: MainActivity's root draws Surf's backdrop behind it.
     Box(
-        modifier = Modifier.fillMaxSize().background(Background),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         if (selectedMethod == null) {
@@ -262,7 +262,7 @@ fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
             if (qrBitmap != null) {
                 Box(
                     modifier = Modifier
-                        .background(Color.White, shape = RoundedCornerShape(16.dp))
+                        .background(Color.White, shape = RectangleShape)
                         .padding(20.dp),
                 ) {
                     Image(bitmap = qrBitmap, contentDescription = "QR code for $url", modifier = Modifier.size(200.dp))
@@ -275,7 +275,7 @@ fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(20.dp))
                 Box(
                     modifier = Modifier
-                        .background(SurfaceColor, shape = RoundedCornerShape(16.dp))
+                        .background(SurfaceColor, shape = RectangleShape)
                         .padding(horizontal = 28.dp, vertical = 20.dp),
                 ) {
                     Text(url, style = MaterialTheme.typography.headlineMedium, color = Accent)

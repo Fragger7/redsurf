@@ -1,5 +1,6 @@
 package com.redsurf.tv
 
+import androidx.compose.ui.graphics.RectangleShape
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +43,7 @@ import androidx.tv.material3.Text
 import com.redsurf.tv.updater.UpdateManager
 import com.redsurf.tv.ui.onboarding.OnboardingScreen
 import com.redsurf.tv.ui.shell.AppShell
+import com.redsurf.tv.ui.theme.surfBackdrop
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.Background
 import com.redsurf.tv.ui.theme.RedSurfTheme
@@ -115,7 +116,8 @@ class MainActivity : ComponentActivity() {
                 // app"), which is exactly what trapped a real user: found live, 2026-09-11.
 
                 Box(
-                    modifier = Modifier.fillMaxSize().background(Background),
+                    modifier = Modifier.fillMaxSize().background(Background)
+                        .surfBackdrop { state !is AppState.Loaded },
                     contentAlignment = Alignment.Center
                 ) {
                     when (val s = state) {
@@ -294,7 +296,7 @@ private fun ModalCard(onDismissRequest: () -> Unit, content: @Composable (primar
             Box(
                 modifier = Modifier
                     .widthIn(max = 520.dp)
-                    .background(Surface, RoundedCornerShape(16.dp))
+                    .background(Surface, RectangleShape)
                     .padding(32.dp)
             ) {
                 Column {

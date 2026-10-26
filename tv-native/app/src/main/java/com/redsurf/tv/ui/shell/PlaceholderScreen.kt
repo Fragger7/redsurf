@@ -18,8 +18,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.redsurf.tv.ui.theme.RedSurfFocus
-import com.redsurf.tv.ui.theme.TextPrimary
-import com.redsurf.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 
 /**
@@ -52,9 +50,9 @@ fun PlaceholderScreen(title: String, subtitle: String) {
             glow = RedSurfFocus.glow(),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-                Text(title, style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
+                Text(title, style = MaterialTheme.typography.headlineLarge)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(subtitle, style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
+                Text(subtitle, style = MaterialTheme.typography.bodyLarge, color = androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.75f))
             }
         }
     }

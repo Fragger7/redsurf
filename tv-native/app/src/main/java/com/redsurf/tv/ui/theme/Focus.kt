@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -20,29 +21,26 @@ import androidx.tv.material3.ClickableSurfaceShape
 import androidx.tv.material3.Glow
 
 /**
- * The two-state focus model from docs/vision/UI_SPEC.md #2. Every focusable Surface(onClick=...)
- * in the app must configure all four of these — an element with no visible focus state is a bug,
- * not a style choice.
+ * The focus model. Every focusable Surface(onClick=...) in the app must configure all of these -
+ * an element with no visible focus state is a bug, not a style choice (UI_SPEC.md #2).
  *
- * - Focused (where the D-pad cursor is): a red ring + glow + slight scale-up.
- * - Selected (the active tab, the playing channel): filled red, no glow.
- * Both can be true at once (a focused, active tab) and must look right together — the glow/ring
- * from [border] and [glow] layers on top of whichever fill [colors] picked.
- *
- * Two fills, deliberately: [colors] is the filled-red "selected" for standalone pills (the nav's
- * active tab). [rowColors] is for rows inside a list: transparent at rest so they sit flat in
- * their panel, raised when focused or selected — a selected *row* shows its state with an accent
- * left bar drawn by the row itself (UI_SPEC.md #2 allows "filled pill or left bar"), not a
- * second full-red block competing with the nav's. The visual pass found the earlier all-red
- * selected group row was the loudest thing on the screen for the least important state.
+ * **Crest, 2026-10-26** (`docs/vision/design-language/RESEARCH.md` "A. Crest"), replacing the
+ * ring + glow + 1.04 scale model:
+ * - Rows (lists, settings, pickers): the focused row becomes a full-width solid red bar. No ring,
+ *   no glow, no scale - the fill alone is the cursor, and it is the cheapest one to draw (no
+ *   shadow pass, no re-layout of a grown node). Selected-but-unfocused rows sit one step up.
+ * - Pills (nav, chips, buttons): the current one is filled red; the focused one carries a white
+ *   2dp outline, so "where I am" and "what's active" read as two different signals.
+ * - Shapes are square everywhere content lives; only [pillShape] is round.
+ * The function names are unchanged so call sites stay put; a later theme swaps the bodies.
  */
 object RedSurfFocus {
 
-    /** Rounded-rect for rows/cards; use [pillShape] for nav pills and buttons. */
+    /** Square by default (Crest). The radius parameter stays for call sites that pass one, but
+     * content shapes are 0dp: a rounded clip is a path clip, paid every frame. */
     @Composable
-    fun shape(radius: Dp = 10.dp): ClickableSurfaceShape = ClickableSurfaceDefaults.shape(
-        shape = RoundedCornerShape(radius),
-    )
+    fun shape(@Suppress("UNUSED_PARAMETER") radius: Dp = 0.dp): ClickableSurfaceShape =
+        ClickableSurfaceDefaults.shape(shape = RectangleShape)
 
     @Composable
     fun pillShape(): ClickableSurfaceShape = ClickableSurfaceDefaults.shape(
@@ -54,25 +52,27 @@ object RedSurfFocus {
         ClickableSurfaceDefaults.colors(
             containerColor = if (selected) SurfaceRaised else resting,
             contentColor = TextPrimary,
-            focusedContainerColor = SurfaceRaised,
+            focusedContainerColor = Accent,
             focusedContentColor = TextPrimary,
         )
 
+    /** Rows: the red fill is the cursor, so no ring. */
     @Composable
-    fun border(): ClickableSurfaceBorder = ClickableSurfaceDefaults.border(
-        focusedBorder = Border(border = BorderStroke(2.dp, Accent)),
+    fun border(): ClickableSurfaceBorder = ClickableSurfaceDefaults.border(focusedBorder = Border.None)
+
+    /** Pills and cards: a white 2dp outline marks focus, distinct from the red "current" fill. */
+    @Composable
+    fun pillBorder(): ClickableSurfaceBorder = ClickableSurfaceDefaults.border(
+        focusedBorder = Border(border = BorderStroke(2.dp, TextPrimary)),
     )
 
     @Composable
-    fun glow(): ClickableSurfaceGlow = ClickableSurfaceDefaults.glow(
-        focusedGlow = Glow(elevationColor = Accent.copy(alpha = 0.4f), elevation = 16.dp),
-    )
+    fun glow(): ClickableSurfaceGlow = ClickableSurfaceDefaults.glow(focusedGlow = Glow.None)
 
     @Composable
-    fun scale(): ClickableSurfaceScale = ClickableSurfaceDefaults.scale(
-        focusedScale = 1.04f,
-    )
+    fun scale(): ClickableSurfaceScale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
 
+    /** Pills: red when current; a focused, non-current pill lifts one step (plus [pillBorder]). */
     @Composable
     fun colors(selected: Boolean = false): ClickableSurfaceColors = ClickableSurfaceDefaults.colors(
         containerColor = if (selected) Accent else Surface,

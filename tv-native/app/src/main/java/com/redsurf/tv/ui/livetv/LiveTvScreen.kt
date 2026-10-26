@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.layout
 import com.redsurf.tv.diag.tracedMeasure
 import com.redsurf.tv.ui.LogoOrLetter
@@ -37,7 +38,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
@@ -903,7 +903,7 @@ fun LiveTvScreen(
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(RectangleShape)
                             .background(Accent)
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
@@ -918,7 +918,7 @@ fun LiveTvScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 24.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RectangleShape)
                     .background(Surface.copy(alpha = 0.95f))
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             ) {
@@ -1118,7 +1118,7 @@ private fun HeroPreviewBand(
     Box(
         modifier = modifier
             .height(RedSurfDensity.HeroExpanded)
-            .clip(RoundedCornerShape(RedSurfDensity.PanelRadius))
+            .clip(RectangleShape)
             .background(Surface),
     ) {
         if (expanded) {
@@ -1198,7 +1198,7 @@ private fun ExpandedHero(
                 .fillMaxHeight()
                 .aspectRatio(16f / 9f)
                 .onGloballyPositioned { onThumbBounds(it.boundsInRoot()) }
-                .clip(RoundedCornerShape(RedSurfDensity.PanelRadius))
+                .clip(RectangleShape)
                 .background(SurfaceRaised),
             contentAlignment = Alignment.Center,
         ) {
@@ -1323,7 +1323,7 @@ internal fun ProgrammeProgressRow(programme: EpgProgramEntity, now: Long) {
             modifier = Modifier
                 .width(70.dp)
                 .height(3.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .clip(RectangleShape)
                 .background(TextSecondary.copy(alpha = 0.3f)),
         ) {
             Box(
@@ -1349,7 +1349,7 @@ private fun BrowseContextMenu(channelName: String, isFavorite: Boolean, modifier
     Column(
         modifier = modifier
             .width(300.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RectangleShape)
             .background(Surface.copy(alpha = 0.94f))
             .padding(12.dp),
     ) {
@@ -1364,12 +1364,12 @@ private fun BrowseContextMenu(channelName: String, isFavorite: Boolean, modifier
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RectangleShape)
                 .background(Accent.copy(alpha = 0.22f))
                 .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = Modifier.width(3.dp).height(18.dp).background(Accent, RoundedCornerShape(2.dp)))
+            Box(modifier = Modifier.width(3.dp).height(18.dp).background(Accent, RectangleShape))
             Spacer(modifier = Modifier.width(10.dp))
             Icon(Icons.Filled.Star, contentDescription = null, tint = if (isFavorite) Accent else TextSecondary, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))

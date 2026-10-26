@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.shell
 
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -7,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
@@ -74,7 +74,7 @@ fun NavStrip(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(SurfaceColor, RoundedCornerShape(14.dp))
+            .background(SurfaceColor, RectangleShape)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -121,7 +121,7 @@ private fun NavPill(dest: NavDestination, selected: Boolean, onClick: () -> Unit
         shape = RedSurfFocus.pillShape(),
         colors = RedSurfFocus.colors(selected = selected),
         scale = RedSurfFocus.scale(),
-        border = RedSurfFocus.border(),
+        border = RedSurfFocus.pillBorder(),
         glow = RedSurfFocus.glow(),
     ) {
         Row(

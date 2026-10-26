@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.livetv
 
+import androidx.compose.ui.graphics.RectangleShape
 import com.redsurf.tv.ui.LogoOrLetter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -245,11 +245,11 @@ private fun ChannelRowPlaceholder() {
         modifier = Modifier
             .fillMaxWidth()
             .height(RowHeight)
-            .background(SurfaceColor, RoundedCornerShape(12.dp))
+            .background(SurfaceColor, RectangleShape)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.size(LogoSize).clip(RoundedCornerShape(8.dp)).background(SurfaceRaised))
+        Box(modifier = Modifier.size(LogoSize).clip(RectangleShape).background(SurfaceRaised))
     }
 }
 
@@ -258,7 +258,7 @@ private fun ChannelRowPlaceholder() {
 @Composable
 private fun ChannelLogo(channel: ChannelEntity) {
     Box(
-        modifier = Modifier.size(LogoSize).clip(RoundedCornerShape(8.dp)).background(SurfaceRaised),
+        modifier = Modifier.size(LogoSize).clip(RectangleShape).background(SurfaceRaised),
         contentAlignment = Alignment.Center,
     ) {
         LogoOrLetter(channel.streamIcon, channel.name, RedSurfType.rowTitle, TextPrimary, Modifier.fillMaxSize().padding(4.dp))

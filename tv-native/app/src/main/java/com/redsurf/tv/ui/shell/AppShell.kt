@@ -43,6 +43,7 @@ import com.redsurf.tv.ui.livetv.GroupKey
 import com.redsurf.tv.ui.livetv.GroupsFocusRequest
 import com.redsurf.tv.ui.livetv.key
 import com.redsurf.tv.ui.livetv.LiveTvScreen
+import com.redsurf.tv.ui.theme.surfBackdrop
 import com.redsurf.tv.ui.theme.tvSafeArea
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
@@ -458,7 +459,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // The safe-area padding stays on in fullscreen too: dropping it resized the whole UI on every
     // entry and exit (a full re-measure of everything); the player escapes it on its own instead
     // (LiveTvScreen's fillWindow, 2026-10-20).
-    val rootModifier = Modifier.fillMaxSize().tvSafeArea()
+    // Surf's backdrop on the calm destinations only (Crest + Surf, 2026-10-20) - never Live TV.
+    val rootModifier = Modifier.fillMaxSize()
+        .surfBackdrop { destination != NavDestination.LiveTv }
+        .tvSafeArea()
         // Long-press Back, intercepted once here rather than in every individual screen's own
         // key router - `onPreviewKeyEvent` on this root sees every key event top-down, before
         // whatever's actually focused (Settings' rail, Live TV's channel list) gets a look at

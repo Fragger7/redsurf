@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.shell
 
+import androidx.compose.ui.graphics.RectangleShape
 import android.util.Log
 import android.provider.Settings as AndroidSettings
 import androidx.compose.animation.core.LinearEasing
@@ -9,7 +10,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.PathMeasure
@@ -343,13 +343,13 @@ fun TeleportMenu(
 @Composable
 private fun TeleportRowView(row: TeleportRow, selected: Boolean) {
     if (selected) LaunchedEffect(row.label) { Log.d("Teleport", "selected ${row.label}") }
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RectangleShape
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(40.dp)
             .clip(shape)
-            .then(if (selected) Modifier.background(Accent.copy(alpha = 0.18f)).border(1.5.dp, Accent, shape) else Modifier)
+            .then(if (selected) Modifier.background(Accent) else Modifier)
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
