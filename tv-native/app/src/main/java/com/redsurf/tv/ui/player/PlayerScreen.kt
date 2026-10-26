@@ -156,9 +156,9 @@ fun PlayerScreen(
     // Favorites category, UP/DOWN zap inside Favorites instead of the channel's own category.
     // Null = the channel's own category, as before.
     zapGroupName: String? = null,
-    // Most-recently-watched first, capped at 8 by the caller (decision 8) - an in-memory stub
-    // until #2.5's real `recent_channels` table lands; the tile row and History picker both read
-    // this same list. Excludes the channel currently playing - the caller's job, not this one's.
+    // Most-recently-watched first, capped at 8 by the caller (decision 8) - backed by Room's
+    // `recent_channels` table, so it survives a relaunch; the tile row and History picker both
+    // read this same list. Excludes the channel currently playing - the caller's job, not this one's.
     recentChannels: List<ChannelEntity> = emptyList(),
     // BACKLOG_SWEEP.md #11/#12, AppPreferences-backed (Settings -> Playback/Appearance) - both
     // default false, matching this screen's pre-toggle behavior exactly.
