@@ -154,5 +154,25 @@ Rows flipped live since the table above was written, all verified on the TV:
 - **Other → Diagnostics** (read-only): device, Android version, free RAM, app heap, database and
   cache size, read off the main thread when the pane opens.
 
-Still grey: General → Language; Appearance → Show full category name on hold, Accent; Remote
-control → Long-press OK, Digit keys; Parental → PIN; Other → Backup & restore.
+### Late morning (v0.44.38-39)
+- **Parental controls → PIN** (TiviMate's "PIN code"): four digits from an on-screen keypad or the
+  remote's number keys; set it by entering it twice, remove it by entering it. Stored as a salted
+  SHA-256, never in clear. With a PIN set, un-hiding a hidden category asks for it; one unlock lasts
+  until you leave Parental controls or Settings. Setting a PIN was verified on the TV
+  (VERIFY-PENDING: wrong PIN, unlock, remove).
+- **Remote control → Digit keys** (default On): in the player, number keys type a channel number
+  (shown top right); it tunes after 2s, or at once on OK. Searches the current playlist, skips
+  hidden categories, "No channel N" when there's no match. VERIFY-PENDING on the TV.
+- Fix: the "Hide category" popup no longer survives leaving Live TV and coming back.
+- **Playback → Audio output** (v0.44.40, `PLAYER_ENGINEERING_BRIEF.md` §2.4): Auto / Force stereo.
+  Force stereo pins the audio sink to stereo PCM, so AC3/E-AC3 are decoded instead of passed through
+  (for a TV/receiver that goes silent on passthrough); changing it rebuilds the player.
+  VERIFY-PENDING on the TV. Real surround behaviour can't be checked here: the TV's audio path is
+  unknown, so only "the toggle works and playback still plays" is checkable.
+- Player, not Settings, but the same "clear history" ask: the History picker (player Actions row)
+  has a "Clear history" row at its end and now scrolls (v0.44.41). It wipes Room's
+  `recent_channels`; never pressed during testing (it would wipe the family's recents).
+
+Still grey: General → Language (the app is English only); Appearance → Show full category name on
+hold (the focused-row marquee already shows it), Accent (themes wait for their own sprint); Remote
+control → Long-press OK; Other → Backup & restore (overlaps Cloud Sync's credentials decision D1).

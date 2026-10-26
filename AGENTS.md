@@ -22,7 +22,37 @@ a Next.js web portal at the repo root.
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which
 were false. It is kept for provenance only.
 
-## ⏸ RESUME HERE - paused 2026-10-21 (user's weekly quota; resumes after it refreshes)
+## ▶ RESUME HERE - unattended run 2026-10-26 (01:58-13:10 CDT) ended at its stop point
+
+Most of the 7-step plan below got built in one run (commits 27dff84..HEAD, CI releases v0.44.x;
+per-step account in `docs/plans/SPRINT_LOG.md`'s 2026-10-26 entry):
+- **1 Performance** - one shared video view for preview + fullscreen (Back first frame 174 -> ~85ms),
+  whole-app baseline profile, per-category channel cache, Crest guide drawing, nav auto-hide by
+  translation. Guide ~13-15% janky with Projectivy's accessibility service on (13.4% without it;
+  that service measurably costs jank - `PERFORMANCE_SALVAGE.md`).
+- **2 Crest + Surf** - built as tokens (Barlow type, square solid-red focus, surf backdrop on calm
+  screens); Live TV re-skinned to Crest density (item 6).
+- **3 Nav feedback** - second-Back-to-exit, hint chip, one global guide-sync indicator (F17).
+- **4 Settings** - per-playlist page, and most grey rows went live (`SETTINGS.md` "As built",
+  v0.44.29-39): subtitles, auto-update, Start on, EPG offset/refresh, clear history, hidden
+  categories, Diagnostics, parental PIN, digit-key channel entry, Audio output (Force stereo).
+- **5 Resilience** - Buffer size, MIME fallback retry, initial bandwidth estimate. **FFmpeg audio
+  (S6) deferred for the user:** Jellyfin's media3-ffmpeg-decoder is GPLv3 and built for media3
+  1.9.0 (we're on 1.10.1); the repo has no LICENSE, so shipping it is the user's call.
+  Player brief P1 items 10-16 done (`PLAYER_ENGINEERING_BRIEF.md` §10): ABR thresholds scaled
+  to Buffer size, a runtime hardware-decoder probe ranks video codecs, live-edge speed 0.95-1.06.
+- **Smaller fixes, same run:** Teleport crescent tick drawn white; the player's History picker
+  gained "Clear history" and scrolls; recents already persist in Room's `recent_channels` (the
+  old "recents survive relaunch" backlog item is done); OTA download now shows a progress chip
+  (backlog "Progress feedback" item 2 - item 1, import parse progress, is still open).
+- **Versions:** local verification builds were v0.44.x while CI tags v0.55.x - CI's versionCode
+  is the run number, so it must be >= the installed one before an OTA/`install -r` can land.
+
+**Next:** the user's feel-check of this run, then Cloud Sync's interview (item 7). Still grey in
+Settings, by choice: Language, Show full name on hold, Accent, Long-press OK, Backup & restore.
+
+## ⏸ Previous pause - 2026-10-21 (user's weekly quota)
+
 
 **Plan agreed with the user, 2026-10-20 - this order supersedes SEQUENCING.md:**
 1. **Performance** - preview ↔ fullscreen first (the user's #1 choppy finding), then categories
