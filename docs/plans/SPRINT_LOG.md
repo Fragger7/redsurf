@@ -942,3 +942,31 @@ on local signed builds throughout, cut one real release at the very end once sat
 Single shared video view placed over the hero or the full window; PlayerScreen composes no view;
 grow/shrink animation removed (snap cut). Back first frame 174 → ~85ms, OK → fullscreen unchanged
 ~75-119ms. User confirmed preview video (CNN HD). Details: `PERFORMANCE_SALVAGE.md` "S1".
+
+## 2026-10-26 overnight run - S2-S8 (v0.44.7 → v0.44.21)
+
+- **S2/S3 categories + sync I/O** (CI 174-177): baseline profile (JIT→AOT; categories 15-18% janky),
+  Crest guide drawing, per-category channel cache evicted on channel-table writes (repeat visits
+  0ms vs 6-18ms, verified), cold-launch grid-focus claim waits for the load (verified, lands on CNN 4K).
+- **S4 nav auto-hide** (a5247f3): slides by translation, re-lays out once.
+- **S5 playback resilience** (07fca9f): Buffer size setting (TiviMate F17), MIME fallback retry,
+  initial bandwidth estimate. Verified on device.
+- **S6 FFmpeg audio - DEFERRED, user decision.** Jellyfin's `media3-ffmpeg-decoder` is GPLv3 and
+  built against media3 1.9.0 (we're on 1.10.1); the repo has no LICENSE. Shipping it would make
+  the APK GPLv3. Options: accept GPLv3, build our own FFmpeg extension (LGPL build) against 1.10.1,
+  or skip.
+- **S7 Crest + Surf tokens** (896652b): Barlow type, square solid-red focus, surf backdrop on calm
+  screens. Verified on device by screenshots (guide, Home, Settings). Leftovers: OTA dialog buttons
+  and nav pills still pill-shaped.
+- **S8 nav feedback** (b297f66, v0.44.21): final Back on Home reveals the nav on the Home pill and
+  arms exit; second Back within 4s exits (TiviMate "Confirm exit by second press Back"). Crest
+  HintChip toast ("Press BACK again to exit"; nav-hidden hint and Teleport tip, each ≤3 times).
+  One global "Updating guide" indicator in the nav strip replaces the per-screen ones. Built
+  without mock-ups per the user's "be brave" direction. Verified on device: chip renders, Home
+  pill focused, two quick Backs exit, no crash. **Not seen:** the sync indicator (no sync ran).
+  Also fixed: `repository.playlists()` was re-subscribed on every recomposition (3 call sites).
+- **Measurement note:** guide-scroll jank on this device falls into two regimes run to run
+  (~500 frames/median 31ms/19-25% vs ~650 frames/median 22ms/14-17%). The pre-S8 build measured
+  back to back gave 20.7-25.4%, the same as S8, so S8 has no measurable regression. Compare only
+  back to back, same regime. Projectivy's accessibility service adds jank too; measure with it
+  disabled (and restore it) and always `compile_app` after install.
