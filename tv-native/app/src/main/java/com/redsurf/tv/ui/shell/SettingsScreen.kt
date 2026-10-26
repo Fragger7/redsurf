@@ -137,6 +137,8 @@ fun SettingsScreen(
     onTogglePreviewOnSelect: () -> Unit,
     bufferSize: BufferSize,
     onCycleBufferSize: () -> Unit,
+    forceStereo: Boolean,
+    onToggleForceStereo: () -> Unit,
     defaultAspect: DefaultAspect,
     onCycleDefaultAspect: () -> Unit,
     afrEnabled: Boolean,
@@ -352,6 +354,8 @@ fun SettingsScreen(
             onTogglePreviewOnSelect = onTogglePreviewOnSelect,
             bufferSize = bufferSize,
             onCycleBufferSize = onCycleBufferSize,
+            forceStereo = forceStereo,
+            onToggleForceStereo = onToggleForceStereo,
             defaultAspect = defaultAspect,
             onCycleDefaultAspect = onCycleDefaultAspect,
             afrEnabled = afrEnabled,
@@ -593,6 +597,8 @@ private fun SettingsPane(
     onTogglePreviewOnSelect: () -> Unit,
     bufferSize: BufferSize,
     onCycleBufferSize: () -> Unit,
+    forceStereo: Boolean,
+    onToggleForceStereo: () -> Unit,
     defaultAspect: DefaultAspect,
     onCycleDefaultAspect: () -> Unit,
     afrEnabled: Boolean,
@@ -830,6 +836,8 @@ private fun SettingsPane(
                     onTogglePreviewOnSelect = onTogglePreviewOnSelect,
                     bufferSize = bufferSize,
                     onCycleBufferSize = onCycleBufferSize,
+                    forceStereo = forceStereo,
+                    onToggleForceStereo = onToggleForceStereo,
                     defaultAspect = defaultAspect,
                     onCycleDefaultAspect = onCycleDefaultAspect,
                     afrEnabled = afrEnabled,
@@ -1520,6 +1528,8 @@ private fun LazyListScope.playbackContent(
     onTogglePreviewOnSelect: () -> Unit,
     bufferSize: BufferSize,
     onCycleBufferSize: () -> Unit,
+    forceStereo: Boolean,
+    onToggleForceStereo: () -> Unit,
     defaultAspect: DefaultAspect,
     onCycleDefaultAspect: () -> Unit,
     afrEnabled: Boolean,
@@ -1551,6 +1561,11 @@ private fun LazyListScope.playbackContent(
         // TIVIMATE_LEARNINGS.md F17 - TiviMate's five steps. Bigger rides out a poor provider,
         // at the cost of a slower channel switch.
         LiveRow(label = "Buffer size", value = bufferSize.label, onClick = onCycleBufferSize)
+        LiveRow(
+            label = "Audio output",
+            value = if (forceStereo) "Force stereo" else "Auto",
+            onClick = onToggleForceStereo,
+        )
     }
     item { LiveRow(label = "Default aspect", value = defaultAspect.label, onClick = onCycleDefaultAspect) }
     item { LiveRow(label = "Auto frame rate", value = if (afrEnabled) "On" else "Off", onClick = onToggleAfr) }

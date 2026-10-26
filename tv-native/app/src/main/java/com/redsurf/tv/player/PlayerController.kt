@@ -20,6 +20,9 @@ import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioCapabilities
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.BehindLiveWindowException
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -133,6 +136,7 @@ class PlayerController(
     context: Context,
     playlistUserAgent: String? = null,
     bufferSize: BufferSize = BufferSize.Small,
+    forceStereo: Boolean = false,
 ) {
     // Main.immediate, not the default background dispatcher (user-found crash, 2026-09-17):
     // every retry path below (the stall watchdog, error backoff, the 456 race retry) eventually
@@ -179,7 +183,23 @@ class PlayerController(
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
 
-        val renderersFactory = DefaultRenderersFactory(context)
+        val renderersFactory = object : DefaultRenderersFactory(context) {
+            // Brief §2.4 "Force stereo": capabilities pinned to plain stereo PCM, so the sink
+            // never offers passthrough and every track decodes.
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink? = if (!forceStereo) {
+                super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
+            } else {
+                DefaultAudioSink.Builder(context)
+                    .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .build()
+            }
+        }
             // ON, never PREFER (brief §2.2) - platform MediaCodec decoders (and AC3/E-AC3 HDMI
             // passthrough) stay first choice; extension renderers are only reached when the
             // platform has nothing, so this can never regress hardware-decode-first performance.

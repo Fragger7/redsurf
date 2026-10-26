@@ -120,6 +120,17 @@ class AppPreferences(context: Context) {
     )
     val bufferSize: StateFlow<BufferSize> = _bufferSize.asStateFlow()
 
+    // PLAYER_ENGINEERING_BRIEF.md §2.4 "Audio output: Auto / Force stereo": forcing decodes
+    // every track to stereo PCM instead of HDMI passthrough - the fix for a receiver/TV that
+    // goes silent on AC3/E-AC3. Read when the player is built (LiveTvScreen's key).
+    private val _forceStereo = MutableStateFlow(prefs.getBoolean(KEY_FORCE_STEREO, false))
+    val forceStereo: StateFlow<Boolean> = _forceStereo.asStateFlow()
+
+    fun setForceStereo(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_FORCE_STEREO, enabled).apply()
+        _forceStereo.value = enabled
+    }
+
     fun cycleBufferSize() {
         val next = BufferSize.entries[(_bufferSize.value.ordinal + 1) % BufferSize.entries.size]
         prefs.edit().putString(KEY_BUFFER_SIZE, next.name).apply()
@@ -323,6 +334,7 @@ class AppPreferences(context: Context) {
         private const val KEY_HINT_PREFIX = "hint_shown_"
         private const val KEY_PREVIEW_ON_SELECT = "preview_on_select"
         private const val KEY_BUFFER_SIZE = "buffer_size"
+        private const val KEY_FORCE_STEREO = "force_stereo"
         private const val KEY_DEFAULT_ASPECT = "default_aspect"
         private const val KEY_EPG_REFRESH = "epg_refresh"
         private const val KEY_AFR_ENABLED = "afr_enabled"

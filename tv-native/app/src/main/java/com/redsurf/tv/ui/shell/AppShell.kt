@@ -252,6 +252,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val blackScreenBetweenZaps by appPreferences.blackScreenBetweenZaps.collectAsState()
     val previewOnSelect by appPreferences.previewOnSelect.collectAsState()
     val bufferSize by appPreferences.bufferSize.collectAsState()
+    val forceStereo by appPreferences.forceStereo.collectAsState()
     val defaultAspect by appPreferences.defaultAspect.collectAsState()
     val afrEnabled by appPreferences.afrEnabled.collectAsState()
     val preferredAudio by appPreferences.preferredAudioLanguage.collectAsState()
@@ -723,6 +724,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         blackScreenBetweenZaps = blackScreenBetweenZaps,
                         digitKeysEnabled = digitKeysEnabled,
                         bufferSize = bufferSize,
+                        forceStereo = forceStereo,
                         defaultAspect = defaultAspect,
                         afrEnabled = afrEnabled,
                         previewOnSelect = previewOnSelect,
@@ -789,6 +791,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         },
                         bufferSize = bufferSize,
                         onCycleBufferSize = { appPreferences.cycleBufferSize() },
+                        forceStereo = forceStereo,
+                        onToggleForceStereo = { appPreferences.setForceStereo(!forceStereo) },
                         defaultAspect = defaultAspect,
                         onCycleDefaultAspect = { appPreferences.cycleDefaultAspect() },
                         afrEnabled = afrEnabled,

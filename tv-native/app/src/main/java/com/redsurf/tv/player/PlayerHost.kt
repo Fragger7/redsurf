@@ -50,6 +50,7 @@ fun Context.findActivity(): Activity? = when (this) {
 fun rememberPlayerController(
     playlistUserAgent: String? = null,
     bufferSize: BufferSize = BufferSize.Small,
+    forceStereo: Boolean = false,
 ): PlayerController {
     val context = LocalContext.current
     // Deliberately keyed on nothing but Unit (brief §3.3: one controller per fullscreen session,
@@ -59,7 +60,7 @@ fun rememberPlayerController(
     // instant that lookup resolves. Whatever value is current on the *first* call is what this
     // session's data source uses - matches the pre-hoist behavior's own risk profile (which had
     // no per-playlist User-Agent support for the media path at all), just narrower now.
-    val controller = remember { PlayerController(context, playlistUserAgent, bufferSize) }
+    val controller = remember { PlayerController(context, playlistUserAgent, bufferSize, forceStereo) }
 
     DisposableEffect(controller) {
         val activity = context.findActivity()

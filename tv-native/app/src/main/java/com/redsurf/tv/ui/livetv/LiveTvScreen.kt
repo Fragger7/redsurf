@@ -133,6 +133,7 @@ fun LiveTvScreen(
     digitKeysEnabled: Boolean = true,
     // TiviMate's "Buffer size" (F17) - keys the shared player, so a change rebuilds it.
     bufferSize: BufferSize = BufferSize.Small,
+    forceStereo: Boolean = false,
     defaultAspect: DefaultAspect = DefaultAspect.Fit,
     afrEnabled: Boolean = false,
     // PREVIEW.md, 2026-09-20 - default true. When true, a single OK on the current-airing cell of
@@ -339,7 +340,9 @@ fun LiveTvScreen(
     val playerUserAgent = remember(playingPlaylistId, playlists) {
         playlists.firstOrNull { it.id == playingPlaylistId }?.userAgent
     }
-    val livePlayer = key(playerUserAgent, bufferSize) { rememberPlayerController(playerUserAgent, bufferSize) }
+    val livePlayer = key(playerUserAgent, bufferSize, forceStereo) {
+        rememberPlayerController(playerUserAgent, bufferSize, forceStereo)
+    }
     // Each fullscreen session starts on the Settings default; the Aspect tile cycles from there.
     LaunchedEffect(livePlayer, isFullscreen, defaultAspect) {
         if (isFullscreen) livePlayer.setResizeMode(defaultAspect.resizeMode)
