@@ -204,6 +204,7 @@ fun SettingsScreen(
     playlistSyncStatus: Map<String, String> = emptyMap(),
     onRenamePlaylist: (String, String) -> Unit = { _, _ -> },
     onSavePlaylistConnection: suspend (String, String, String, String) -> String? = { _, _, _, _ -> null },
+    loadPlaylistAccount: suspend (String) -> com.redsurf.tv.vod.XtreamUserInfo? = { null },
     onRefreshPlaylist: (String) -> Unit = {},
     onUpdatePlaylistEpg: (String) -> Unit = {},
 ) {
@@ -401,6 +402,7 @@ fun SettingsScreen(
             playlistSyncStatus = playlistSyncStatus,
             onRenamePlaylist = onRenamePlaylist,
             onSavePlaylistConnection = onSavePlaylistConnection,
+            loadPlaylistAccount = loadPlaylistAccount,
             onRefreshPlaylist = onRefreshPlaylist,
             onUpdatePlaylistEpg = onUpdatePlaylistEpg,
             onDetailOpenChanged = { playlistDetailOpen = it },
@@ -650,6 +652,7 @@ private fun SettingsPane(
     playlistSyncStatus: Map<String, String>,
     onRenamePlaylist: (String, String) -> Unit,
     onSavePlaylistConnection: suspend (String, String, String, String) -> String?,
+    loadPlaylistAccount: suspend (String) -> com.redsurf.tv.vod.XtreamUserInfo?,
     onRefreshPlaylist: (String) -> Unit,
     onUpdatePlaylistEpg: (String) -> Unit,
     onDetailOpenChanged: (Boolean) -> Unit,
@@ -906,6 +909,7 @@ private fun SettingsPane(
                 onUpdateEpg = { onUpdatePlaylistEpg(openPlaylist.id) },
                 onRename = { name -> onRenamePlaylist(openPlaylist.id, name) },
                 onSaveConnection = { server, user, pass -> onSavePlaylistConnection(openPlaylist.id, server, user, pass) },
+                loadAccount = { loadPlaylistAccount(openPlaylist.id) },
                 onDelete = { closeDetail(addPlaylistFocus) { onDeletePlaylist(openPlaylist.id) } },
                 firstRowFocus = detailFirstFocus,
                 modifier = Modifier
@@ -1101,6 +1105,7 @@ private fun PlaylistDetail(
     onUpdateEpg: () -> Unit,
     onRename: (String) -> Unit,
     onSaveConnection: suspend (String, String, String) -> String?,
+    loadAccount: suspend () -> com.redsurf.tv.vod.XtreamUserInfo?,
     onDelete: () -> Unit,
     firstRowFocus: FocusRequester,
     modifier: Modifier = Modifier,
@@ -1108,6 +1113,16 @@ private fun PlaylistDetail(
     var name by remember(playlist.id) { mutableStateOf(playlist.name) }
     val saveFocus = remember { FocusRequester() }
     val canRefresh = playlist.type == "xtream" || playlist.type == "m3u"
+    // TiviMate's playlist info: the panel's account object, fetched once per page open. "Checking…"
+    // until it answers; the section disappears if the panel doesn't (M3U/Stalker never show it).
+    var account by remember(playlist.id) { mutableStateOf<com.redsurf.tv.vod.XtreamUserInfo?>(null) }
+    var accountLoaded by remember(playlist.id) { mutableStateOf(false) }
+    if (playlist.type == "xtream") {
+        LaunchedEffect(playlist.id) {
+            account = loadAccount()
+            accountLoaded = true
+        }
+    }
     LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         item {
             LiveRow(
@@ -1166,6 +1181,27 @@ private fun PlaylistDetail(
         playlist.userAgent?.takeIf { it.isNotBlank() }?.let { ua -> item { InfoRow("User agent", ua) } }
         item { InfoRow("Channels", channelCount?.let { "%,d".format(it) } ?: "—") }
         item { InfoRow("Content", "Live TV") }
+        if (playlist.type == "xtream" && (!accountLoaded || account != null)) {
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionDivider()
+            }
+            val info = account
+            if (info == null) {
+                item { InfoRow("Account", "Checking…") }
+            } else {
+                item {
+                    InfoRow(
+                        "Account",
+                        listOfNotNull(info.status ?: "—", "trial".takeIf { info.isTrial }).joinToString(" · "),
+                    )
+                }
+                item { InfoRow("Expires", info.expiresAtSec?.let { formatAccountExpiry(it) } ?: "Never") }
+                if (info.maxConnections != null) {
+                    item { InfoRow("Connections", "${info.activeConnections ?: 0} of ${info.maxConnections} in use") }
+                }
+            }
+        }
         item {
             Spacer(modifier = Modifier.height(8.dp))
             SectionDivider()
@@ -1786,3 +1822,17 @@ private fun SectionDivider() {
 @Composable
 private fun ActionChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) =
     CrestButton(label, onClick, modifier)
+
+/** "12 Mar 2027 (in 137 days)" - the date plus how long is left, TiviMate's expiry line. */
+private fun formatAccountExpiry(epochSec: Long): String {
+    val ms = epochSec * 1000
+    val date = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(ms))
+    val days = Math.floorDiv(ms - System.currentTimeMillis(), 86_400_000L)
+    val left = when {
+        days < 0 -> "expired"
+        days == 0L -> "today"
+        days == 1L -> "in 1 day"
+        else -> "in $days days"
+    }
+    return "$date ($left)"
+}

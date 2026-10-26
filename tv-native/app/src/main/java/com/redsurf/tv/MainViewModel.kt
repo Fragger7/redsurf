@@ -487,6 +487,19 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    /** The Xtream panel's own account object for this playlist (expiry, connections, status) -
+     * the per-playlist page's Account section, TiviMate's playlist info. Credentials come from a
+     * stored stream URL, as everywhere else; null for other types or on any failure. */
+    suspend fun playlistAccountInfo(playlistId: String): com.redsurf.tv.vod.XtreamUserInfo? =
+        withContext(Dispatchers.IO) {
+            val db = localDb ?: return@withContext null
+            val playlist = db.playlistDao().getPlaylistById(playlistId) ?: return@withContext null
+            if (playlist.type != "xtream") return@withContext null
+            val (server, user, pass) = db.channelDao().firstForPlaylist(playlistId)?.streamId
+                ?.let { XtreamApi.parseXtreamCredentials(it) } ?: return@withContext null
+            XtreamApi.getUserInfo(server, user, pass, playlist.userAgent)
+        }
+
     /**
      * Settings → Playlists → <playlist> → Connection: edits a loaded playlist's login in place
      * (AGENTS.md backlog, "edit existing credentials"). Xtream: the new login is checked against

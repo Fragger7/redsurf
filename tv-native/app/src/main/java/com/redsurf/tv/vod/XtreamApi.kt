@@ -21,7 +21,15 @@ data class VodSeries(val id: String, val name: String, val cover: String, val ra
  * channel's `streamId` already IS its full playback URL (`.../live/user/pass/id.ts`,
  * `MainViewModel.loadXtreamCodes`), so the caller parses server/user/pass back out of whichever
  * channel is currently playing instead of this app persisting the password a second time. */
-data class XtreamUserInfo(val activeConnections: Int?, val maxConnections: Int?)
+data class XtreamUserInfo(
+    val activeConnections: Int?,
+    val maxConnections: Int?,
+    /** `exp_date`, unix seconds; null for an unlimited account or a panel that doesn't say. */
+    val expiresAtSec: Long? = null,
+    /** `status`, e.g. "Active", "Expired", "Banned". */
+    val status: String? = null,
+    val isTrial: Boolean = false,
+)
 
 /** One live channel from Xtream's get_live_streams, with its category name already resolved. */
 data class XtreamLiveStream(
@@ -115,6 +123,9 @@ object XtreamApi {
             XtreamUserInfo(
                 activeConnections = userInfo.optString("active_cons").toIntOrNull(),
                 maxConnections = userInfo.optString("max_connections").toIntOrNull(),
+                expiresAtSec = userInfo.optString("exp_date").toLongOrNull()?.takeIf { it > 0 },
+                status = userInfo.optString("status").takeIf { it.isNotBlank() && it != "null" },
+                isTrial = userInfo.optString("is_trial") == "1",
             )
         }.getOrNull()
     }
