@@ -49,7 +49,8 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
     // "Resolution badge" flipped live (BACKLOG_SWEEP.md #12) - now AppearanceContent's own toggle
     // row in SettingsScreen.kt, not a grey row here.
     SettingsCategory.Appearance to listOf(
-        GreyRow("Show full category name on hold", "Off"),
+        // "Show full category name on hold" removed 2026-10-26: the focused-row marquee shows full
+        // names, and hold-OK on a category is Hide (SETTINGS.md).
         GreyRow("Accent", "Red"),
     ),
     // "Black screen between zaps" flipped live (BACKLOG_SWEEP.md #11) - now PlaybackContent's own

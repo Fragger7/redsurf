@@ -37,7 +37,7 @@ Live rows are the ones that exist and work today. **Everything else is a grey ro
 | **General** | — | Resume last channel on launch · Off (lands with Phase 2 #2.5) / Start on · Live TV / Language · System |
 | **Playlists** | Loaded playlists (each: name, type, **Remove** w/ confirm) · Add playlist · *Danger zone:* Reset everything (confirm) | per playlist: Rename · Refresh / re-sync · Content · Live+VOD (the selector the on-screen forms lack) |
 | **EPG** | — | Sources · none / Time offset · 0h / Refresh every · 12h (all Phase 3) |
-| **Appearance** | — | Resolution badge · Class (SD/HD/FHD/4K) vs Pixels / Hide nav strip when idle · Off / Show full category name on hold · Off / Accent · Red |
+| **Appearance** | — | Resolution badge · Class (SD/HD/FHD/4K) vs Pixels / Hide nav strip when idle · Off / Accent · Red |
 | **Playback** | — | Black screen between zaps · Off / Auto frame rate · Off / Buffer · Default / Preferred audio · Auto / Preferred subtitles · Off / Default aspect · Fit |
 | **Remote control** | — | Long-press OK · Context menu / Digit keys · Channel number entry |
 | **Parental controls** | — | PIN · Not set / Hidden groups · none |
@@ -181,5 +181,6 @@ Rows flipped live since the table above was written, all verified on the TV:
   Context menu (default) / Add/remove favourite (with the usual toast) / Recent channels (opens the
   History picker). TiviMate remaps every long key; this is its most-used one. VERIFY-PENDING.
 
-Still grey: General → Language (the app is English only); Appearance → Show full category name on
-hold (the focused-row marquee already shows it), Accent (themes wait for their own sprint); Other → Backup & restore (overlaps Cloud Sync's credentials decision D1).
+Still grey: General → Language (the app is English only); Appearance → Accent (themes wait for their own sprint); Other → Backup & restore (overlaps Cloud Sync's credentials decision D1).
+Removed 2026-10-26: Appearance → "Show full category name on hold" - not a TiviMate setting, the
+focused-row marquee already shows full names, and hold-OK on a category is now Hide.
