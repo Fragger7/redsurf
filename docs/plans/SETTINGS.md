@@ -119,3 +119,19 @@ a pre-existing bug where removing the last playlist never returned to Onboarding
    question is now **decided** (always the first channel), and a new one was found (recent-channel
    tile selection across categories doesn't update `selectedGroup`, so Back lands on the wrong
    category). The original question here is still open - re-ask separately.
+
+## As-built update, 2026-10-26 (overnight run, v0.44.29-30)
+
+Rows flipped live since the table above was written, all verified on the TV:
+- **Playlists → per-playlist page** (v0.44.29): Rename (RIGHT to Save), Update channels, Update
+  EPG, grouped channel counts. Opened by OK on a playlist row; Back returns to that row.
+- **EPG → Refresh every** (v0.44.30): 6h / 12h / **Daily** (default) / 2 days. Changing it
+  reschedules every playlist's periodic sync (confirmed in `dumpsys jobscheduler`: ~2-day
+  latencies on "2 days", under 24h on "Daily"). Time offset is still grey.
+- **Playback → Default aspect** (Fit / Fill / Zoom, default Fit): applied when fullscreen. The
+  setting persists and reaches the player; the visual difference wasn't checkable on a 16:9
+  stream (screenshots show video as black).
+- **Playback → Auto frame rate** (default Off): only switches display modes in fullscreen;
+  restores the original mode otherwise.
+- **Playback → Preferred audio**: shows the remembered language (or Auto); OK clears it.
+  Preferred subtitles is still grey.
