@@ -58,10 +58,10 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
     ),
     SettingsCategory.RemoteControl to listOf(
         GreyRow("Long-press OK", "Context menu"),
-        GreyRow("Digit keys", "Channel number entry"),
+        // "Digit keys" is live - SettingsScreen.kt's remoteControlContent.
     ),
     SettingsCategory.ParentalControls to listOf(
-        GreyRow("PIN", "Not set"),
+        // "PIN" is live - SettingsScreen.kt's parentalContent; it guards unhiding.
         // "Hidden groups" is live - SettingsScreen.kt's parentalContent ("Hidden categories").
     ),
     SettingsCategory.Other to listOf(

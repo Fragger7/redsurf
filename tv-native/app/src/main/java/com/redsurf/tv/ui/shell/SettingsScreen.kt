@@ -168,10 +168,16 @@ fun SettingsScreen(
     hiddenGroupRows: List<String> = emptyList(),
     hiddenGroups: Set<String> = emptySet(),
     onToggleGroupHidden: (String) -> Unit = {},
+    // Parental "PIN": whether one is set, a checker, and set/clear (null clears).
+    parentalPinSet: Boolean = false,
+    checkParentalPin: (String) -> Boolean = { true },
+    onSetParentalPin: (String?) -> Unit = {},
     // TELEPORT_MENU.md decision 1, 2026-09-19 - same AppPreferences pattern, the first live row
     // Remote control has ever had.
     teleportMenuEnabled: Boolean,
     onToggleTeleportMenuEnabled: () -> Unit,
+    digitKeysEnabled: Boolean = true,
+    onToggleDigitKeys: () -> Unit = {},
     // Sprint 2, 2026-09-23 (Finding 9, FOCUS_MODEL.md rule 4) - AppShell used to remove this whole
     // composable from composition on every destination switch away from Settings, the same
     // conditional-composition trap Sprint 1 already fixed for LiveTvScreen. `selectedSettingsCategory`
@@ -278,7 +284,7 @@ fun SettingsScreen(
         selectedCategory == SettingsCategory.General ||
         selectedCategory == SettingsCategory.RemoteControl ||
         selectedCategory == SettingsCategory.Other ||
-        (selectedCategory == SettingsCategory.ParentalControls && hiddenGroupRows.isNotEmpty())
+        selectedCategory == SettingsCategory.ParentalControls
 
     Row(
         modifier = Modifier.hiddenButComposed(visible).fillMaxSize()
@@ -373,8 +379,13 @@ fun SettingsScreen(
             hiddenGroupRows = hiddenGroupRows,
             hiddenGroups = hiddenGroups,
             onToggleGroupHidden = onToggleGroupHidden,
+            parentalPinSet = parentalPinSet,
+            checkParentalPin = checkParentalPin,
+            onSetParentalPin = onSetParentalPin,
             teleportMenuEnabled = teleportMenuEnabled,
             onToggleTeleportMenuEnabled = onToggleTeleportMenuEnabled,
+            digitKeysEnabled = digitKeysEnabled,
+            onToggleDigitKeys = onToggleDigitKeys,
             playlistChannelCounts = playlistChannelCounts,
             playlistSyncStatus = playlistSyncStatus,
             onRenamePlaylist = onRenamePlaylist,
@@ -610,8 +621,14 @@ private fun SettingsPane(
     hiddenGroupRows: List<String> = emptyList(),
     hiddenGroups: Set<String> = emptySet(),
     onToggleGroupHidden: (String) -> Unit = {},
+    // Parental "PIN": whether one is set, a checker, and set/clear (null clears).
+    parentalPinSet: Boolean = false,
+    checkParentalPin: (String) -> Boolean = { true },
+    onSetParentalPin: (String?) -> Unit = {},
     teleportMenuEnabled: Boolean,
     onToggleTeleportMenuEnabled: () -> Unit,
+    digitKeysEnabled: Boolean = true,
+    onToggleDigitKeys: () -> Unit = {},
     playlistChannelCounts: Map<String, Int>,
     playlistSyncStatus: Map<String, String>,
     onRenamePlaylist: (String, String) -> Unit,
@@ -695,6 +712,33 @@ private fun SettingsPane(
         }
     }
     LaunchedEffect(category) { if (category != SettingsCategory.Playlists) resetDetail() }
+    // Parental PIN: one unlock lasts until the pane leaves Parental controls.
+    var pinPrompt by remember { mutableStateOf<PinPrompt?>(null) }
+    var parentalUnlocked by remember { mutableStateOf(false) }
+    LaunchedEffect(category) { if (category != SettingsCategory.ParentalControls) parentalUnlocked = false }
+    pinPrompt?.let { prompt ->
+        PinDialog(
+            title = when (prompt) {
+                PinPrompt.Create -> "Set a PIN"
+                PinPrompt.Remove -> "Enter PIN to turn it off"
+                is PinPrompt.Unlock -> "Enter PIN"
+            },
+            confirmNew = prompt == PinPrompt.Create,
+            check = if (prompt == PinPrompt.Create) null else checkParentalPin,
+            onDone = { pin ->
+                pinPrompt = null
+                when (prompt) {
+                    PinPrompt.Create -> onSetParentalPin(pin)
+                    PinPrompt.Remove -> onSetParentalPin(null)
+                    is PinPrompt.Unlock -> {
+                        parentalUnlocked = true
+                        onToggleGroupHidden(prompt.key)
+                    }
+                }
+            },
+            onDismiss = { pinPrompt = null },
+        )
+    }
     LaunchedEffect(playlists, detailId) {
         if (detailId != null && closeTarget == null && playlists.none { it.id == detailId }) resetDetail()
     }
@@ -800,6 +844,8 @@ private fun SettingsPane(
                 SettingsCategory.RemoteControl -> remoteControlContent(
                     teleportMenuEnabled = teleportMenuEnabled,
                     onToggle = onToggleTeleportMenuEnabled,
+                    digitKeysEnabled = digitKeysEnabled,
+                    onToggleDigitKeys = onToggleDigitKeys,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.ParentalControls -> parentalContent(
@@ -807,7 +853,12 @@ private fun SettingsPane(
                     hiddenGroups = hiddenGroups,
                     multiplePlaylists = playlists.size > 1,
                     playlistName = { id -> playlists.firstOrNull { it.id == id }?.name.orEmpty() },
-                    onToggle = onToggleGroupHidden,
+                    onToggle = { key ->
+                        if (parentalPinSet && !parentalUnlocked) pinPrompt = PinPrompt.Unlock(key)
+                        else onToggleGroupHidden(key)
+                    },
+                    pinSet = parentalPinSet,
+                    onPinRow = { pinPrompt = if (parentalPinSet) PinPrompt.Remove else PinPrompt.Create },
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.Other -> otherContent(
@@ -1340,10 +1391,18 @@ private fun LazyListScope.parentalContent(
     multiplePlaylists: Boolean,
     playlistName: (String) -> String,
     onToggle: (String) -> Unit,
+    pinSet: Boolean,
+    onPinRow: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
-    val rows = SETTINGS_GREY_ROWS[SettingsCategory.ParentalControls].orEmpty()
-    items(rows) { GreyRowContent(it) }
+    item {
+        LiveRow(
+            label = "PIN",
+            value = if (pinSet) "On" else "Not set",
+            onClick = onPinRow,
+            modifier = Modifier.focusRequester(firstRowFocus),
+        )
+    }
     if (hiddenGroupRows.isEmpty()) {
         item { GreyRowContent(GreyRow("Hidden categories", "None - hold OK on a category")) }
         return
@@ -1355,9 +1414,15 @@ private fun LazyListScope.parentalContent(
             label = if (multiplePlaylists) "$name · ${playlistName(playlistId)}" else name,
             value = if (key in hiddenGroups) "Hidden" else "Shown",
             onClick = { onToggle(key) },
-            modifier = if (index == 0) Modifier.focusRequester(firstRowFocus) else Modifier,
         )
     }
+}
+
+/** What the Parental PIN dialog is asking for. */
+private sealed interface PinPrompt {
+    data object Create : PinPrompt
+    data object Remove : PinPrompt
+    data class Unlock(val key: String) : PinPrompt
 }
 
 /** Other: "Clear watch history" is live - a two-press confirm done in place (the value reads
@@ -1540,10 +1605,13 @@ private fun LazyListScope.appearanceContent(
 
 /** Remote control (`docs/plans/TELEPORT_MENU.md` decision 1, 2026-09-19): "Teleport Menu" is the
  * first live row this category has ever had - default off, see `AppShell.kt`'s long-press-Back
- * handler for what flipping it changes. Existing grey rows (Long-press OK, Digit keys) unchanged. */
+ * handler for what flipping it changes. "Digit keys" (2026-10-26): number keys type a channel
+ * number in fullscreen, TiviMate's default - see PlayerScreen's digit entry. */
 private fun LazyListScope.remoteControlContent(
     teleportMenuEnabled: Boolean,
     onToggle: () -> Unit,
+    digitKeysEnabled: Boolean,
+    onToggleDigitKeys: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
@@ -1552,6 +1620,13 @@ private fun LazyListScope.remoteControlContent(
             value = if (teleportMenuEnabled) "On" else "Off",
             onClick = onToggle,
             modifier = Modifier.focusRequester(firstRowFocus),
+        )
+    }
+    item {
+        LiveRow(
+            label = "Digit keys",
+            value = if (digitKeysEnabled) "Channel number entry" else "Off",
+            onClick = onToggleDigitKeys,
         )
     }
     items(SETTINGS_GREY_ROWS[SettingsCategory.RemoteControl].orEmpty()) { GreyRowContent(it) }

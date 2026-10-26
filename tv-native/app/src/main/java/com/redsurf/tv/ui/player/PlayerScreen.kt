@@ -79,6 +79,9 @@ import com.redsurf.tv.ui.theme.WaveSpinner
 import com.redsurf.tv.vod.XtreamApi
 import com.redsurf.tv.vod.XtreamUserInfo
 import kotlinx.coroutines.delay
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
+import android.view.KeyEvent as NativeKeyEvent
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -87,6 +90,8 @@ private const val TAG = "PlayerScreen"
 private const val ZAP_BANNER_TIMEOUT_MS = 4_000L
 private const val CONTROLS_TIMEOUT_MS = 8_000L
 private const val CLOCK_TICK_MS = 60_000L
+private const val DIGIT_COMMIT_MS = 2_000L
+private const val MAX_DIGITS = 5
 
 /**
  * The overlay chrome shown while a channel plays fullscreen (PHASE_2.md - "The Player"). See
@@ -157,6 +162,8 @@ fun PlayerScreen(
     // default false, matching this screen's pre-toggle behavior exactly.
     blackScreenBetweenZaps: Boolean = false,
     showRawResolution: Boolean = false,
+    // Settings -> Remote control "Digit keys": number keys type a channel number (TiviMate).
+    digitKeysEnabled: Boolean = true,
     // The one shared Live TV player (L5, 2026-10-20) - owned by LiveTvScreen, which also keys it on
     // the playing playlist's User-Agent.
     controller: PlayerController,
@@ -184,6 +191,10 @@ fun PlayerScreen(
     val tilesFloorFocus = remember { FocusRequester() }
     val actionsFloorFocus = remember { FocusRequester() }
     var favoriteToast by remember { mutableStateOf<String?>(null) }
+    // Digit-key channel entry (TiviMate's default): digits accumulate in a top-right box; ~2s
+    // after the last one (or OK) the current channel's playlist is searched for that number.
+    var digitEntry by remember { mutableStateOf("") }
+    var digitJob by remember { mutableStateOf<Job?>(null) }
 
     // PLAYER_ENGINEERING_BRIEF.md §6/§9: [playlistUserAgent] is resolved by the caller
     // (LiveTvScreen, reactively, well before this screen is ever composed - see its own doc
@@ -274,6 +285,35 @@ fun PlayerScreen(
                     "-> to=${next?.let { "(${it.num} ${it.name})" } ?: "null"} group=$zapGroup",
             )
             next?.let(onChannelChanged)
+        }
+    }
+
+    fun commitDigits() {
+        digitJob?.cancel()
+        val typed = digitEntry
+        digitEntry = ""
+        val num = typed.toIntOrNull() ?: return
+        val channel = currentChannel ?: return
+        scope.launch {
+            val target = repository.channelByNumber(channel.playlistId, num)
+            Log.d(TAG, "digit entry $num -> ${target?.let { "(${it.num} ${it.name})" } ?: "none"}")
+            when {
+                target == null -> favoriteToast = "No channel $num"
+                target.streamId != channel.streamId -> {
+                    overlay = PlayerOverlay.ZapBanner
+                    onChannelChanged(target)
+                }
+            }
+        }
+    }
+
+    fun typeDigit(d: Int) {
+        if (digitEntry.length >= MAX_DIGITS) return
+        digitEntry += d
+        digitJob?.cancel()
+        digitJob = scope.launch {
+            delay(DIGIT_COMMIT_MS)
+            commitDigits()
         }
     }
 
@@ -502,6 +542,16 @@ fun PlayerScreen(
                         // The Level 0 control matrix (decision 3). LEFT/RIGHT/UP/DOWN act once
                         // per press (isFirstDown), not once per repeat tick, so a held button
                         // doesn't machine-gun through channels.
+                        val code = event.nativeKeyEvent.keyCode
+                        if (digitKeysEnabled && code in NativeKeyEvent.KEYCODE_0..NativeKeyEvent.KEYCODE_9) {
+                            if (isFirstDown) typeDigit(code - NativeKeyEvent.KEYCODE_0)
+                            return@onKeyEvent true
+                        }
+                        // OK while a number is pending tunes it now instead of opening Controls.
+                        if (digitEntry.isNotEmpty() && (event.key == Key.DirectionCenter || event.key == Key.Enter)) {
+                            if (event.type == KeyEventType.KeyUp) commitDigits()
+                            return@onKeyEvent true
+                        }
                         when (event.key) {
                             Key.DirectionCenter, Key.Enter -> when {
                                 isDown && event.nativeKeyEvent.repeatCount == 0 -> okWasLongPress = false
@@ -767,6 +817,18 @@ fun PlayerScreen(
         // favorites" - there's no favourites list UI yet (AGENTS.md backlog), so this is the only
         // feedback the toggle gets right now. Same transient-badge language as errorPresentation
         // above, not a native Android Toast (this whole screen is custom Compose chrome).
+        if (digitEntry.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(24.dp)
+                    .clip(RectangleShape)
+                    .background(Surface.copy(alpha = 0.9f))
+                    .padding(horizontal = 18.dp, vertical = 8.dp),
+            ) {
+                Text(digitEntry, style = RedSurfType.rowSecondary.copy(fontSize = 34.sp), color = TextPrimary)
+            }
+        }
         favoriteToast?.let { message ->
             LaunchedEffect(message) {
                 delay(1_500)

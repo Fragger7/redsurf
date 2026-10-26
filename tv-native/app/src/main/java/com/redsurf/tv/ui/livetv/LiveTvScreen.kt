@@ -130,6 +130,7 @@ fun LiveTvScreen(
     // use for either value itself, it's just the composable in between AppShell (which owns
     // AppPreferences) and PlayerScreen (which actually reads them).
     blackScreenBetweenZaps: Boolean = false,
+    digitKeysEnabled: Boolean = true,
     // TiviMate's "Buffer size" (F17) - keys the shared player, so a change rebuilds it.
     bufferSize: BufferSize = BufferSize.Small,
     defaultAspect: DefaultAspect = DefaultAspect.Fit,
@@ -643,6 +644,11 @@ fun LiveTvScreen(
     LaunchedEffect(contextMenuChannel) {
         Log.d("LiveTvScreen", "contextMenu -> ${contextMenuChannel?.name ?: "closed"}")
     }
+    // Leaving Live TV (Teleport, a pill) while a menu is open must close it - found live
+    // 2026-10-26: the hide popup was still up on return, over a cell it no longer belonged to.
+    LaunchedEffect(visible) {
+        if (!visible) { contextMenuChannel = null; contextMenuGroup = null; contextMenuArmed = false }
+    }
     // Local Categories-row landing (same mechanism Teleport uses via AppShell) - the last favorite
     // removed while inside Favorites, Back from the grid, and LEFT off the grid's past edge.
     var localGroupsFocusRequest by remember { mutableStateOf<GroupsFocusRequest?>(null) }
@@ -1049,6 +1055,7 @@ fun LiveTvScreen(
                     recentChannels = recentChannels.filter { it.streamId != focusedChannel?.streamId },
                     blackScreenBetweenZaps = blackScreenBetweenZaps,
                     showRawResolution = showRawResolution,
+                    digitKeysEnabled = digitKeysEnabled,
                     controller = livePlayer,
                     modifier = Modifier.fillWindow(windowSize) { screenBounds?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero },
                 )

@@ -302,7 +302,9 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     }
     val autoPlayLastChannelOnLaunch by appPreferences.autoPlayLastChannelOnLaunch.collectAsState()
     val teleportMenuEnabled by appPreferences.teleportMenuEnabled.collectAsState()
+    val digitKeysEnabled by appPreferences.digitKeysEnabled.collectAsState()
     val hiddenGroups by appPreferences.hiddenGroups.collectAsState()
+    val parentalPinSet by appPreferences.parentalPinSet.collectAsState()
     // Settings -> Parental's rows: every category hidden at any point this session, so unhiding
     // one flips its value in place instead of removing the row that holds focus.
     var hiddenGroupRows by remember { mutableStateOf(emptyList<String>()) }
@@ -719,6 +721,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         onFullscreenChanged = { liveTvFullscreen = it },
                         onChannelsFocusChanged = { liveTvChannelsFocused = it },
                         blackScreenBetweenZaps = blackScreenBetweenZaps,
+                        digitKeysEnabled = digitKeysEnabled,
                         bufferSize = bufferSize,
                         defaultAspect = defaultAspect,
                         afrEnabled = afrEnabled,
@@ -818,6 +821,9 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         onClearWatchHistory = { scope.launch { viewModel.repository.clearRecentChannels() } },
                         hiddenGroupRows = hiddenGroupRows,
                         hiddenGroups = hiddenGroups,
+                        parentalPinSet = parentalPinSet,
+                        checkParentalPin = { appPreferences.checkParentalPin(it) },
+                        onSetParentalPin = { appPreferences.setParentalPin(it) },
                         onToggleGroupHidden = { key ->
                             appPreferences.setGroupHidden(key, key !in hiddenGroups)
                             viewModel.repository.hiddenGroups.value = appPreferences.hiddenGroups.value
@@ -829,6 +835,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         onToggleTeleportMenuEnabled = {
                             appPreferences.setTeleportMenuEnabled(!teleportMenuEnabled)
                         },
+                        digitKeysEnabled = digitKeysEnabled,
+                        onToggleDigitKeys = { appPreferences.setDigitKeysEnabled(!digitKeysEnabled) },
                         visible = destination == NavDestination.Settings,
                         playlistChannelCounts = playlistChannelCounts,
                         playlistSyncStatus = playlistSyncStatus,

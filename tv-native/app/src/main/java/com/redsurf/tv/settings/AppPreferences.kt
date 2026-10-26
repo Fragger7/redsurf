@@ -28,6 +28,16 @@ class AppPreferences(context: Context) {
         _blackScreenBetweenZaps.value = enabled
     }
 
+    // Settings -> Remote control "Digit keys": number keys type a channel number in fullscreen
+    // (TiviMate's default). Off = number keys do nothing.
+    private val _digitKeysEnabled = MutableStateFlow(prefs.getBoolean(KEY_DIGIT_KEYS, true))
+    val digitKeysEnabled: StateFlow<Boolean> = _digitKeysEnabled.asStateFlow()
+
+    fun setDigitKeysEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DIGIT_KEYS, enabled).apply()
+        _digitKeysEnabled.value = enabled
+    }
+
     // EPG_WRAPUP.md 1.7 - TiviMate's "double-height selected row": the focused guide row grows to
     // 2x so the name gets two lines and the playing/catch-up icons get room. Default on.
     private val _doubleHeightRow = MutableStateFlow(prefs.getBoolean(KEY_DOUBLE_HEIGHT_ROW, true))
@@ -232,6 +242,25 @@ class AppPreferences(context: Context) {
         _hiddenGroups.value = next
     }
 
+    // Settings -> Parental "PIN" (TiviMate's parental PIN code). Stored as a salted SHA-256, never
+    // the digits; when set, unhiding a category asks for it.
+    private val _parentalPinSet = MutableStateFlow(prefs.getString(KEY_PARENTAL_PIN, null) != null)
+    val parentalPinSet: StateFlow<Boolean> = _parentalPinSet.asStateFlow()
+
+    fun setParentalPin(pin: String?) {
+        prefs.edit().apply {
+            if (pin == null) remove(KEY_PARENTAL_PIN) else putString(KEY_PARENTAL_PIN, hashPin(pin))
+        }.apply()
+        _parentalPinSet.value = pin != null
+    }
+
+    fun checkParentalPin(pin: String): Boolean = prefs.getString(KEY_PARENTAL_PIN, null) == hashPin(pin)
+
+    private fun hashPin(pin: String): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest("redsurf-pin:$pin".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
     /** "Home" or "LiveTv" - the destination Start on = Last used resumes; null before any. */
     fun getLastDestination(): String? = prefs.getString(KEY_LAST_DESTINATION, null)
 
@@ -281,6 +310,7 @@ class AppPreferences(context: Context) {
 
     companion object {
         private const val KEY_BLACK_SCREEN_BETWEEN_ZAPS = "black_screen_between_zaps"
+        private const val KEY_DIGIT_KEYS = "digit_keys_enabled"
         private const val KEY_SHOW_RAW_RESOLUTION = "show_raw_resolution"
         private const val KEY_DOUBLE_HEIGHT_ROW = "double_height_focused_row"
         private const val KEY_PUBLIC_EPG = "public_epg_supplement"
@@ -299,6 +329,7 @@ class AppPreferences(context: Context) {
         private const val KEY_START_ON = "start_on"
         private const val KEY_EPG_TIME_OFFSET = "epg_time_offset"
         private const val KEY_HIDDEN_GROUPS = "hidden_groups"
+        private const val KEY_PARENTAL_PIN = "parental_pin"
         private const val KEY_LAST_DESTINATION = "last_destination"
         private const val KEY_AUTO_UPDATE = "auto_update"
         private const val KEY_PREFERRED_SUBTITLE_LANGUAGE = "preferred_subtitle_language"

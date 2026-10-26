@@ -87,6 +87,14 @@ interface ChannelDao {
     )
     suspend fun nextInGroup(playlistId: String, groupName: String, num: Int): ChannelEntity?
 
+    // Digit-key channel entry (Settings -> Remote control). A few rows, not one, so the caller can
+    // skip any in a hidden category; no `num` index - a one-off query per entry, not a hot path.
+    @Query(
+        "SELECT * FROM channels WHERE playlistId = :playlistId AND streamType = 'live' " +
+            "AND isHidden = 0 AND num = :num ORDER BY name LIMIT 8"
+    )
+    suspend fun byNumber(playlistId: String, num: Int): List<ChannelEntity>
+
     @Query(
         "SELECT * FROM channels WHERE playlistId = :playlistId AND groupName = :groupName " +
             "AND streamType = 'live' AND isHidden = 0 AND num < :num ORDER BY num DESC, name DESC LIMIT 1"

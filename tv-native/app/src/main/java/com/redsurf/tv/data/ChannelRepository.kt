@@ -123,6 +123,12 @@ class ChannelRepository(
         if (isFavoritesGroup(groupName)) favoriteDao.prev(playlistId, num) ?: favoriteDao.last(playlistId)
         else channelDao.prevInGroup(playlistId, groupName, num) ?: channelDao.lastInGroup(playlistId, groupName)
 
+    /** Digit-key entry: the live channel numbered [num] in [playlistId], skipping hidden categories. */
+    suspend fun channelByNumber(playlistId: String, num: Int): ChannelEntity? {
+        val hidden = hiddenGroups.value
+        return channelDao.byNumber(playlistId, num).firstOrNull { hiddenGroupKey(it.playlistId, it.groupName) !in hidden }
+    }
+
     /** Teleport Menu (docs/plans/TELEPORT_MENU.md decision 3) - the group's own first channel by
      * num/name order, for jumps that land on a category rather than an already-known channel
      * (Playlist Root, Root Category). */
