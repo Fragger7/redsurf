@@ -243,7 +243,8 @@ fun EpgGridColumn(
         val labelWidthPx = with(density) { labelWidth.toPx() }
         val headerHeightPx = with(density) { RedSurfDensity.GridHeaderHeight.toPx() }
         val nowStrokePx = with(density) { 2.dp.toPx() }
-        val nowCapPx = with(density) { 3.dp.toPx() }
+        val nowCapPx = with(density) { 4.5.dp.toPx() }
+        val nowCapStroke = remember(density) { Stroke(width = with(density) { 2.dp.toPx() }, cap = StrokeCap.Round) }
         val wakePx = with(density) { 28.dp.toPx() }
         val hasRows = channels.isNotEmpty()
         val nowOffsetPx = ((floorToHalfHour(now) - windowStart) / MINUTE_MS) * pxPerMinutePx
@@ -282,7 +283,17 @@ fun EpgGridColumn(
                             size = Size(wakePx, size.height - headerHeightPx),
                         )
                         drawLine(Accent, Offset(x, headerHeightPx), Offset(x, size.height), strokeWidth = nowStrokePx)
-                        drawCircle(Accent, radius = nowCapPx, center = Offset(x, headerHeightPx))
+                        // Crest's crest cap: the mark's crescent, open to the upper right like the
+                        // wave (RESEARCH.md "A. Crest" - one of its two ornaments).
+                        drawArc(
+                            Accent,
+                            startAngle = -10f,
+                            sweepAngle = -280f,
+                            useCenter = false,
+                            topLeft = Offset(x - nowCapPx, headerHeightPx - nowCapPx),
+                            size = Size(nowCapPx * 2, nowCapPx * 2),
+                            style = nowCapStroke,
+                        )
                     }
                 },
         ) {

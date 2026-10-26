@@ -179,10 +179,14 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // Back within [EXIT_CONFIRM_MS] leaves the app. Without this the first Back on Home quit.
     var hintText by remember { mutableStateOf<String?>(null) }
     var hintSeq by remember { mutableIntStateOf(0) }
-    fun showHint(text: String) { hintText = text; hintSeq++ }
+    var hintMs by remember { mutableLongStateOf(HINT_MS) }
+    var hintCountdown by remember { mutableStateOf(false) }
+    fun showHint(text: String, durationMs: Long = HINT_MS, countdown: Boolean = false) {
+        hintText = text; hintMs = durationMs; hintCountdown = countdown; hintSeq++
+    }
     LaunchedEffect(hintSeq) {
         if (hintText == null) return@LaunchedEffect
-        delay(HINT_MS)
+        delay(hintMs)
         hintText = null
     }
     var exitArmedAt by remember { mutableLongStateOf(0L) }
@@ -551,7 +555,9 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         } else {
             exitArmedAt = now
             runCatching { navPillFocusRequesters[NavDestination.Home]?.requestFocus() }
-            showHint("Press BACK again to exit")
+            // Crest's exit-toast countdown bar: the chip stays exactly as long as the second
+            // Back still exits, and its red bar runs out with it.
+            showHint("Press BACK again to exit", durationMs = EXIT_CONFIRM_MS, countdown = true)
         }
     }
 
@@ -891,6 +897,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
 
         HintChip(
             text = if (liveTvFullscreen && !teleportMenuOpen) null else hintText,
+            countdownMs = if (hintCountdown) hintMs else null,
+            seq = hintSeq,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
         )
 
