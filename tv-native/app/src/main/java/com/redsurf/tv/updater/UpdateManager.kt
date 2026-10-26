@@ -57,7 +57,8 @@ object UpdateManager {
         }
     }
 
-    fun downloadAndInstall(context: Context, downloadUrl: String, versionName: String) {
+    /** Returns the DownloadManager id, for [downloadProgress]. */
+    fun downloadAndInstall(context: Context, downloadUrl: String, versionName: String): Long {
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val uri = Uri.parse(downloadUrl)
         
@@ -85,6 +86,23 @@ object UpdateManager {
         } else {
             context.registerReceiver(onComplete, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
         }
+        return downloadId
+    }
+
+    /** Fraction done (0..1, or -1 while the size is still unknown), or null once the download has
+     * finished, failed or vanished - the backlog's "OTA download goes silent" item: the user saw
+     * nothing between "Install now" and the system installer sheet. */
+    fun downloadProgress(context: Context, downloadId: Long): Float? {
+        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        dm.query(DownloadManager.Query().setFilterById(downloadId))?.use { c ->
+            if (!c.moveToFirst()) return null
+            val status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            if (status == DownloadManager.STATUS_SUCCESSFUL || status == DownloadManager.STATUS_FAILED) return null
+            val done = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+            val total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+            return if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else -1f
+        }
+        return null
     }
 
     private fun installApk(context: Context, fileName: String) {

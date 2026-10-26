@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -81,6 +82,8 @@ class MainActivity : ComponentActivity() {
                 // (found live, 2026-09-11: the dialog reappeared unchanged after Settings with
                 // no indication the permission had actually been granted).
                 var retryInstallOnResume by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
+                // The download in flight (id to version), for the progress chip below.
+                var download by remember { mutableStateOf<Pair<Long, String>?>(null) }
 
                 // ON_RESUME, not a once-only LaunchedEffect(Unit): the ask (user, 2026-09-11) is
                 // to check "no matter where launched from," not just a cold process start.
@@ -97,7 +100,7 @@ class MainActivity : ComponentActivity() {
                                 if (UpdateManager.canInstallUnknownApps(this@MainActivity)) {
                                     retryInstallOnResume = null
                                     showInstallPermissionPrompt = false
-                                    UpdateManager.downloadAndInstall(this@MainActivity, info.downloadUrl, info.newVersion)
+                                    download = UpdateManager.downloadAndInstall(this@MainActivity, info.downloadUrl, info.newVersion) to info.newVersion
                                     viewModel.dismissUpdatePrompt()
                                 }
                             }
@@ -178,13 +181,21 @@ class MainActivity : ComponentActivity() {
                             versionName = availableUpdate.newVersion,
                             onInstall = {
                                 if (UpdateManager.canInstallUnknownApps(this@MainActivity)) {
-                                    UpdateManager.downloadAndInstall(this@MainActivity, availableUpdate.downloadUrl, availableUpdate.newVersion)
+                                    download = UpdateManager.downloadAndInstall(this@MainActivity, availableUpdate.downloadUrl, availableUpdate.newVersion) to availableUpdate.newVersion
                                     viewModel.dismissUpdatePrompt()
                                 } else {
                                     showInstallPermissionPrompt = true
                                 }
                             },
                             onDismiss = { viewModel.dismissUpdatePrompt() }
+                        )
+                    }
+                    download?.let { (id, version) ->
+                        UpdateDownloadChip(
+                            downloadId = id,
+                            versionName = version,
+                            onFinished = { download = null },
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
                         )
                     }
                 }
@@ -194,6 +205,37 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+    }
+}
+
+/**
+ * Non-focusable progress chip while the OTA APK downloads, polled from DownloadManager twice a
+ * second (a cursor query, cheap); the system installer sheet takes over when it completes.
+ */
+@Composable
+private fun UpdateDownloadChip(downloadId: Long, versionName: String, onFinished: () -> Unit, modifier: Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var fraction by remember { mutableStateOf(-1f) }
+    LaunchedEffect(downloadId) {
+        while (true) {
+            val p = UpdateManager.downloadProgress(context, downloadId) ?: break
+            fraction = p
+            kotlinx.coroutines.delay(500)
+        }
+        onFinished()
+    }
+    androidx.compose.foundation.layout.Column(
+        modifier.background(SurfaceRaised).padding(horizontal = 16.dp, vertical = 12.dp).width(260.dp)
+    ) {
+        Text(
+            if (fraction < 0f) "Downloading RedSurf $versionName" else "Downloading RedSurf $versionName · ${(fraction * 100).toInt()}%",
+            color = TextPrimary,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.fillMaxWidth().height(3.dp).background(Background)) {
+            Box(Modifier.fillMaxWidth(fraction.coerceAtLeast(0.02f)).height(3.dp).background(Accent))
+        }
     }
 }
 
