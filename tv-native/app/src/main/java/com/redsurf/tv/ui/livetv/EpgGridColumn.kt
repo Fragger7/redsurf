@@ -69,12 +69,10 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -112,7 +110,6 @@ private val TickHour = Color.White.copy(alpha = 0.10f)
 private val TickHalf = Color.White.copy(alpha = 0.045f)
 private val SlotTick = Color.White.copy(alpha = 0.14f)
 private val CurrentFill = Accent.copy(alpha = 0.20f)
-private val CursorFill = Accent.copy(alpha = 0.16f)
 private val GapLine = TextSecondary.copy(alpha = 0.18f)
 private val NowWakeStart = Accent.copy(alpha = 0f)
 private val NowWakeEnd = Accent.copy(alpha = 0.10f)
@@ -157,9 +154,8 @@ private data class RowJump(val index: Int, val time: Long, val nonce: Long, val 
  * label outside the scrolled viewport entirely - no overlap, no `graphicsLayer` per row, and the
  * shared state still moves every row and the ruler together.
  *
- * Nothing animates at rest (`TELEPORT_MENU.md`'s rule): the one motion is "The Wash" (G.6), a
- * 180ms sweep across a cell on focus arrival, driven by one grid-level `Animatable` that the
- * focused cell alone reads while it runs.
+ * Nothing animates (`TELEPORT_MENU.md`'s rule; Crest, 2026-10-26, retired "The Wash" - every
+ * cursor move paid ~11 extra frames of redraw for it).
  */
 @Composable
 fun EpgGridColumn(
@@ -217,13 +213,6 @@ fun EpgGridColumn(
     // (the window reaches PAST_MINUTES back) - see the scroll effect inside BoxWithConstraints,
     // which needs the measured minute scale.
     var cursorKey by remember { mutableStateOf<CursorKey?>(null) }
-    val wash = remember { Animatable(1f) }
-    LaunchedEffect(cursorKey) {
-        if (cursorKey != null) {
-            wash.snapTo(0f)
-            wash.animateTo(1f, tween(180, easing = FastOutSlowInEasing))
-        }
-    }
 
     val density = LocalDensity.current
     // One measurer for the whole grid: titles are measured while drawing, and its cache keeps a
@@ -233,9 +222,6 @@ fun EpgGridColumn(
     val metaStyle = RedSurfType.gridMeta
     val channelStyle = RedSurfType.gridChannel
     val slotMetrics = remember(density, cellStyle, metaStyle, channelStyle) { SlotMetrics(density, cellStyle, metaStyle, channelStyle) }
-    val gapDash = remember(density) {
-        with(density) { PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 5.dp.toPx())) }
-    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -370,8 +356,6 @@ fun EpgGridColumn(
                                 pxPerMinute = pxPerMinute,
                                 timelineContentWidth = timelineContentWidth,
                                 sharedScroll = sharedScroll,
-                                gapDash = gapDash,
-                                wash = wash,
                                 onCursor = { key, slot ->
                                     if (key != cursorKey) {
                                         cursorKey = key
@@ -501,8 +485,6 @@ private fun EpgChannelRow(
     pxPerMinute: Dp,
     timelineContentWidth: Dp,
     sharedScroll: ScrollState,
-    gapDash: PathEffect,
-    wash: Animatable<Float, *>,
     onCursor: (CursorKey, EpgSlot) -> Unit,
     onTune: (ChannelEntity) -> Unit,
     onLongPress: (ChannelEntity) -> Unit,
@@ -724,7 +706,6 @@ private fun EpgChannelRow(
                     }
                     val origin = slots.first().start
                     val sel = if (rowHasFocus) selected else -1
-                    val sweep = wash.value
                     for (index in slots.indices) {
                         val slot = slots[index]
                         val left = (slot.start - origin) / MINUTE_MS.toFloat() * pxPerMinutePx - scroll
@@ -740,8 +721,6 @@ private fun EpgChannelRow(
                                     isNowCell = index == nowIndex,
                                     expanded = expanded,
                                     stickyShift = (-left).coerceIn(0f, (width - metrics.minText).coerceAtLeast(0f)),
-                                    sweep = if (index == sel) sweep else 1f,
-                                    gapDash = gapDash,
                                     textMeasurer = textMeasurer,
                                     m = metrics,
                                 )
@@ -792,7 +771,7 @@ private fun ChannelLabelBlock(
             // Logo chip.
             val chipLeft = m.labelPad + m.numberWidth + m.numberGap
             val chipTop = (h - m.logo) / 2f
-            drawRoundRect(SurfaceRaised, Offset(chipLeft, chipTop), Size(m.logo, m.logo), CornerRadius(m.chipRadius))
+            drawRect(SurfaceRaised, Offset(chipLeft, chipTop), Size(m.logo, m.logo))
             val bitmap = logo
             if (bitmap != null) {
                 val box = m.logo - 2 * m.chipPad
@@ -861,7 +840,6 @@ private class SlotMetrics(density: Density, val cellStyle: TextStyle, val metaSt
     val numberGap = with(density) { 6.dp.toPx() }
     val logo = with(density) { RedSurfDensity.GridLogo.toPx() }
     val logoGap = with(density) { 8.dp.toPx() }
-    val chipRadius = with(density) { 5.dp.toPx() }
     val chipPad = with(density) { 2.dp.toPx() }
     val glyphGap = with(density) { 4.dp.toPx() }
     val playingGlyph = with(density) { 10.dp.toPx() }
@@ -871,7 +849,6 @@ private class SlotMetrics(density: Density, val cellStyle: TextStyle, val metaSt
     val tickStroke = with(density) { 2.dp.toPx() }
     val bar = with(density) { 3.dp.toPx() }
     val inset = with(density) { 1.dp.toPx() }
-    val radius = with(density) { RedSurfDensity.CellRadius.toPx() }
     val outline = with(density) { 1.5.dp.toPx() }
     val hairline = with(density) { RedSurfDensity.Hairline.toPx() }
     val labelClearance = with(density) { 74.dp.toPx() }
@@ -890,11 +867,12 @@ private class SlotMetrics(density: Density, val cellStyle: TextStyle, val metaSt
  * - Aired: a 2dp start-edge tick inset 7dp top and bottom (the whole "ribbon, not boxes" trick);
  *   the currently-airing slot alone is filled, with the same 3dp leading bar `GroupsColumn`'s
  *   selected row already uses; titles of slots wholly in the past dim to half.
- * - Gap: nothing but a dashed centre line across the span (the lattice ticks show through, so the
+ * - Gap: nothing but a solid hairline (Crest: no dashes; a dash `PathEffect` was path-rendered
+ *   every frame) across the span (the lattice ticks show through, so the
  *   30-minute columns are visibly present *inside* the gap), and a quiet "No listings" on the slot
  *   airing now - where the cursor lands.
- * - Selected: a soft fill, a 1.5dp outline, the 3dp leading bar, and The Wash - one horizontal
- *   gradient sweep for 180ms after the selection arrives, then nothing.
+ * - Selected: a solid red cell (Crest).
+ * - Shapes are square (Crest's 0dp radius) - plain rects, the cheapest thing to draw.
  * - Text: TiviMate's sticky titles (2026-10-05) - a programme that started before the visible
  *   edge keeps its title pinned to that edge ([stickyShift]) instead of cut off mid-word.
  */
@@ -906,8 +884,6 @@ private fun DrawScope.drawSlot(
     isNowCell: Boolean,
     expanded: Boolean,
     stickyShift: Float,
-    sweep: Float,
-    gapDash: PathEffect,
     textMeasurer: TextMeasurer,
     m: SlotMetrics,
 ) {
@@ -920,48 +896,29 @@ private fun DrawScope.drawSlot(
             // another red, which already means "focus/now".
             val supplemented = slot.programme.playlistId == PublicEpg.PLAYLIST_ID
             if (supplemented) {
-                drawRoundRect(SupplementFill, Offset(0f, m.inset), Size(w, h - 2 * m.inset), CornerRadius(m.radius))
+                drawRect(SupplementFill, Offset(0f, m.inset), Size(w, h - 2 * m.inset))
                 if (w > m.supplementDotMinWidth) {
                     drawCircle(SupplementTick, radius = m.supplementDot, center = Offset(w - m.supplementDotInset, m.inset + m.supplementDotInset))
                 }
             }
             if (isCurrent) {
-                drawRoundRect(CurrentFill, Offset(0f, m.inset), Size(w, h - 2 * m.inset), CornerRadius(m.radius))
+                drawRect(CurrentFill, Offset(0f, m.inset), Size(w, h - 2 * m.inset))
                 drawRect(Accent, Offset.Zero, Size(m.bar, h))
             } else if (supplemented) {
-                drawLine(SupplementTick, Offset(m.tickStroke / 2f, m.tickInset), Offset(m.tickStroke / 2f, h - m.tickInset), m.tickStroke, pathEffect = gapDash)
+                drawRect(SupplementTick, Offset(0f, m.tickInset), Size(m.tickStroke, h - 2 * m.tickInset))
             } else {
-                drawLine(SlotTick, Offset(m.tickStroke / 2f, m.tickInset), Offset(m.tickStroke / 2f, h - m.tickInset), m.tickStroke)
+                drawRect(SlotTick, Offset(0f, m.tickInset), Size(m.tickStroke, h - 2 * m.tickInset))
             }
         }
         is GapSlot -> {
             val dashStart = if (isNowCell) m.labelClearance else 0f
-            if (w > dashStart) drawLine(GapLine, Offset(dashStart, h / 2f), Offset(w, h / 2f), m.hairline, pathEffect = gapDash)
+            if (w > dashStart) drawRect(GapLine, Offset(dashStart, (h - m.hairline) / 2f), Size(w - dashStart, m.hairline))
         }
     }
     if (selected) {
-        drawRoundRect(CursorFill, Offset(0f, m.inset), Size(w, h - 2 * m.inset), CornerRadius(m.radius))
-        drawRoundRect(
-            Accent,
-            Offset(m.outline / 2f, m.inset + m.outline / 2f),
-            Size(w - m.outline, h - 2 * m.inset - m.outline),
-            CornerRadius(m.radius),
-            style = Stroke(m.outline),
-        )
-        drawRect(Accent, Offset.Zero, Size(m.bar, h))
-        if (sweep < 1f) {
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    0f to Color.Transparent,
-                    0.5f to Accent.copy(alpha = 0.30f * (1f - sweep)),
-                    1f to Color.Transparent,
-                    startX = -w + 2f * w * sweep,
-                    endX = 2f * w * sweep,
-                ),
-                topLeft = Offset(0f, m.inset),
-                size = Size(w, h - 2 * m.inset),
-            )
-        }
+        // Crest (design-language RESEARCH.md "A. Crest"): the cursor is a solid red cell - square,
+        // no outline, no wash. Also the cheapest cursor to draw: one rect, no path or gradient.
+        drawRect(Accent, Offset(0f, m.inset), Size(w, h - 2 * m.inset))
     }
     val textLeft = stickyShift + m.padStart
     val maxWidth = (w - textLeft - m.padEnd).toInt()

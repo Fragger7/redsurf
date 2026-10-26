@@ -19,8 +19,10 @@ object RedSurfDensity {
     val GridLabelWidth = 180.dp
     val GridLogo = 26.dp
     val CellPadH = 6.dp
-    val CellRadius = 3.dp
-    val PanelRadius = 10.dp
+    /** Crest (design-language RESEARCH.md "A. Crest", 2026-10-26): square. 0dp also turns every
+     * clip into a plain rect clip - a rounded one is a path clip, paid every frame. */
+    val CellRadius = 0.dp
+    val PanelRadius = 0.dp
     val ColumnGap = 12.dp
     val CategoriesWidth = 200.dp
     val HeroExpanded = 136.dp
