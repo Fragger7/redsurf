@@ -286,11 +286,17 @@ fun EpgGridColumn(
                     }
                 },
         ) {
+            // The supplement key shows only when public listings are actually on screen
+            // (AGENTS.md's indicator decision: explained once, not a badge per cell).
+            val hasSupplemented = remember(programsByChannel) {
+                programsByChannel.values.any { list -> list.any { it.playlistId == PublicEpg.PLAYLIST_ID } }
+            }
             GridTimeHeader(
                 windowStart = windowStart,
                 pxPerMinute = pxPerMinute,
                 timelineContentWidth = timelineContentWidth,
                 sharedScroll = sharedScroll,
+                showSupplementKey = hasSupplemented,
             )
             if (!hasRows) {
                 Text(
@@ -411,6 +417,7 @@ private fun GridTimeHeader(
     pxPerMinute: Dp,
     timelineContentWidth: Dp,
     sharedScroll: ScrollState,
+    showSupplementKey: Boolean,
 ) {
     val density = LocalDensity.current
     val hairlinePx = with(density) { RedSurfDensity.Hairline.toPx() }
@@ -434,8 +441,28 @@ private fun GridTimeHeader(
             style = RedSurfType.gridMeta,
             color = TextSecondary,
             maxLines = 1,
-            modifier = Modifier.width(RedSurfDensity.GridLabelWidth).padding(start = 4.dp, bottom = 5.dp),
+            modifier = Modifier
+                .width(if (showSupplementKey) RedSurfDensity.GridLabelWidth - SupplementKeyWidth else RedSurfDensity.GridLabelWidth)
+                .padding(start = 4.dp, bottom = 5.dp),
         )
+        if (showSupplementKey) {
+            // The legend for drawSlot's tint + corner dot: the same dot, so the non-colour cue is
+            // what gets explained, not just the hue.
+            Row(
+                modifier = Modifier.width(SupplementKeyWidth).padding(bottom = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Canvas(modifier = Modifier.size(6.dp)) { drawCircle(SupplementTick) }
+                Text(
+                    "Public guide",
+                    style = RedSurfType.gridHeaderHalf,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
+        }
         Box(modifier = Modifier.weight(1f).fillMaxHeight().horizontalScroll(sharedScroll)) {
             val columns = WINDOW_MINUTES / 30
             Row(
@@ -1035,6 +1062,7 @@ private val PlayingBlue = Color(0xFF3B82F6)
 // it never reads as the red that means focus/now.
 private val SupplementFill = Color(0xFF38BDF8).copy(alpha = 0.14f)
 private val SupplementTick = Color(0xFF7DD3FC).copy(alpha = 0.8f)
+private val SupplementKeyWidth = 84.dp
 
 /** TiviMate's "this channel is playing" mark - a small blue play triangle (EPG_WRAPUP.md 1.6). */
 private fun DrawScope.drawPlayingGlyph(side: Float) {
