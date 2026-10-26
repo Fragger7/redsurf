@@ -41,7 +41,6 @@ val SETTINGS_GREY_ROWS: Map<SettingsCategory, List<GreyRow>> = mapOf(
     // "Resume last channel on launch" flipped live (AGENTS.md backlog, 2026-09-15) - now
     // generalContent's own toggle row in SettingsScreen.kt, not a grey row here.
     SettingsCategory.General to listOf(
-        GreyRow("Start on", "Live TV"),
         GreyRow("Language", "System"),
     ),
     // "Update EPG now" / "Last updated" / "Sources" / "Refresh every" are live rows in

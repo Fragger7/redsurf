@@ -43,6 +43,7 @@ import com.redsurf.tv.MainViewModel
 import com.redsurf.tv.data.FAVORITES_GROUP
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.settings.AppPreferences
+import com.redsurf.tv.settings.StartOn
 import com.redsurf.tv.sync.EpgSyncScheduler
 import com.redsurf.tv.ui.livetv.GroupKey
 import com.redsurf.tv.ui.livetv.GroupsFocusRequest
@@ -108,7 +109,19 @@ private const val HINT_NAV_HIDDEN = "nav_hidden"
 
 @Composable
 fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
-    var destination by remember { mutableStateOf(NavDestination.LiveTv) }
+    // Settings -> General "Start on", read once for the first frame so a Home start never
+    // flashes Live TV. A throwaway instance: the shell's own one is built further down.
+    val startContext = LocalContext.current
+    var destination by remember {
+        val prefs = AppPreferences(startContext)
+        mutableStateOf(
+            when (prefs.startOn.value) {
+                StartOn.LiveTv -> NavDestination.LiveTv
+                StartOn.Home -> NavDestination.Home
+                StartOn.LastUsed -> if (prefs.getLastDestination() == NavDestination.Home.name) NavDestination.Home else NavDestination.LiveTv
+            },
+        )
+    }
     var liveTvFullscreen by remember { mutableStateOf(false) }
     var liveTvChannelsFocused by remember { mutableStateOf(false) }
     var selectedSettingsCategory by remember { mutableStateOf(SettingsCategory.General) }
@@ -302,9 +315,21 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         val channel = viewModel.repository.getChannel(playlistId, streamId) ?: return@LaunchedEffect
         liveTvSelectedGroup = GroupKey(channel.playlistId, channel.groupName)
         liveTvFocusedChannel = channel
-        if (autoPlayLastChannelOnLaunch) liveTvAutoPlayTrigger = true
-        else liveTvClaimInitialFocusTrigger = true
+        if (autoPlayLastChannelOnLaunch) {
+            destination = NavDestination.LiveTv
+            liveTvAutoPlayTrigger = true
+        } else if (destination == NavDestination.LiveTv) {
+            liveTvClaimInitialFocusTrigger = true
+        }
     }
+
+    // Start on = Last used: remember the browse destination the user was last on.
+    LaunchedEffect(destination) {
+        if (destination == NavDestination.Home || destination == NavDestination.LiveTv) {
+            appPreferences.setLastDestination(destination.name)
+        }
+    }
+    val startOn by appPreferences.startOn.collectAsState()
 
     // The write side of the same feature - records whatever channel is actually playing
     // (`liveTvFullscreen`, not just browse-focused - resuming into whatever you idly scrolled
@@ -769,6 +794,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                             appPreferences.setShowRawResolution(!showRawResolution)
                         },
                         autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
+                        startOn = startOn,
+                        onCycleStartOn = { appPreferences.cycleStartOn() },
                         onToggleAutoPlayLastChannelOnLaunch = {
                             appPreferences.setAutoPlayLastChannelOnLaunch(!autoPlayLastChannelOnLaunch)
                         },

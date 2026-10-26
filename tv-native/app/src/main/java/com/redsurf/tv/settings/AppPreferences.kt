@@ -190,6 +190,29 @@ class AppPreferences(context: Context) {
         _preferredSubtitleLanguage.value = language
     }
 
+    // Settings -> General "Start on": where a cold launch lands. LastUsed records Home/Live TV only
+    // (the browse destinations; nobody wants to boot into Settings). Default Live TV - the
+    // player is the app. "Auto-play last channel on launch" still wins when on.
+    private val _startOn = MutableStateFlow(
+        StartOn.entries.firstOrNull { it.name == prefs.getString(KEY_START_ON, null) } ?: StartOn.LiveTv,
+    )
+    val startOn: StateFlow<StartOn> = _startOn.asStateFlow()
+
+    fun cycleStartOn() {
+        val next = StartOn.entries[(_startOn.value.ordinal + 1) % StartOn.entries.size]
+        prefs.edit().putString(KEY_START_ON, next.name).apply()
+        _startOn.value = next
+    }
+
+    /** "Home" or "LiveTv" - the destination Start on = Last used resumes; null before any. */
+    fun getLastDestination(): String? = prefs.getString(KEY_LAST_DESTINATION, null)
+
+    fun setLastDestination(name: String) {
+        if (prefs.getString(KEY_LAST_DESTINATION, null) != name) {
+            prefs.edit().putString(KEY_LAST_DESTINATION, name).apply()
+        }
+    }
+
     // Settings -> About "Auto-update". Off stops the background checks (resume + periodic); the
     // manual "Check for updates" row still works. Default on.
     private val _autoUpdate = MutableStateFlow(prefs.getBoolean(KEY_AUTO_UPDATE, true))
@@ -245,6 +268,8 @@ class AppPreferences(context: Context) {
         private const val KEY_DEFAULT_ASPECT = "default_aspect"
         private const val KEY_EPG_REFRESH = "epg_refresh"
         private const val KEY_AFR_ENABLED = "afr_enabled"
+        private const val KEY_START_ON = "start_on"
+        private const val KEY_LAST_DESTINATION = "last_destination"
         private const val KEY_AUTO_UPDATE = "auto_update"
         private const val KEY_PREFERRED_SUBTITLE_LANGUAGE = "preferred_subtitle_language"
     }
@@ -272,6 +297,8 @@ enum class BufferSize(
 }
 
 /** The player's three resize modes, in the same order its Aspect tile cycles them. */
+enum class StartOn(val label: String) { LiveTv("Live TV"), Home("Home"), LastUsed("Last used") }
+
 enum class DefaultAspect(val label: String, val resizeMode: Int) {
     Fit("Fit", androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT),
     Fill("Fill", androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL),

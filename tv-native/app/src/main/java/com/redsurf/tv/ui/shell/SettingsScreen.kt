@@ -3,6 +3,7 @@ package com.redsurf.tv.ui.shell
 import androidx.compose.ui.graphics.RectangleShape
 import com.redsurf.tv.settings.BufferSize
 import com.redsurf.tv.settings.DefaultAspect
+import com.redsurf.tv.settings.StartOn
 import com.redsurf.tv.settings.EpgRefresh
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -148,6 +149,8 @@ fun SettingsScreen(
     // AGENTS.md backlog, 2026-09-15 - same AppPreferences pattern as the two above.
     autoPlayLastChannelOnLaunch: Boolean,
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
+    startOn: StartOn,
+    onCycleStartOn: () -> Unit,
     // TELEPORT_MENU.md decision 1, 2026-09-19 - same AppPreferences pattern, the first live row
     // Remote control has ever had.
     teleportMenuEnabled: Boolean,
@@ -343,6 +346,8 @@ fun SettingsScreen(
             onCycleNavAutoHide = onCycleNavAutoHide,
             autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
             onToggleAutoPlayLastChannelOnLaunch = onToggleAutoPlayLastChannelOnLaunch,
+            startOn = startOn,
+            onCycleStartOn = onCycleStartOn,
             teleportMenuEnabled = teleportMenuEnabled,
             onToggleTeleportMenuEnabled = onToggleTeleportMenuEnabled,
             playlistChannelCounts = playlistChannelCounts,
@@ -570,6 +575,8 @@ private fun SettingsPane(
     onCycleNavAutoHide: () -> Unit = {},
     autoPlayLastChannelOnLaunch: Boolean,
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
+    startOn: StartOn,
+    onCycleStartOn: () -> Unit,
     teleportMenuEnabled: Boolean,
     onToggleTeleportMenuEnabled: () -> Unit,
     playlistChannelCounts: Map<String, Int>,
@@ -699,6 +706,8 @@ private fun SettingsPane(
                 SettingsCategory.General -> generalContent(
                     autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
                     onToggle = onToggleAutoPlayLastChannelOnLaunch,
+                    startOn = startOn,
+                    onCycleStartOn = onCycleStartOn,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.Playlists -> playlistsContent(
@@ -1250,6 +1259,8 @@ private fun LazyListScope.aboutContent(
 private fun LazyListScope.generalContent(
     autoPlayLastChannelOnLaunch: Boolean,
     onToggle: () -> Unit,
+    startOn: StartOn,
+    onCycleStartOn: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
@@ -1260,6 +1271,7 @@ private fun LazyListScope.generalContent(
             modifier = Modifier.focusRequester(firstRowFocus),
         )
     }
+    item { LiveRow(label = "Start on", value = startOn.label, onClick = onCycleStartOn) }
     items(SETTINGS_GREY_ROWS[SettingsCategory.General].orEmpty()) { GreyRowContent(it) }
 }
 
