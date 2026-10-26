@@ -52,11 +52,15 @@ per-step account in `docs/plans/SPRINT_LOG.md`'s 2026-10-26 entry):
   breaking one).
 - **Remote control → Long-press OK** (58226b9): Context menu / Add/remove favourite / Recent
   channels, in the fullscreen player. Builds clean; VERIFY-PENDING.
+- **Crest buttons** (bae67ca): one `CrestButton` (pill, solid red focus, no scale) replaces
+  tv-material3 `Button` in the OTA/permission dialogs, onboarding and Settings' action chips;
+  onboarding shows the real mark + wordmark and Crest cards/fields. Builds clean.
 - **Versions:** local verification builds were v0.44.x while CI tags v0.55.x - CI's versionCode
   is the run number, so it must be >= the installed one before an OTA/`install -r` can land.
 
 **Next:** the user's feel-check of this run, then Cloud Sync's interview (item 7). Still grey in
-Settings, by choice: Language, Show full name on hold, Accent, Long-press OK, Backup & restore.
+Settings, by choice: Language (English only), Accent (themes sprint), Backup & restore (Cloud
+Sync D1). "Show full category name on hold" was retired (marquee covers it; hold-OK is Hide).
 
 ## ⏸ Previous pause - 2026-10-21 (user's weekly quota)
 
