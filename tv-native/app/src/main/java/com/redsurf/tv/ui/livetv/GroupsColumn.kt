@@ -9,7 +9,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.border
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import android.util.Log
@@ -27,7 +26,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -37,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -201,14 +200,18 @@ fun GroupsColumn(
     val listState = rememberLazyListState()
     val initialFocus = remember { FocusRequester() }
     var initialFocusDone by remember { mutableStateOf(false) }
+    // Read live, not captured at launch: on a cold launch the resumed channel's grid row can claim
+    // focus while this column's rows are still loading (seen on a fresh install, 2026-10-26), and
+    // this one-shot must then stand down instead of pulling focus back to the category.
+    val claimInitial by rememberUpdatedState(claimInitialFocus)
     LaunchedEffect(selectedGroup, rows) {
         if (initialFocusDone || selectedGroup == null) return@LaunchedEffect
         val index = rows.indexOfFirst { it is GroupsRow.Item && it.group.key() == selectedGroup }
         if (index < 0) return@LaunchedEffect
         runCatching { listState.scrollToItem(index) }
-        if (!claimInitialFocus) return@LaunchedEffect
+        if (!claimInitial) return@LaunchedEffect
         repeat(5) { attempt ->
-            if (initialFocusDone) return@repeat
+            if (initialFocusDone || !claimInitial) return@repeat
             delay(100)
             initialFocusDone = runCatching { initialFocus.requestFocus() }.isSuccess
             Log.d(TAG, "initialFocus attempt=$attempt success=$initialFocusDone selectedGroup=$selectedGroup")
@@ -314,7 +317,7 @@ fun GroupsColumn(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .background(SurfaceColor, RoundedCornerShape(16.dp))
+            .background(SurfaceColor)
             .padding(horizontal = 12.dp, vertical = 14.dp)
             .onFocusChanged { state ->
                 if (state.hasFocus && !hadFocus && !landingRequest) {
@@ -517,9 +520,6 @@ private fun PlaylistHeaderRow(
     }
 }
 
-private val FocusedScale = 1.04f // RedSurfFocus.scale()
-private val FocusGlow = Accent.copy(alpha = 0.4f) // RedSurfFocus.glow()
-
 @Composable
 private fun GroupRow(
     group: GroupCount,
@@ -532,11 +532,13 @@ private fun GroupRow(
     // SWEEP-adjacent decision, AGENTS.md 2026-09-15: "only the focused row marquees") needs the
     // former.
     var isFocused by remember { mutableStateOf(false) }
-    // Performance salvage (2026-10-20): a plain focusable Box with RedSurfFocus's look applied
+    // Performance salvage (2026-10-20): a plain focusable Box with the focus look applied
     // instantly - the tv-material Surface animated scale, border, glow and colour on every move,
     // in both the row losing focus and the one gaining it (TiviMate's lists switch instantly).
+    // S2 (2026-10-26): Crest focus - a square, full-width red bar, no scale and no glow
+    // (design-language/RESEARCH.md "Crest"). The blurred shadow and scaled layer were the
+    // costliest thing RenderThread drew per category move.
     // One accessibility node per row (name + count) - an accessibility service is always on here.
-    val shape = RoundedCornerShape(8.dp)
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -549,14 +551,13 @@ private fun GroupRow(
             .onKeyEvent { it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter }
             .focusable()
             .clearAndSetSemantics { contentDescription = "${formatGroupName(group.groupName)} ${group.count}" }
-            .graphicsLayer {
-                val scale = if (isFocused) FocusedScale else 1f
-                scaleX = scale
-                scaleY = scale
-            }
-            .then(if (isFocused) Modifier.shadow(16.dp, shape, ambientColor = FocusGlow, spotColor = FocusGlow) else Modifier)
-            .background(if (isFocused || selected) SurfaceRaised else Color.Transparent, shape)
-            .then(if (isFocused) Modifier.border(2.dp, Accent, shape) else Modifier),
+            .background(
+                when {
+                    isFocused -> Accent
+                    selected -> SurfaceRaised
+                    else -> Color.Transparent
+                },
+            ),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().height(36.dp),
@@ -568,7 +569,7 @@ private fun GroupRow(
                     .padding(start = 4.dp)
                     .width(3.dp)
                     .height(18.dp)
-                    .background(if (selected) Accent else SurfaceColor.copy(alpha = 0f), RoundedCornerShape(2.dp)),
+                    .background(if (selected && !isFocused) Accent else SurfaceColor.copy(alpha = 0f)),
             )
             Spacer(modifier = Modifier.width(9.dp))
             Text(
@@ -582,7 +583,7 @@ private fun GroupRow(
             Text(
                 group.count.toString(),
                 style = RedSurfType.rowSecondary,
-                color = TextSecondary,
+                color = if (isFocused) TextPrimary else TextSecondary,
                 modifier = Modifier.padding(start = 10.dp, end = 12.dp),
             )
         }

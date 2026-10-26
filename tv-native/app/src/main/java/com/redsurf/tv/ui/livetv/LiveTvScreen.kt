@@ -85,6 +85,9 @@ import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -460,6 +463,7 @@ fun LiveTvScreen(
             it < FIRST_PROGRAMME_ROWS || (targetIndex >= 0 && it in (targetIndex - FIRST_PROGRAMME_ROWS / 2)..(targetIndex + FIRST_PROGRAMME_ROWS / 2))
         }.toSet()
         val programmes = viewModel.repository.programmesFor(channelsInGroup.filterIndexed { i, _ -> i in firstRows }, windowStart, windowEnd)
+        Log.d("LiveTvScreen", "gridQuery+programmes group=${group.groupName} tookMs=${System.currentTimeMillis() - queryStart}")
         // Safety net for the same race: if real focus was inside the grid when its rows are about
         // to be replaced, it will be orphaned - reclaim it onto the new rows.
         val hadGridFocus = channelsHasFocus
@@ -544,6 +548,13 @@ fun LiveTvScreen(
         // in the past; for those 300ms that's where focus sat, and a quick next press acted from
         // there - the user's "RIGHT lands on the first cell". Only retries wait.
         Log.d("LiveTvScreen", "claimGridFocus <- ${Throwable().stackTrace.getOrNull(1)?.let { "${it.methodName}:${it.lineNumber}" }} gridHasFocus=$channelsHasFocus")
+        // Overnight run, 2026-10-26: the first launch after an install gave up with
+        // loadedFor=null - the page cache is cold then, and query + programmes outlasted the
+        // retries below while they were spent waiting for rows. Wait for the load itself first
+        // (no polling: snapshotFlow wakes on the state change), then spend the retries on focus.
+        withTimeoutOrNull(15_000) {
+            snapshotFlow { selectedGroup == null || gridLoadedFor == selectedGroup }.first { it }
+        }
         repeat(20) { attempt ->
             delay(if (attempt == 0) 16 else 300)
             if (selectedGroup != null && gridLoadedFor != selectedGroup) return@repeat
@@ -766,8 +777,10 @@ fun LiveTvScreen(
                     now = now,
                     groupLabel = selectedGroupInfo?.let { formatGroupName(it.groupName) },
                     groupCount = selectedGroupInfo?.count,
-                    // No view while fullscreen holds the video surface.
-                    player = if (isFullscreen) null else livePlayer,
+                    // Unchanged across fullscreen: the hero sits under the fullscreen video, and
+                    // swapping it to null recomposed the band (and loaded a fallback logo) inside
+                    // the OK -> fullscreen frame.
+                    player = livePlayer,
                     isFavorite = { isFavorite(it) },
                     previewOnSelect = previewOnSelect,
                     onThumbBounds = { heroThumbBounds = it },
@@ -781,6 +794,7 @@ fun LiveTvScreen(
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(RedSurfDensity.ColumnGap)) {
                 traced("GroupsColumn") {
                     GroupsColumn(
+                        claimInitialFocus = !channelsHasFocus,
                         groups = groups,
                         selectedGroup = selectedGroup,
                         guideUpdating = guideUpdating,
@@ -1186,7 +1200,7 @@ private fun ExpandedHero(
             contentAlignment = Alignment.Center,
         ) {
             // The shared Live TV player (L5) - Live TV starts and switches its stream; this pane
-            // only shows it (null while fullscreen holds the video surface). The player outlives
+            // only shows it. The player outlives
             // a transient error and keeps reconnecting (Sprint 2, 2026-09-23, item 3); only the
             // visual choice - video vs. the fallback thumbnail - follows the error state.
             if (previewingChannel != null && player != null) {
