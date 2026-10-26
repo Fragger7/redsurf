@@ -337,7 +337,7 @@ fun TeleportMenu(
     }
 }
 
-/** One row. The selected live row gets a soft accent fill, an accent outline and the crescent
+/** One row. The selected live row gets Crest's solid red fill and a white crescent
  * tick (the one deliberate deviation from `RedSurfFocus`, carrying the portal's motif - Opus
  * consultation); grey rows are dimmed and the key handler never lands on them. */
 @Composable
@@ -357,7 +357,9 @@ private fun TeleportRowView(row: TeleportRow, selected: Boolean) {
             if (selected) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     drawArc(
-                        color = Accent,
+                        // White, not Accent: Crest made the selected row a solid red block, and a
+                        // red tick on it vanished.
+                        color = TextPrimary,
                         startAngle = -60f,
                         sweepAngle = 300f,
                         useCenter = false,
