@@ -36,8 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
+import com.redsurf.tv.ui.theme.CrestButton
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -263,20 +262,9 @@ private fun UpdateAvailableDialog(versionName: String, onInstall: () -> Unit, on
         )
         Spacer(modifier = Modifier.height(24.dp))
         Row {
-            Button(
-                onClick = onInstall,
-                modifier = Modifier.focusRequester(installButtonFocus),
-                colors = ButtonDefaults.colors(containerColor = Accent)
-            ) {
-                Text("Install now")
-            }
+            CrestButton("Install now", onClick = onInstall, modifier = Modifier.focusRequester(installButtonFocus))
             Spacer(modifier = Modifier.width(16.dp))
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.colors(containerColor = SurfaceRaised)
-            ) {
-                Text("Later")
-            }
+            CrestButton("Later", onClick = onDismiss)
         }
     }
 }
@@ -299,20 +287,9 @@ private fun InstallPermissionDialog(onGoToSettings: () -> Unit, onDismiss: () ->
         )
         Spacer(modifier = Modifier.height(24.dp))
         Row {
-            Button(
-                onClick = onGoToSettings,
-                modifier = Modifier.focusRequester(settingsButtonFocus),
-                colors = ButtonDefaults.colors(containerColor = Accent)
-            ) {
-                Text("Open settings")
-            }
+            CrestButton("Open settings", onClick = onGoToSettings, modifier = Modifier.focusRequester(settingsButtonFocus))
             Spacer(modifier = Modifier.width(16.dp))
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.colors(containerColor = SurfaceRaised)
-            ) {
-                Text("Cancel")
-            }
+            CrestButton("Cancel", onClick = onDismiss)
         }
     }
 }

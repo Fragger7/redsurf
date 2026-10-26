@@ -25,7 +25,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -36,6 +35,14 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.redsurf.tv.ui.theme.Accent
 import com.redsurf.tv.ui.theme.Surface as SurfaceColor
 import com.redsurf.tv.ui.theme.TextSecondary
+import com.redsurf.tv.R
+import com.redsurf.tv.ui.theme.CrestButton
+import com.redsurf.tv.ui.theme.RedSurfFocus
+import com.redsurf.tv.ui.theme.RedSurfType
+import com.redsurf.tv.ui.theme.SurfaceRaised
+import com.redsurf.tv.ui.theme.TextPrimary
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun OnboardingScreen(
@@ -65,15 +72,20 @@ fun OnboardingScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 // App Logo / Name
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 32.dp)) {
-                    Box(modifier = Modifier.size(64.dp).background(Accent, androidx.compose.foundation.shape.CircleShape))
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text("RedSurf", style = MaterialTheme.typography.displayLarge, color = Color.White)
+                    // The real mark + wordmark (branding, 2026-09-16), not a placeholder red dot.
+                    Image(
+                        painter = painterResource(R.drawable.ic_mark),
+                        contentDescription = null,
+                        modifier = Modifier.size(72.dp),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("RedSurf", style = RedSurfType.wordmark.copy(fontSize = 48.sp), color = Accent)
                 }
 
                 Text(
                     if (onCancel != null) "Add another playlist:" else "Welcome. Please select a setup method:",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = Color.Gray,
+                    color = TextSecondary,
                     modifier = Modifier.padding(bottom = 32.dp)
                 )
 
@@ -94,12 +106,7 @@ fun OnboardingScreen(
 
                 if (onCancel != null) {
                     Spacer(modifier = Modifier.height(32.dp))
-                    androidx.tv.material3.Button(
-                        onClick = onCancel,
-                        colors = androidx.tv.material3.ButtonDefaults.colors(containerColor = Color.DarkGray),
-                    ) {
-                        Text("Cancel - back to Live TV")
-                    }
+                    CrestButton("Cancel - back to Live TV", onClick = onCancel)
                 }
             }
         } else {
@@ -131,14 +138,9 @@ enum class OnboardingMethod { Xtream, M3U, Mobile, Cloud }
 @Composable
 fun CloudSetupContent(onBack: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(500.dp)) {
-        Text("Cloud Login", style = MaterialTheme.typography.headlineLarge, color = Color.White, modifier = Modifier.padding(bottom = 16.dp))
+        Text("Cloud Login", style = MaterialTheme.typography.headlineLarge, color = TextPrimary, modifier = Modifier.padding(bottom = 16.dp))
         Text("Web syncing is currently disabled in this version for local privacy. Please use the Local Setup (Mobile Phone) option.", color = TextSecondary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        androidx.tv.material3.Button(
-            onClick = onBack,
-            colors = androidx.tv.material3.ButtonDefaults.colors(containerColor = Color.DarkGray)
-        ) {
-            Text("Back")
-        }
+        CrestButton("Back", onClick = onBack)
     }
 }
 
@@ -152,10 +154,12 @@ fun OnboardingCard(title: String, subtitle: String, onClick: () -> Unit) {
             .width(220.dp)
             .height(180.dp)
             .onFocusChanged { isFocused = it.isFocused },
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = SurfaceColor,
-            focusedContainerColor = Accent
-        )
+        // Crest: square, solid red when focused, no ring/glow/scale - the same cursor as a row.
+        colors = RedSurfFocus.rowColors(resting = SurfaceColor),
+        shape = RedSurfFocus.shape(),
+        scale = RedSurfFocus.scale(),
+        border = RedSurfFocus.border(),
+        glow = RedSurfFocus.glow(),
     ) {
         Column(
             modifier = Modifier
@@ -167,14 +171,14 @@ fun OnboardingCard(title: String, subtitle: String, onClick: () -> Unit) {
             Text(
                 title,
                 style = MaterialTheme.typography.headlineSmall,
-                color = Color.White,
+                color = TextPrimary,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (isFocused) Color.White else Color.Gray,
+                color = if (isFocused) TextPrimary else TextSecondary,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
@@ -192,7 +196,7 @@ fun XtreamInputForm(onSubmit: (String, String, String, String) -> Unit, onBack: 
         modifier = Modifier.width(400.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Xtream Codes Details", color = Color.White, style = MaterialTheme.typography.headlineLarge)
+        Text("Xtream Codes Details", color = TextPrimary, style = MaterialTheme.typography.headlineLarge)
 
         // Parity with the Mobile Phone pairing form (user request, 2026-09-12): that form has
         // always had a name field, this one didn't - every on-screen Xtream playlist showed up
@@ -203,15 +207,8 @@ fun XtreamInputForm(onSubmit: (String, String, String, String) -> Unit, onBack: 
         TvTextField(value = password, onValueChange = { password = it }, label = "Password", isPassword = true)
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 16.dp)) {
-            androidx.tv.material3.Button(onClick = { onSubmit(name, serverUrl, username, password) }) {
-                Text("Connect")
-            }
-            androidx.tv.material3.Button(
-                onClick = onBack,
-                colors = androidx.tv.material3.ButtonDefaults.colors(containerColor = Color.DarkGray)
-            ) {
-                Text("Back")
-            }
+            CrestButton("Connect", onClick = { onSubmit(name, serverUrl, username, password) })
+            CrestButton("Back", onClick = onBack)
         }
     }
 }
@@ -225,21 +222,14 @@ fun M3uInputForm(onSubmit: (String, String) -> Unit, onBack: () -> Unit) {
         modifier = Modifier.width(400.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("M3U Playlist URL", color = Color.White, style = MaterialTheme.typography.headlineLarge)
+        Text("M3U Playlist URL", color = TextPrimary, style = MaterialTheme.typography.headlineLarge)
 
         TvTextField(value = name, onValueChange = { name = it }, label = "Playlist Name (optional)")
         TvTextField(value = m3uUrl, onValueChange = { m3uUrl = it }, label = "http://...")
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 16.dp)) {
-            androidx.tv.material3.Button(onClick = { onSubmit(name, m3uUrl) }) {
-                Text("Connect")
-            }
-            androidx.tv.material3.Button(
-                onClick = onBack,
-                colors = androidx.tv.material3.ButtonDefaults.colors(containerColor = Color.DarkGray)
-            ) {
-                Text("Back")
-            }
+            CrestButton("Connect", onClick = { onSubmit(name, m3uUrl) })
+            CrestButton("Back", onClick = onBack)
         }
     }
 }
@@ -250,9 +240,9 @@ fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
     val qrBitmap = remember(url) { generatePairingQrCode(url) }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Add via Mobile Phone", style = MaterialTheme.typography.displayMedium, color = Color.White)
+        Text("Add via Mobile Phone", style = MaterialTheme.typography.displayMedium, color = TextPrimary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Ensure your phone is on the same WiFi as the TV.", color = Color.Gray)
+        Text("Ensure your phone is on the same WiFi as the TV.", color = TextSecondary)
         Spacer(modifier = Modifier.height(40.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(40.dp)) {
@@ -270,8 +260,8 @@ fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
             }
 
             Column(horizontalAlignment = Alignment.Start) {
-                Text("Scan with your phone's camera, or", color = Color.Gray)
-                Text("open your phone's browser and go to:", color = Color.Gray)
+                Text("Scan with your phone's camera, or", color = TextSecondary)
+                Text("open your phone's browser and go to:", color = TextSecondary)
                 Spacer(modifier = Modifier.height(20.dp))
                 Box(
                     modifier = Modifier
@@ -284,12 +274,7 @@ fun MobilePairingView(ip: String, port: Int, onBack: () -> Unit) {
         }
 
         Spacer(modifier = Modifier.height(48.dp))
-        androidx.tv.material3.Button(
-            onClick = onBack,
-            colors = androidx.tv.material3.ButtonDefaults.colors(containerColor = Color.DarkGray)
-        ) {
-            Text("Back to Options")
-        }
+        CrestButton("Back to Options", onClick = onBack)
     }
 }
 
@@ -327,7 +312,7 @@ fun TvTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { androidx.compose.material3.Text(label, color = if (isFocused) Color.White else Color.Gray) },
+        label = { androidx.compose.material3.Text(label, color = if (isFocused) TextPrimary else TextSecondary) },
         visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
         modifier = Modifier
             .fillMaxWidth()
@@ -360,9 +345,10 @@ fun TvTextField(
         shape = RectangleShape,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Accent,
-            unfocusedBorderColor = Color.DarkGray,
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.LightGray
+            unfocusedBorderColor = SurfaceRaised,
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextSecondary,
+            cursorColor = Accent
         )
     )
 }

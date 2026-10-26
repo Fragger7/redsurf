@@ -70,6 +70,7 @@ import com.redsurf.tv.UpdateCheckStatus
 import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.ui.theme.hiddenButComposed
 import com.redsurf.tv.ui.theme.Accent
+import com.redsurf.tv.ui.theme.CrestButton
 import com.redsurf.tv.ui.theme.RedSurfFocus
 import com.redsurf.tv.ui.theme.RedSurfType
 import com.redsurf.tv.ui.theme.Surface as SurfaceColor
@@ -1783,22 +1784,5 @@ private fun SectionDivider() {
 }
 
 @Composable
-private fun ActionChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        // Crest: chips are pills (chrome); focus is the same solid red as a row.
-        colors = RedSurfFocus.rowColors(resting = SurfaceRaised),
-        shape = RedSurfFocus.pillShape(),
-        scale = RedSurfFocus.scale(),
-        border = RedSurfFocus.border(),
-        glow = RedSurfFocus.glow(),
-    ) {
-        Text(
-            label,
-            style = RedSurfType.rowSecondary,
-            color = TextPrimary,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-        )
-    }
-}
+private fun ActionChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) =
+    CrestButton(label, onClick, modifier)
