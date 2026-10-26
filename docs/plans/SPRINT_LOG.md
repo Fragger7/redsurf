@@ -973,3 +973,22 @@ grow/shrink animation removed (snap cut). Back first frame 174 → ~85ms, OK →
   back to back gave 20.7-25.4%, the same as S8, so S8 has no measurable regression. Compare only
   back to back, same regime. Projectivy's accessibility service adds jank too; measure with it
   disabled (and restore it) and always `compile_app` after install.
+
+## 2026-10-26 morning (08:10-13:10) - Settings rows, player brief P1, Crest buttons (v0.44.29 → v0.44.45)
+
+Commits e1817a9..f11332c. All build clean and unit tests pass; device status per item below.
+- **Settings went live** (`SETTINGS.md` "As built"): parental PIN (guards unhiding; leaving
+  Settings relocks), digit-key channel entry (2s commit, 5 digits, logs `digit entry`), Audio
+  output (Auto / Force stereo), per-playlist "Connection" editor (login checked before any write;
+  stream-id prefix rewritten so hidden/recents/favourites survive), Remote control → Long-press OK
+  (Context menu / Favourite / Recents). "Show full category name on hold" retired.
+- **Player brief P1 10-16**: ABR thresholds scaled to Buffer size, runtime hardware-decoder probe
+  ranks video codecs (logs `hardware video decoders, preferred order`), live-edge speed 0.95-1.06.
+- **Small fixes**: white Teleport tick; History picker "Clear history" row + scrolling; hide-popup
+  no longer survives leaving Live TV; OTA download progress chip; M3U import parse progress;
+  Teleport T.5 hold tip.
+- **Crest buttons** (bae67ca): `CrestButton` replaces tv-material3 `Button` everywhere; onboarding
+  shows the mark + wordmark. A sweep found no tv-material3 Button/Card or rounded shapes left
+  outside the theme; the only hard-coded colours left are EPG's deliberate cool supplement tint
+  and dead code (`MultiViewEngine`, `VodDashboard`).
+- **Device:** the TV was in family use (PBS Kids) from ~10:00. DEVICE-RESULTS-PENDING.
