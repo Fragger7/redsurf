@@ -9,6 +9,7 @@ import com.redsurf.tv.player.LiveVideoView
 import androidx.compose.ui.graphics.Color
 import com.redsurf.tv.player.rememberPlayerController
 import com.redsurf.tv.settings.BufferSize
+import com.redsurf.tv.settings.LongPressOk
 import com.redsurf.tv.settings.DefaultAspect
 import com.redsurf.tv.player.PlayerController
 import com.redsurf.tv.ui.stableCallback
@@ -131,6 +132,7 @@ fun LiveTvScreen(
     // AppPreferences) and PlayerScreen (which actually reads them).
     blackScreenBetweenZaps: Boolean = false,
     digitKeysEnabled: Boolean = true,
+    longPressOk: LongPressOk = LongPressOk.Menu,
     // TiviMate's "Buffer size" (F17) - keys the shared player, so a change rebuilds it.
     bufferSize: BufferSize = BufferSize.Small,
     forceStereo: Boolean = false,
@@ -1059,6 +1061,7 @@ fun LiveTvScreen(
                     blackScreenBetweenZaps = blackScreenBetweenZaps,
                     showRawResolution = showRawResolution,
                     digitKeysEnabled = digitKeysEnabled,
+                    longPressOk = longPressOk,
                     controller = livePlayer,
                     modifier = Modifier.fillWindow(windowSize) { screenBounds?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero },
                 )

@@ -180,6 +180,8 @@ fun SettingsScreen(
     onToggleTeleportMenuEnabled: () -> Unit,
     digitKeysEnabled: Boolean = true,
     onToggleDigitKeys: () -> Unit = {},
+    longPressOkLabel: String = "Context menu",
+    onCycleLongPressOk: () -> Unit = {},
     // Sprint 2, 2026-09-23 (Finding 9, FOCUS_MODEL.md rule 4) - AppShell used to remove this whole
     // composable from composition on every destination switch away from Settings, the same
     // conditional-composition trap Sprint 1 already fixed for LiveTvScreen. `selectedSettingsCategory`
@@ -392,6 +394,8 @@ fun SettingsScreen(
             onToggleTeleportMenuEnabled = onToggleTeleportMenuEnabled,
             digitKeysEnabled = digitKeysEnabled,
             onToggleDigitKeys = onToggleDigitKeys,
+            longPressOkLabel = longPressOkLabel,
+            onCycleLongPressOk = onCycleLongPressOk,
             playlistChannelCounts = playlistChannelCounts,
             playlistSyncStatus = playlistSyncStatus,
             onRenamePlaylist = onRenamePlaylist,
@@ -639,6 +643,8 @@ private fun SettingsPane(
     onToggleTeleportMenuEnabled: () -> Unit,
     digitKeysEnabled: Boolean = true,
     onToggleDigitKeys: () -> Unit = {},
+    longPressOkLabel: String = "Context menu",
+    onCycleLongPressOk: () -> Unit = {},
     playlistChannelCounts: Map<String, Int>,
     playlistSyncStatus: Map<String, String>,
     onRenamePlaylist: (String, String) -> Unit,
@@ -865,6 +871,8 @@ private fun SettingsPane(
                     onToggle = onToggleTeleportMenuEnabled,
                     digitKeysEnabled = digitKeysEnabled,
                     onToggleDigitKeys = onToggleDigitKeys,
+                    longPressOkLabel = longPressOkLabel,
+                    onCycleLongPressOk = onCycleLongPressOk,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.ParentalControls -> parentalContent(
@@ -1694,6 +1702,8 @@ private fun LazyListScope.remoteControlContent(
     onToggle: () -> Unit,
     digitKeysEnabled: Boolean,
     onToggleDigitKeys: () -> Unit,
+    longPressOkLabel: String,
+    onCycleLongPressOk: () -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
@@ -1710,6 +1720,11 @@ private fun LazyListScope.remoteControlContent(
             value = if (digitKeysEnabled) "Channel number entry" else "Off",
             onClick = onToggleDigitKeys,
         )
+    }
+    item {
+        // TiviMate's key remap, for the one key that matters most: what holding OK does in the
+        // fullscreen player. Cycles Context menu -> Add/remove favourite -> Recent channels.
+        LiveRow(label = "Long-press OK", value = longPressOkLabel, onClick = onCycleLongPressOk)
     }
     items(SETTINGS_GREY_ROWS[SettingsCategory.RemoteControl].orEmpty()) { GreyRowContent(it) }
 }

@@ -309,6 +309,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     val autoPlayLastChannelOnLaunch by appPreferences.autoPlayLastChannelOnLaunch.collectAsState()
     val teleportMenuEnabled by appPreferences.teleportMenuEnabled.collectAsState()
     val digitKeysEnabled by appPreferences.digitKeysEnabled.collectAsState()
+    val longPressOk by appPreferences.longPressOk.collectAsState()
     val hiddenGroups by appPreferences.hiddenGroups.collectAsState()
     val parentalPinSet by appPreferences.parentalPinSet.collectAsState()
     // Settings -> Parental's rows: every category hidden at any point this session, so unhiding
@@ -739,6 +740,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         onChannelsFocusChanged = { liveTvChannelsFocused = it },
                         blackScreenBetweenZaps = blackScreenBetweenZaps,
                         digitKeysEnabled = digitKeysEnabled,
+                        longPressOk = longPressOk,
                         bufferSize = bufferSize,
                         forceStereo = forceStereo,
                         defaultAspect = defaultAspect,
@@ -857,6 +859,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         },
                         digitKeysEnabled = digitKeysEnabled,
                         onToggleDigitKeys = { appPreferences.setDigitKeysEnabled(!digitKeysEnabled) },
+                        longPressOkLabel = longPressOk.label,
+                        onCycleLongPressOk = { appPreferences.cycleLongPressOk() },
                         visible = destination == NavDestination.Settings,
                         playlistChannelCounts = playlistChannelCounts,
                         playlistSyncStatus = playlistSyncStatus,

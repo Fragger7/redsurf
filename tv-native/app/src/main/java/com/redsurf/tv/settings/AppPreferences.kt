@@ -38,6 +38,20 @@ class AppPreferences(context: Context) {
         _digitKeysEnabled.value = enabled
     }
 
+    // Settings -> Remote control "Long-press OK": what holding OK does in the fullscreen player.
+    // TiviMate remaps every long key ("Long OK: open menu" by default); we offer its three most
+    // useful actions for this one key.
+    private val _longPressOk = MutableStateFlow(
+        LongPressOk.entries.firstOrNull { it.name == prefs.getString(KEY_LONG_PRESS_OK, null) } ?: LongPressOk.Menu,
+    )
+    val longPressOk: StateFlow<LongPressOk> = _longPressOk.asStateFlow()
+
+    fun cycleLongPressOk() {
+        val next = LongPressOk.entries[(_longPressOk.value.ordinal + 1) % LongPressOk.entries.size]
+        prefs.edit().putString(KEY_LONG_PRESS_OK, next.name).apply()
+        _longPressOk.value = next
+    }
+
     // EPG_WRAPUP.md 1.7 - TiviMate's "double-height selected row": the focused guide row grows to
     // 2x so the name gets two lines and the playing/catch-up icons get room. Default on.
     private val _doubleHeightRow = MutableStateFlow(prefs.getBoolean(KEY_DOUBLE_HEIGHT_ROW, true))
@@ -322,6 +336,7 @@ class AppPreferences(context: Context) {
     companion object {
         private const val KEY_BLACK_SCREEN_BETWEEN_ZAPS = "black_screen_between_zaps"
         private const val KEY_DIGIT_KEYS = "digit_keys_enabled"
+        private const val KEY_LONG_PRESS_OK = "long_press_ok"
         private const val KEY_SHOW_RAW_RESOLUTION = "show_raw_resolution"
         private const val KEY_DOUBLE_HEIGHT_ROW = "double_height_focused_row"
         private const val KEY_PUBLIC_EPG = "public_epg_supplement"
@@ -370,6 +385,10 @@ enum class BufferSize(
 }
 
 /** The player's three resize modes, in the same order its Aspect tile cycles them. */
+enum class LongPressOk(val label: String) {
+    Menu("Context menu"), Favorite("Add/remove favourite"), Recents("Recent channels"),
+}
+
 enum class StartOn(val label: String) { LiveTv("Live TV"), Home("Home"), LastUsed("Last used") }
 
 enum class DefaultAspect(val label: String, val resizeMode: Int) {

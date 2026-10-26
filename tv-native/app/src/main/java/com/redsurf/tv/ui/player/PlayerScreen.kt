@@ -1,5 +1,6 @@
 package com.redsurf.tv.ui.player
 
+import com.redsurf.tv.settings.LongPressOk
 import androidx.compose.ui.graphics.RectangleShape
 import com.redsurf.tv.diag.tracedMeasure
 import com.redsurf.tv.diag.traced
@@ -166,6 +167,8 @@ fun PlayerScreen(
     showRawResolution: Boolean = false,
     // Settings -> Remote control "Digit keys": number keys type a channel number (TiviMate).
     digitKeysEnabled: Boolean = true,
+    // Settings -> Remote control "Long-press OK" - the menu by default.
+    longPressOk: LongPressOk = LongPressOk.Menu,
     // The one shared Live TV player (L5, 2026-10-20) - owned by LiveTvScreen, which also keys it on
     // the playing playlist's User-Agent.
     controller: PlayerController,
@@ -559,7 +562,17 @@ fun PlayerScreen(
                                 isDown && event.nativeKeyEvent.repeatCount == 0 -> okWasLongPress = false
                                 isDown && event.nativeKeyEvent.isLongPress && !okWasLongPress -> {
                                     okWasLongPress = true
-                                    overlay = PlayerOverlay.ContextMenu
+                                    when (longPressOk) {
+                                        LongPressOk.Menu -> overlay = PlayerOverlay.ContextMenu
+                                        LongPressOk.Recents -> overlay = PlayerOverlay.Picker(PickerKind.History)
+                                        LongPressOk.Favorite -> currentChannel?.let { channel ->
+                                            scope.launch {
+                                                val now = !repository.isFavorite(channel.playlistId, channel.streamId)
+                                                repository.setFavorite(channel.playlistId, channel.streamId, now)
+                                                favoriteToast = if (now) "Added to favourites" else "Removed from favourites"
+                                            }
+                                        }
+                                    }
                                 }
                                 event.type == KeyEventType.KeyUp && !okWasLongPress ->
                                     overlay = PlayerOverlay.Controls(PlayerOverlay.Controls.Floor.Tiles)
