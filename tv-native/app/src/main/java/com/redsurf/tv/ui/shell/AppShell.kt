@@ -52,11 +52,7 @@ import com.redsurf.tv.ui.livetv.key
 import com.redsurf.tv.ui.livetv.LiveTvScreen
 import com.redsurf.tv.ui.theme.surfBackdrop
 import com.redsurf.tv.ui.theme.tvSafeArea
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 
 /**
@@ -228,16 +224,15 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // rail, Search from its pane - found live 2026-09-30). The last key seen decides it, so
     // LEFT/RIGHT along the strip itself is never redirected.
     var lastKeyWasUp by remember { mutableStateOf(false) }
-    // Nav-strip auto-hide (EPG_WRAPUP.md 2.3, scoped 2026-09-21): slides away after
-    // [navAutoHideSeconds] without a key press while focus is elsewhere; comes back only when
+    // Nav-strip auto-hide (EPG_WRAPUP.md 2.3, scoped 2026-09-21): slides away
+    // [navAutoHideSeconds] after focus leaves the strip, key presses or not (TiviMate; user
+    // feel-check 2026-10-27 - restarting the timer on every key meant browsing the guide never
+    // let it hide); comes back only when
     // focus reaches the strip itself (UP from a screen's top, Back to Home, long-press Back, the
     // Teleport row) - never on any key, or it would pop back on every cursor move. The strip is
     // only collapsed, never removed, so every one of those jumps can still land on a pill.
-    // Performance salvage L2 (2026-10-19): a key press restarts the timer through this flow, never
-    // through a state value. It used to be a `lastKeyAt` state used as a LaunchedEffect key - read
-    // during composition, so every single D-pad press recomposed this whole shell, the root of
-    // the app (measured: 98% janky frames scrolling the guide).
-    val keyPresses = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST) }
+    // No per-key state may feed this (performance salvage L2, 2026-10-19): a `lastKeyAt` state
+    // once recomposed the whole shell on every D-pad press (98% janky frames in the guide).
     var navHidden by remember { mutableStateOf(false) }
     val groups by viewModel.repository.liveGroups().collectAsState(initial = emptyList())
     // "Now Playing" / "Return to fullscreen" mean the last channel actually *played* (user,
@@ -283,12 +278,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             navHidden = false
             return@LaunchedEffect
         }
-        keyPresses.onStart { emit(Unit) }.collectLatest {
-            if (!navHidden) {
-                delay(navAutoHideSeconds * 1000L)
-                navHidden = true
-            }
-        }
+        delay(navAutoHideSeconds * 1000L)
+        navHidden = true
     }
     // Auto-hide re-layout (performance salvage S4, 2026-10-26; TIVIMATE_LEARNINGS.md F16): the
     // slide is a translation of the whole column, never a height animation - animating the
@@ -535,30 +526,31 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // this class doc already describes for fullscreen, just a second instance of it. Also
     // excluded while the Teleport Menu is open (decision 7: Back closes the menu with no other
     // side effect) - its own BackHandler right below takes over then.
+    // Back from a tab lands on that tab's own pill with the exit hint; the next Back exits
+    // (TiviMate's "Confirm exit by second press Back", F17; user feel-check 2026-10-27 - it used
+    // to jump to Home first). On Live TV that same pill focus is what brings a hidden strip back.
+    // Excluded while Live TV's Channels column holds focus (BACKLOG_SWEEP.md #8: LiveTvScreen's
+    // own BackHandler peels Channels -> Categories first) and while the Teleport Menu is open
+    // (its own BackHandler closes it, decision 7).
     BackHandler(
         enabled = !liveTvFullscreen &&
             !teleportMenuOpen &&
-            destination != NavDestination.Home &&
             !(destination == NavDestination.LiveTv && liveTvChannelsFocused),
     ) {
-        destination = NavDestination.Home
-    }
-
-    BackHandler(enabled = teleportMenuOpen) {
-        teleportMenuOpen = false
-    }
-
-    BackHandler(enabled = !liveTvFullscreen && !teleportMenuOpen && destination == NavDestination.Home) {
         val now = SystemClock.uptimeMillis()
         if (navHasFocus && now - exitArmedAt < EXIT_CONFIRM_MS) {
             (prefsContext as? Activity)?.finish()
         } else {
             exitArmedAt = now
-            runCatching { navPillFocusRequesters[NavDestination.Home]?.requestFocus() }
+            runCatching { navPillFocusRequesters[destination]?.requestFocus() }
             // Crest's exit-toast countdown bar: the chip stays exactly as long as the second
             // Back still exits, and its red bar runs out with it.
             showHint("Press BACK again to exit", durationMs = EXIT_CONFIRM_MS, countdown = true)
         }
+    }
+
+    BackHandler(enabled = teleportMenuOpen) {
+        teleportMenuOpen = false
     }
 
     // The safe-area padding stays on in fullscreen too: dropping it resized the whole UI on every
@@ -583,7 +575,6 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
             val isDown = event.type == KeyEventType.KeyDown
             if (isDown) {
                 lastKeyWasUp = event.key == Key.DirectionUp
-                keyPresses.tryEmit(Unit)
                 UserActivity.touch()
                 if ((event.key == Key.DirectionUp || event.key == Key.DirectionDown) &&
                     event.nativeKeyEvent.repeatCount == HOLD_REPEATS_FOR_TIP &&
@@ -814,7 +805,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                             appPreferences.setPreviewOnSelect(!previewOnSelect)
                         },
                         bufferSize = bufferSize,
-                        onCycleBufferSize = { appPreferences.cycleBufferSize() },
+                        onSetBufferSize = { appPreferences.setBufferSize(it) },
                         forceStereo = forceStereo,
                         onToggleForceStereo = { appPreferences.setForceStereo(!forceStereo) },
                         defaultAspect = defaultAspect,
@@ -839,7 +830,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                         epgTimeOffsetHours = epgTimeOffsetHours,
                         onCycleEpgTimeOffset = { appPreferences.cycleEpgTimeOffset() },
                         navAutoHideSeconds = navAutoHideSeconds,
-                        onCycleNavAutoHide = { appPreferences.cycleNavAutoHide() },
+                        onSetNavAutoHide = { appPreferences.setNavAutoHideSeconds(it) },
                         onToggleShowRawResolution = {
                             appPreferences.setShowRawResolution(!showRawResolution)
                         },

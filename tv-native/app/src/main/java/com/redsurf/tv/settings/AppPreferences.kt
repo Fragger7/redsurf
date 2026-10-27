@@ -87,14 +87,14 @@ class AppPreferences(context: Context) {
     }
 
     // EPG_WRAPUP.md 2.3 - the nav strip slides away after this many idle seconds; 0 = never.
-    // Cycles 3 → 5 → 10 → Off in Settings → Appearance. Default 5s (scoped 2026-09-21).
+    // Picked from Off/3/5/10/15s in Settings → Appearance (preset picker, polish sprint
+    // 2026-10-27). Default 5s (scoped 2026-09-21).
     private val _navAutoHideSeconds = MutableStateFlow(prefs.getInt(KEY_NAV_AUTO_HIDE, 5))
     val navAutoHideSeconds: StateFlow<Int> = _navAutoHideSeconds.asStateFlow()
 
-    fun cycleNavAutoHide() {
-        val next = when (_navAutoHideSeconds.value) { 3 -> 5; 5 -> 10; 10 -> 0; else -> 3 }
-        prefs.edit().putInt(KEY_NAV_AUTO_HIDE, next).apply()
-        _navAutoHideSeconds.value = next
+    fun setNavAutoHideSeconds(seconds: Int) {
+        prefs.edit().putInt(KEY_NAV_AUTO_HIDE, seconds).apply()
+        _navAutoHideSeconds.value = seconds
     }
 
     private val _showRawResolution =
@@ -145,10 +145,9 @@ class AppPreferences(context: Context) {
         _forceStereo.value = enabled
     }
 
-    fun cycleBufferSize() {
-        val next = BufferSize.entries[(_bufferSize.value.ordinal + 1) % BufferSize.entries.size]
-        prefs.edit().putString(KEY_BUFFER_SIZE, next.name).apply()
-        _bufferSize.value = next
+    fun setBufferSize(size: BufferSize) {
+        prefs.edit().putString(KEY_BUFFER_SIZE, size.name).apply()
+        _bufferSize.value = size
     }
 
     // Settings -> Playback "Default aspect": what each fullscreen session starts on; the

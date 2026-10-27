@@ -20,6 +20,7 @@ import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
@@ -89,7 +90,34 @@ data class NetworkStats(
     val bufferedMs: Long = 0,
     val bufferedPercentage: Int = 0,
     val bitrateEstimateBps: Long? = null,
+    // Stats for nerds (polish sprint, 2026-10-27): the active video decoder, whether it runs on
+    // hardware, and frames dropped since that decoder started. Null until ExoPlayer reports them.
+    val videoDecoderName: String? = null,
+    val videoDecoderHardware: Boolean? = null,
+    val droppedFrames: Int? = null,
 )
+
+/**
+ * Whether a MediaCodec decoder runs on hardware. API 29+ asks `MediaCodecInfo` directly; below
+ * that, the AOSP naming convention: software decoders are `c2.android.*` / `OMX.google.*` (and
+ * Media3's own extension decoders, e.g. ffmpeg/libgav1, which aren't MediaCodec names at all).
+ */
+private val hardwareDecoderCache = HashMap<String, Boolean>()
+
+private fun isHardwareDecoder(name: String): Boolean = hardwareDecoderCache.getOrPut(name) {
+    val lower = name.lowercase()
+    val softwareByName = lower.startsWith("c2.android.") || lower.startsWith("omx.google.") ||
+        lower.contains("ffmpeg") || lower.contains("libgav1") || lower.contains("libvpx") ||
+        lower.contains("libdav1d")
+    if (android.os.Build.VERSION.SDK_INT >= 29) {
+        runCatching {
+            android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS).codecInfos
+                .firstOrNull { it.name == name }?.isHardwareAccelerated
+        }.getOrNull() ?: !softwareByName
+    } else {
+        !softwareByName
+    }
+}
 
 private fun resolutionClassOf(height: Int): String? = when {
     height <= 0 -> null
@@ -126,6 +154,9 @@ private fun videoCodecOf(mimeType: String?): String? = when (mimeType) {
     MimeTypes.VIDEO_H264 -> "H.264"
     MimeTypes.VIDEO_H265 -> "H.265"
     MimeTypes.VIDEO_VP9 -> "VP9"
+    MimeTypes.VIDEO_AV1 -> "AV1"
+    MimeTypes.VIDEO_MPEG2 -> "MPEG-2"
+    MimeTypes.VIDEO_MP4V -> "MPEG-4"
     else -> null
 }
 
@@ -331,6 +362,10 @@ class PlayerController(
     private var smoothedBitrateEstimateBps: Long? = null
     private var consecutiveEmptyWindows = 0
 
+    // Set from AnalyticsListener.onVideoDecoderInitialized (playback thread = main looper here),
+    // read by the 2s poll; cleared when the decoder is released so a stale name never shows.
+    @Volatile private var videoDecoderName: String? = null
+
     private fun startNetworkStatsPoll() {
         scope.launch {
             while (true) {
@@ -347,10 +382,14 @@ class PlayerController(
                     // 3 windows (~6s) of true silence, not one quiet tick, before clearing.
                     if (consecutiveEmptyWindows >= 3) smoothedBitrateEstimateBps = null
                 }
+                val decoderName = videoDecoderName
                 _networkStats.value = NetworkStats(
                     bufferedMs = exoPlayer.totalBufferedDuration,
                     bufferedPercentage = exoPlayer.bufferedPercentage,
                     bitrateEstimateBps = smoothedBitrateEstimateBps,
+                    videoDecoderName = decoderName,
+                    videoDecoderHardware = decoderName?.let(::isHardwareDecoder),
+                    droppedFrames = exoPlayer.videoDecoderCounters?.droppedBufferCount,
                 )
             }
         }
@@ -458,6 +497,20 @@ class PlayerController(
             }
 
             override fun onPlayerError(error: PlaybackException) = handlePlaybackError(error)
+        })
+        exoPlayer.addAnalyticsListener(object : AnalyticsListener {
+            override fun onVideoDecoderInitialized(
+                eventTime: AnalyticsListener.EventTime,
+                decoderName: String,
+                initializedTimestampMs: Long,
+                initializationDurationMs: Long,
+            ) {
+                videoDecoderName = decoderName
+            }
+
+            override fun onVideoDecoderReleased(eventTime: AnalyticsListener.EventTime, decoderName: String) {
+                if (videoDecoderName == decoderName) videoDecoderName = null
+            }
         })
         startPositionWatchdog()
         startNetworkStatsPoll()

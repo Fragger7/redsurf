@@ -243,3 +243,15 @@ Performance gate before each phase: Sports-screen jank no worse than the guide's
 7. **Matching hint (user):** streaming-exclusive games (Amazon, Peacock, Netflix, ESPN+) usually also air on the teams' home-market local stations or RSNs, and ESPN games are often simulcast on ABC. For example, an Amazon Eagles game is on Philadelphia's CBS/NBC/FOX/ABC stations, and a Peacock 76ers game is on NBC Philadelphia / NBC Sports Philadelphia. So candidates are the listed networks, their simulcast partners, and both teams' home-market affiliates and RSNs. Verify the rule per league in the S0 spike.
 8. **Unofficial failover streams:** deferred until the repo goes private. Who maintains the list depends on how sources are found.
 9. **Repo goes private as its own sprint, together with the failover streams.** Hybrid approach: a public repo that holds only APKs, so OTA keeps working.
+
+## 10. Layout decision (user, 2026-10-27)
+
+- **v1.0 = C · Game Day** (`docs/vision/sports-hub/mockups.html`). Ask the user later about
+  upgrading to a richer view - the dynamic hero from A (Marquee) is "very appealing".
+- **Hold OK in the hub = the source picker.** Fullscreen keeps long-press OK = context menu.
+- **Logos:** team, channel and provider logos, loaded dynamically, wherever free APIs allow and
+  performance holds. If frame times suffer, fall back to team logos only (measure first).
+- **Matching must search the provider's dedicated sports categories** (e.g. "NFL", "NBA",
+  "NFL Game Pass", "USA | NBA PPV"-style groups). Most providers carry per-event channels there;
+  they are the most likely hit, so search them first, then the regular channels.
+- **Order unchanged:** polish → Perf Max → Search → Sports Hub.

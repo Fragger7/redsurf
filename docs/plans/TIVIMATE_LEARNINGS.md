@@ -135,3 +135,19 @@ tabular figures at all - keep it off numbers.)
 Researched for `SPORTS_HUB.md`: TiviMate (like IPTV Smarters and OTT Navigator) has no sports
 guide or game-to-channel finder - only its EPG grid. Nothing to copy; RedSurf leads here. Closest
 prior art is Teamarr (AGPL - ideas only, no code) and Apple TV's "My Sports" for the 10-foot UI.
+
+## Playlist settings (polish sprint, 2026-10-27) - from 5.3.3's `strings.xml`
+
+TiviMate's per-playlist page holds: name, URL (editable), type (M3U / Xtream: server, username,
+password / Stalker: MAC, serial number, device ID), TV-vs-VOD playlist, User-Agent, update now /
+on app start / interval (hours) / on playlists change, per-playlist EPG sources + priority + EPG
+time shift, logo priority, manage/sort groups, catch-up, expiration date, max connections, enable
+playlist, delete with confirm, and reorder/sort of playlists.
+
+RedSurf now has: name, connection editor (server/URL, user, password), type, MAC/User-Agent when
+set, update channels/EPG now, channel count, real Content scope (was hard-coded "Live TV"), and for
+Xtream status (Active/Expired/Banned or "Not responding")/trial, expiry, connections in use.
+Deferred, with reasons: Stalker serial/device ID (needs a Room migration; Stalker barely used),
+Enable toggle (belongs with Cloud Sync's global enable/disable), update-on-start/interval, groups
+management, logo priority, M3U reachability probe (a HEAD on a 327 MB list is cheap but some
+providers count it as a connection - not worth it untested).

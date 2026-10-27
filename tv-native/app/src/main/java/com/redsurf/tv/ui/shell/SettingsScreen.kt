@@ -137,7 +137,7 @@ fun SettingsScreen(
     previewOnSelect: Boolean,
     onTogglePreviewOnSelect: () -> Unit,
     bufferSize: BufferSize,
-    onCycleBufferSize: () -> Unit,
+    onSetBufferSize: (BufferSize) -> Unit,
     forceStereo: Boolean,
     onToggleForceStereo: () -> Unit,
     defaultAspect: DefaultAspect,
@@ -159,7 +159,7 @@ fun SettingsScreen(
     onCycleEpgTimeOffset: () -> Unit = {},
     onCycleEpgRefresh: () -> Unit = {},
     navAutoHideSeconds: Int = 5,
-    onCycleNavAutoHide: () -> Unit = {},
+    onSetNavAutoHide: (Int) -> Unit = {},
     // AGENTS.md backlog, 2026-09-15 - same AppPreferences pattern as the two above.
     autoPlayLastChannelOnLaunch: Boolean,
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
@@ -358,7 +358,7 @@ fun SettingsScreen(
             previewOnSelect = previewOnSelect,
             onTogglePreviewOnSelect = onTogglePreviewOnSelect,
             bufferSize = bufferSize,
-            onCycleBufferSize = onCycleBufferSize,
+            onSetBufferSize = onSetBufferSize,
             forceStereo = forceStereo,
             onToggleForceStereo = onToggleForceStereo,
             defaultAspect = defaultAspect,
@@ -380,7 +380,7 @@ fun SettingsScreen(
             onCycleEpgTimeOffset = onCycleEpgTimeOffset,
             onCycleEpgRefresh = onCycleEpgRefresh,
             navAutoHideSeconds = navAutoHideSeconds,
-            onCycleNavAutoHide = onCycleNavAutoHide,
+            onSetNavAutoHide = onSetNavAutoHide,
             autoPlayLastChannelOnLaunch = autoPlayLastChannelOnLaunch,
             onToggleAutoPlayLastChannelOnLaunch = onToggleAutoPlayLastChannelOnLaunch,
             startOn = startOn,
@@ -605,7 +605,7 @@ private fun SettingsPane(
     previewOnSelect: Boolean,
     onTogglePreviewOnSelect: () -> Unit,
     bufferSize: BufferSize,
-    onCycleBufferSize: () -> Unit,
+    onSetBufferSize: (BufferSize) -> Unit,
     forceStereo: Boolean,
     onToggleForceStereo: () -> Unit,
     defaultAspect: DefaultAspect,
@@ -627,7 +627,7 @@ private fun SettingsPane(
     onCycleEpgTimeOffset: () -> Unit = {},
     onCycleEpgRefresh: () -> Unit = {},
     navAutoHideSeconds: Int = 5,
-    onCycleNavAutoHide: () -> Unit = {},
+    onSetNavAutoHide: (Int) -> Unit = {},
     autoPlayLastChannelOnLaunch: Boolean,
     onToggleAutoPlayLastChannelOnLaunch: () -> Unit,
     startOn: StartOn,
@@ -848,7 +848,7 @@ private fun SettingsPane(
                     previewOnSelect = previewOnSelect,
                     onTogglePreviewOnSelect = onTogglePreviewOnSelect,
                     bufferSize = bufferSize,
-                    onCycleBufferSize = onCycleBufferSize,
+                    onSetBufferSize = onSetBufferSize,
                     forceStereo = forceStereo,
                     onToggleForceStereo = onToggleForceStereo,
                     defaultAspect = defaultAspect,
@@ -867,7 +867,7 @@ private fun SettingsPane(
                     doubleHeightRow = doubleHeightRow,
                     onToggleDoubleHeightRow = onToggleDoubleHeightRow,
                     navAutoHideSeconds = navAutoHideSeconds,
-                    onCycleNavAutoHide = onCycleNavAutoHide,
+                    onSetNavAutoHide = onSetNavAutoHide,
                     firstRowFocus = firstRowFocus,
                 )
                 SettingsCategory.RemoteControl -> remoteControlContent(
@@ -1114,7 +1114,8 @@ private fun PlaylistDetail(
     val saveFocus = remember { FocusRequester() }
     val canRefresh = playlist.type == "xtream" || playlist.type == "m3u"
     // TiviMate's playlist info: the panel's account object, fetched once per page open. "Checking…"
-    // until it answers; the section disappears if the panel doesn't (M3U/Stalker never show it).
+    // until it answers, "Not responding" if the panel doesn't (TiviMate's active/dead status; M3U and
+    // Stalker never show the section).
     var account by remember(playlist.id) { mutableStateOf<com.redsurf.tv.vod.XtreamUserInfo?>(null) }
     var accountLoaded by remember(playlist.id) { mutableStateOf(false) }
     if (playlist.type == "xtream") {
@@ -1180,15 +1181,15 @@ private fun PlaylistDetail(
         playlist.macAddress?.takeIf { it.isNotBlank() }?.let { mac -> item { InfoRow("MAC address", mac) } }
         playlist.userAgent?.takeIf { it.isNotBlank() }?.let { ua -> item { InfoRow("User agent", ua) } }
         item { InfoRow("Channels", channelCount?.let { "%,d".format(it) } ?: "—") }
-        item { InfoRow("Content", "Live TV") }
-        if (playlist.type == "xtream" && (!accountLoaded || account != null)) {
+        item { InfoRow("Content", contentLabel(playlist.contentType)) }
+        if (playlist.type == "xtream") {
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 SectionDivider()
             }
             val info = account
             if (info == null) {
-                item { InfoRow("Account", "Checking…") }
+                item { InfoRow("Account", if (accountLoaded) "Not responding" else "Checking…") }
             } else {
                 item {
                     InfoRow(
@@ -1209,6 +1210,14 @@ private fun PlaylistDetail(
         }
         item { RemovePlaylistRow(isLast = isLast, onDelete = onDelete) }
     }
+}
+
+// The playlist's chosen scope. VOD isn't stored yet, so only Live TV is ever imported; say so rather
+// than claim content the app doesn't have (AGENTS.md backlog: content type was shown wrong/static).
+private fun contentLabel(contentType: String): String = when (contentType) {
+    "live" -> "Live TV"
+    "vod" -> "VOD only (Live TV shown until VOD lands)"
+    else -> "Live TV + VOD (VOD not imported yet)"
 }
 
 @Composable
@@ -1414,6 +1423,9 @@ private fun LazyListScope.epgContent(
     }
     items(SETTINGS_GREY_ROWS.getValue(SettingsCategory.Epg)) { GreyRowContent(it) }
 }
+
+/** Nav strip auto-hide presets, seconds; 0 = never (TiviMate offers a similar fixed list). */
+private val NAV_AUTO_HIDE_PRESETS = listOf(0, 3, 5, 10, 15)
 
 private val epgTimeFormat = java.text.SimpleDateFormat("EEE h:mm a", java.util.Locale.getDefault())
 private fun formatEpgTime(millis: Long): String = epgTimeFormat.format(java.util.Date(millis))
@@ -1631,7 +1643,7 @@ private fun LazyListScope.playbackContent(
     previewOnSelect: Boolean,
     onTogglePreviewOnSelect: () -> Unit,
     bufferSize: BufferSize,
-    onCycleBufferSize: () -> Unit,
+    onSetBufferSize: (BufferSize) -> Unit,
     forceStereo: Boolean,
     onToggleForceStereo: () -> Unit,
     defaultAspect: DefaultAspect,
@@ -1664,7 +1676,14 @@ private fun LazyListScope.playbackContent(
     item {
         // TIVIMATE_LEARNINGS.md F17 - TiviMate's five steps. Bigger rides out a poor provider,
         // at the cost of a slower channel switch.
-        LiveRow(label = "Buffer size", value = bufferSize.label, onClick = onCycleBufferSize)
+        PickerRow(
+            label = "Buffer size",
+            options = BufferSize.entries,
+            selected = bufferSize,
+            optionLabel = { it.label },
+            onPick = onSetBufferSize,
+            row = { value, onClick, m -> LiveRow(label = "Buffer size", value = value, onClick = onClick, modifier = m) },
+        )
         LiveRow(
             label = "Audio output",
             value = if (forceStereo) "Force stereo" else "Auto",
@@ -1700,7 +1719,7 @@ private fun LazyListScope.appearanceContent(
     doubleHeightRow: Boolean,
     onToggleDoubleHeightRow: () -> Unit,
     navAutoHideSeconds: Int,
-    onCycleNavAutoHide: () -> Unit,
+    onSetNavAutoHide: (Int) -> Unit,
     firstRowFocus: FocusRequester,
 ) {
     item {
@@ -1721,10 +1740,13 @@ private fun LazyListScope.appearanceContent(
     }
     // EPG_WRAPUP.md 2.3 - flipped live from the grey "Hide nav strip when idle" row.
     item {
-        LiveRow(
+        PickerRow(
             label = "Hide nav strip when idle",
-            value = if (navAutoHideSeconds == 0) "Off" else "After ${navAutoHideSeconds}s",
-            onClick = onCycleNavAutoHide,
+            options = NAV_AUTO_HIDE_PRESETS,
+            selected = navAutoHideSeconds,
+            optionLabel = { if (it == 0) "Off" else "After ${it}s" },
+            onPick = onSetNavAutoHide,
+            row = { value, onClick, m -> LiveRow(label = "Hide nav strip when idle", value = value, onClick = onClick, modifier = m) },
         )
     }
     items(SETTINGS_GREY_ROWS[SettingsCategory.Appearance].orEmpty()) { GreyRowContent(it) }

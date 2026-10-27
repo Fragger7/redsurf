@@ -998,3 +998,5 @@ Commits e1817a9..f11332c. All build clean and unit tests pass; device status per
   the exit hint stays the full 4s confirm window with a red countdown bar. Builds clean.
 - **Account section** (05040c0): an Xtream playlist's page shows Account (status, trial), Expires (date + days left, or Never) and Connections (X of Y in use), from `player_api.php` `user_info`; hidden if the fetch fails. Builds clean.
 - **Device:** the TV was in family use (PBS Kids) from ~10:00 and was not re-tested before the 13:10 stop. Everything from e1817a9 to 05040c0 is builds clean / unit tests 44/44 (before 05040c0); none of it is device-verified. Test state left on the TV: parental PIN 1234, "US| NFHS PPV · Faraz Strong" hidden.
+
+- 2026-10-27 ~02:15: **user says the TV is free overnight** - device-test sprint may start ~08:30 (redsurf-unattended start step 4). Sports Hub decisions recorded in SPORTS_HUB.md section 10 (Game Day; hold OK = source picker; logos; search sports categories). Stats-for-nerds overlay builds clean.

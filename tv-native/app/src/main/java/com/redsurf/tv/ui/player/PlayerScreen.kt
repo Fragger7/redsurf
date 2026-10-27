@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -212,6 +213,9 @@ fun PlayerScreen(
     val errorPresentation by controller.errorPresentation.collectAsState()
     val isBuffering by controller.isBuffering.collectAsState()
     val resizeMode by controller.resizeMode.collectAsState()
+    // Stats for nerds (polish sprint, 2026-10-27): a small always-on corner readout, toggled from
+    // the Actions floor. Per fullscreen session, like TiviMate's; survives zaps (same screen).
+    var showStats by remember { mutableStateOf(false) }
 
     // Spinner shows only after a real delay, not immediately on every zap (user request,
     // 2026-09-18: most zaps resolve in a second or two thanks to the last-frame-held zap trick, so
@@ -666,6 +670,15 @@ fun PlayerScreen(
             }
         }
 
+        if (showStats) {
+            StatsForNerds(
+                streamInfo = streamInfo,
+                networkStats = networkStats,
+                // Below the clock row that any overlay brings up, so the two never collide.
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 64.dp, end = 24.dp),
+            )
+        }
+
         // Scrim + breadcrumb/clock (decision 7's chrome, not its info-block content - that's
         // #2.3). Shown whenever any overlay is up; Level 0 (nothing showing) stays pure video,
         // per the reference screenshots - there's no transient chrome on entry.
@@ -755,6 +768,12 @@ fun PlayerScreen(
                                 onSubtitles = { overlay = PlayerOverlay.Picker(PickerKind.Subtitles) },
                                 onAspect = { controller.cycleResizeMode() },
                                 onVideoInfo = { overlay = PlayerOverlay.Picker(PickerKind.Info) },
+                                statsOn = showStats,
+                                onToggleStats = {
+                                    showStats = !showStats
+                                    // Close the controls so the readout is seen over plain video.
+                                    overlay = PlayerOverlay.None
+                                },
                                 modifier = Modifier.padding(horizontal = 24.dp),
                             )
                         }
@@ -1030,6 +1049,8 @@ private fun ActionRow(
     onSubtitles: () -> Unit,
     onAspect: () -> Unit,
     onVideoInfo: () -> Unit,
+    statsOn: Boolean,
+    onToggleStats: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val modeLabel = when (resizeMode) {
@@ -1049,6 +1070,7 @@ private fun ActionRow(
         Tile(icon = Icons.Filled.Create, label = "Subtitles", onClick = onSubtitles)
         Tile(icon = Icons.Filled.Build, label = aspectLabel, onClick = onAspect)
         Tile(icon = Icons.Filled.Info, label = "Video info", onClick = onVideoInfo)
+        Tile(icon = Icons.Filled.Refresh, label = if (statsOn) "Stats: on" else "Stats: off", onClick = onToggleStats)
     }
 }
 
@@ -1429,6 +1451,9 @@ private fun VideoInfoOverlay(
     val networkRows = listOf(
         "Network speed" to (networkStats.bitrateEstimateBps?.let { formatBitrate(it) } ?: "Calculating…"),
         "Buffer" to "${networkStats.bufferedMs / 1000}s (${networkStats.bufferedPercentage}%)",
+    ) + listOfNotNull(
+        networkStats.videoDecoderName?.let { "Decoder" to decoderLabel(it, networkStats.videoDecoderHardware) },
+        networkStats.droppedFrames?.let { "Dropped frames" to "$it" },
     )
     // Server host only, deliberately - not the full stream URL (it embeds the provider password,
     // and this is an on-screen overlay, not a copy-to-clipboard field; showing it plaintext isn't
@@ -1457,6 +1482,54 @@ private fun VideoInfoOverlay(
             if (providerRows.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
                 InfoSection("Provider", providerRows)
+            }
+        }
+    }
+}
+
+private fun decoderLabel(name: String, hardware: Boolean?): String = when (hardware) {
+    true -> "HW · $name"
+    false -> "SW · $name"
+    null -> name
+}
+
+/**
+ * The stats-for-nerds corner readout: codec, decoder (HW/SW), resolution/fps/bitrate, live buffer
+ * ahead, measured network speed, dropped frames. Values come from the controller's 2s poll, so
+ * this recomposes at most every 2s - a handful of Text nodes, no animation, nothing drawn when off.
+ */
+@Composable
+private fun StatsForNerds(streamInfo: StreamInfo, networkStats: NetworkStats, modifier: Modifier = Modifier) {
+    val video = listOfNotNull(
+        streamInfo.videoCodec,
+        streamInfo.rawResolution,
+        streamInfo.frameRate?.let { "${it}fps" },
+        streamInfo.videoBitrateBps?.let { formatBitrate(it) },
+    ).joinToString(" · ").ifEmpty { "-" }
+    val audio = listOfNotNull(
+        streamInfo.audioCodec,
+        streamInfo.audioChannels,
+        streamInfo.audioBitrateBps?.let { formatBitrate(it) },
+    ).joinToString(" · ").ifEmpty { "-" }
+    val rows = listOf(
+        "Video" to video,
+        "Audio" to audio,
+        "Decoder" to (networkStats.videoDecoderName?.let { decoderLabel(it, networkStats.videoDecoderHardware) } ?: "-"),
+        "Buffer" to "%.1fs ahead".format(networkStats.bufferedMs / 1000.0),
+        "Network" to (networkStats.bitrateEstimateBps?.let { formatBitrate(it) } ?: "Calculating…"),
+        "Dropped" to (networkStats.droppedFrames?.let { "$it frames" } ?: "-"),
+    )
+    Column(
+        modifier = modifier
+            .width(360.dp)
+            .background(Color.Black.copy(alpha = 0.7f))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Text("Stats for nerds", style = RedSurfType.rowSecondary, color = TextSecondary, modifier = Modifier.padding(bottom = 4.dp))
+        rows.forEach { (label, value) ->
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+                Text(label, style = MaterialTheme.typography.bodySmall, color = TextSecondary, modifier = Modifier.width(72.dp))
+                Text(value, style = MaterialTheme.typography.bodySmall, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
