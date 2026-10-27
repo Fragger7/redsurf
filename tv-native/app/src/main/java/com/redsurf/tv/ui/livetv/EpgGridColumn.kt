@@ -582,12 +582,11 @@ private fun EpgChannelRow(
     val pendingStart = remember { LongArray(1) { Long.MIN_VALUE } }
     val nowIndex = remember(slots, now) { nowSlotIndex(slots, now) }
     val selected = remember(slots, selectedStart) { slotIndexAt(slots, selectedStart) }
-    // Is there anything before "now" worth walking LEFT into? Past listings, or an archive to
-    // catch up from. If not, LEFT from the now-cell leaves for Categories instead of stepping
-    // through hours of empty half-hours (2026-10-05).
-    val hasPast = remember(slots, now, channel.tvArchiveDays) {
-        channel.tvArchiveDays > 0 || slots.any { it is AiredSlot && it.start < now && it.end <= now }
-    }
+    // The first real listing in the row. LEFT at or before "now" with no listing further left
+    // leaves for Categories instead of stepping through hours of empty half-hours (2026-10-05):
+    // OK on a gap just tunes live, so an archive alone gives the walk nothing to land on
+    // (2026-10-27 - a no-listings row with catch-up swallowed LEFT presses with no visible change).
+    val firstAired = remember(slots) { slots.indexOfFirst { it is AiredSlot } }
     // OK / hold-OK, tracked without state (no recomposition per press): [0] = this press began
     // on this row, [1] = its long-press already fired.
     val okPress = remember { BooleanArray(2) }
@@ -722,7 +721,7 @@ private fun EpgChannelRow(
                 val slot = slots.getOrNull(cur) ?: return@onPreviewKeyEvent false
                 when (event.key) {
                     Key.DirectionLeft -> {
-                        if (cur == 0 || (cur <= nowIndex && !hasPast)) onLeftEdge() else selectedStart = slots[cur - 1].start
+                        if (cur == 0 || (cur <= nowIndex && (firstAired < 0 || firstAired >= cur))) onLeftEdge() else selectedStart = slots[cur - 1].start
                         true
                     }
                     Key.DirectionRight -> {
