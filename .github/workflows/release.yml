@@ -57,14 +57,14 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        # versionCode = run number + 1000. Local verification builds had run ahead
-        # of the run count (TV at 204 while CI was at ~192), so CI APKs were
-        # downgrades the TV refused. The base keeps every CI build above any local
-        # one; a local build must use 1000 + the next run number to match.
+        # versionCode = run number + 2000. Local verification builds had run ahead
+        # of the run count twice (TV at 204 vs CI ~192, then 1208 vs CI 1206), so CI
+        # APKs were downgrades the TV refused. The base keeps every CI build above any
+        # local one; a local build must use 2000 + the next run number to match.
         run: |
           ./gradlew :app:assembleRelease \
             -PversionName=${{ steps.version.outputs.new_tag }} \
-            -PversionCode=$(( ${{ github.run_number }} + 1000 ))
+            -PversionCode=$(( ${{ github.run_number }} + 2000 ))
 
       # An unsigned or debug-signed APK must never reach a release: it would be
       # unable to update any installed copy, which is the exact bug this pipeline

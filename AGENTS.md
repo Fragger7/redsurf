@@ -29,8 +29,8 @@ were false. It is kept for provenance only.
   lean rows, slots off the main thread) - per-step numbers in `SPRINT_LOG.md` 2026-10-27.
   Category moves still ~28-31% janky (target <=12%); p90 improved. Sports Hub S0 batch 1
   (normaliser, ESPN parser, 13 tests) - no UI.
-- **TV:** v0.58.8-local, **versionCode 1208** - the next CI build must exceed 1208 (bump the base
-  in the workflow or install manually) or OTA won't land. Test state reverted (PIN off, nothing
+- **TV:** CI base bumped to **2000 + run number** (2026-10-27) so CI releases out-rank the local
+  v0.58.8-local/1208; a local build must use 2000 + the next run number. Test state reverted (PIN off, nothing
   hidden); Chromecast settings restored.
 - **Next:** Perf Max step 4 (semantics diet; one app `ImageLoader` with `allowHardware(false)`,
   ~8MB byte-sized LRU + disk cache replacing `ChannelLogos.kt`'s `LruCache<String, ImageBitmap>(400)`),
