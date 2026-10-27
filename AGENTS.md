@@ -68,18 +68,29 @@ per-step account in `docs/plans/SPRINT_LOG.md`'s 2026-10-26 entry):
   the CI APK with uninstall/reinstall or bump the run count. **Test state left on the TV:** parental
   PIN 1234, and "US| NFHS PPV · Faraz Strong" hidden (undo in Settings → Parental controls).
 
-**Next (user, 2026-10-26 evening - this supersedes the 7-step order's remaining items):**
-1. **Next unattended window, on the user's signal only (they're using the TV):** first fix OTA - offset
-   CI's versionCode so it exceeds the installed 204 (e.g. run number + a fixed base), cut a release,
-   install it; then the device-test sprint for every VERIFY-PENDING item above.
-2. **Performance Max sprint** - squeeze every drop; rewrites are on the table if the gain is big.
-   Research brief: `docs/plans/PERFORMANCE_MAX.md`. Includes making the preview ↔ fullscreen
-   shrink/expand **smooth like TiviMate** (user: faster now, "more useable", but abrupt).
-3. **Search sprint** - soon.
-4. **Sports Hub** - a new screen/feature; **starts with an interview** of the user, then design + build.
-5. **Multi-View** - probably after Live TV, Search and Sports Hub.
-6. **VOD (Movies/Series)** - not before Search and Sports Hub are done.
-7. **Cloud Sync** - interview (D1-D4) still owed.
+**Next (user, 2026-10-27 - supersedes the 2026-10-26 list):**
+1. **OTA fix** - CI versionCode = run number + a fixed base (must exceed the installed 204); release.
+2. **Polish sprint** (feel-check, `TESTING_OUTSTANDING.md` §N): nav auto-hides a few seconds after
+   focus leaves the strip, key presses or not (TiviMate); hide-timer as a preset picker
+   (Off/3/5/10/15s); Back from a tab lands on its pill with the exit hint, next Back exits (F17);
+   stats-for-nerds overlay (codec, HW/SW decoder, res/fps/bitrate, live buffer-ahead, network
+   speed, dropped frames); playlist management TiviMate pass (study its screen first: all
+   Xtream/Stalker fields, Live/VOD/Both, expiry, active/dead status).
+3. **Performance Max** - full scope of `docs/plans/PERFORMANCE_MAX.md`, every ranked fix,
+   measurement-gated; includes the smooth TiviMate-like preview ↔ fullscreen shrink/expand.
+4. **Search sprint.**
+5. **Sports Hub** - interview done (`SPORTS_HUB.md` §9); S0 match spike + layout mock-ups for the
+   user to pick, then build.
+6. **Private repo** - APK-only public repo for OTA/portal first, then flip private; then the
+   unofficial-stream failover.
+7. **Cloud Sync** - interview (D1-D4) first.
+8. **Multi-View.**
+9. **VOD (Movies/Series)** - only once Live TV is done well.
+- **Process (user, 2026-10-27):** build through the window; the device-test sprint is the last
+  thing in the final window (quality + all tests passing), not mid-way iteration.
+- **Backlog - audio (user, 2026-10-27, low priority):** no GPLv3 (keep the option to sell the
+  app). Route: build FFmpeg from LGPL-only components as a dynamic `.so` with Media3's Apache-2.0
+  ffmpeg extension. If ever sold, check Dolby E-AC-3 licensing.
 - **Recents (TiviMate parity, user 2026-10-26):** a "Clear" button on the recent-channels strip, and
   long-press OK on a recent channel → "Remove" to drop one entry.
 - **Deferred:** the Full visual tier / Shield builds (user, 2026-10-26).
