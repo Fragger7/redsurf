@@ -65,7 +65,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
@@ -164,6 +163,8 @@ private data class RowJump(val index: Int, val time: Long, val nonce: Long, val 
 fun EpgGridColumn(
     channels: List<ChannelEntity>,
     programsByChannel: Map<String, List<EpgProgramEntity>>,
+    // [programsByChannel] as slots, built off the main thread with the listings ([slotsByChannel]).
+    slotsByChannel: Map<String, List<EpgSlot>>,
     groupName: String?,
     now: Long,
     windowStart: Long,
@@ -372,16 +373,15 @@ fun EpgGridColumn(
                         runCatching { rowsState.scrollToItem(if (forward) first.index + 1 else first.index) }
                     }
                 }
+                // Rows without listings (or whose listings are still loading) share one all-gap list.
+                val noListings = remember(windowStart) { slotsFor(emptyList(), windowStart, windowStart + WINDOW_MINUTES * MINUTE_MS) }
                 LazyColumn(state = rowsState, modifier = Modifier.fillMaxSize()) {
                     // One content type for every row, so rows leaving the list (a category change)
                     // are recycled for the new category's rows instead of built from nothing.
                     items(count = channels.size, key = { channels[it].streamId }, contentType = { 0 }) { index ->
                         val channel = channels[index]
                         val isFocusTarget = if (targetIndex >= 0) index == targetIndex else index == 0
-                        val programmes = programsByChannel[channel.streamId].orEmpty()
-                        val slots = remember(programmes, windowStart) {
-                            slotsFor(programmes, windowStart, windowStart + WINDOW_MINUTES * MINUTE_MS)
-                        }
+                        val slots = slotsByChannel[channel.streamId] ?: noListings
                         traced("EpgRow") {
                             EpgChannelRow(
                                 channel = channel,
@@ -693,12 +693,15 @@ private fun EpgChannelRow(
     }
     Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(if (expanded) RedSurfDensity.GridRowHeight * 2 else RedSurfDensity.GridRowHeight)
-            .onPlaced { placed[0] = true }
+            // Full width, fixed height, the placed flag and the trace in one layout node, not four
+            // (Perf Max: a category change creates every visible row's modifier chain at once).
             .layout { measurable, constraints ->
-                val placeable = traced("EpgRow:measure") { measurable.measure(constraints) }
-                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                val h = (if (expanded) RedSurfDensity.GridRowHeight * 2 else RedSurfDensity.GridRowHeight).roundToPx()
+                val placeable = traced("EpgRow:measure") { measurable.measure(Constraints.fixed(constraints.maxWidth, h)) }
+                layout(placeable.width, placeable.height) {
+                    placeable.place(0, 0)
+                    placed[0] = true
+                }
             }
             .then(firstCellFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
             .focusRequester(rowFocus)

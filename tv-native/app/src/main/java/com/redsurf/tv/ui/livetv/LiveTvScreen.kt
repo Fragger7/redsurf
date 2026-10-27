@@ -89,7 +89,9 @@ import com.redsurf.tv.ui.theme.Surface
 import com.redsurf.tv.ui.theme.SurfaceRaised
 import com.redsurf.tv.ui.theme.TextPrimary
 import com.redsurf.tv.ui.theme.TextSecondary
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.snapshotFlow
@@ -445,6 +447,7 @@ fun LiveTvScreen(
     var gridLoadedFor by remember { mutableStateOf<GroupKey?>(null) }
     var gridReclaimNonce by remember { mutableStateOf(0) }
     var gridPrograms by remember { mutableStateOf<Map<String, List<EpgProgramEntity>>>(emptyMap()) }
+    var gridSlots by remember { mutableStateOf<Map<String, List<EpgSlot>>>(emptyMap()) }
     // The Favorites category's contents change without the selected category changing (found
     // live 2026-09-30: after removing a favorite the removed row stayed on screen, and the next
     // hold-OK on it re-added it) - so while Favorites is showing, the favorites set itself is
@@ -455,6 +458,7 @@ fun LiveTvScreen(
         if (group == null) {
             gridChannels = emptyList()
             gridPrograms = emptyMap()
+            gridSlots = emptyMap()
             gridLoadedFor = null
             return@LaunchedEffect
         }
@@ -481,16 +485,23 @@ fun LiveTvScreen(
             it < FIRST_PROGRAMME_ROWS || (targetIndex >= 0 && it in (targetIndex - FIRST_PROGRAMME_ROWS / 2)..(targetIndex + FIRST_PROGRAMME_ROWS / 2))
         }.toSet()
         val programmes = viewModel.repository.programmesFor(channelsInGroup.filterIndexed { i, _ -> i in firstRows }, windowStart, windowEnd)
+        // Perf Max (2026-10-27): slots built here, not per row in composition - that was ~8ms of
+        // the ~29ms frame a category change costs (sorting listings, gap slots, per row).
+        val slots = withContext(Dispatchers.Default) { slotsByChannel(programmes, windowStart) }
         Log.d("LiveTvScreen", "gridQuery+programmes group=${group.groupName} tookMs=${System.currentTimeMillis() - queryStart}")
         // Safety net for the same race: if real focus was inside the grid when its rows are about
         // to be replaced, it will be orphaned - reclaim it onto the new rows.
         val hadGridFocus = channelsHasFocus
         gridChannels = channelsInGroup
         gridPrograms = programmes
+        gridSlots = slots
         gridLoadedFor = group
         if (hadGridFocus) gridReclaimNonce++
         channelsInGroup.filterIndexed { i, _ -> i !in firstRows }.chunked(REMAINING_PROGRAMME_CHUNK).forEach { chunk ->
-            gridPrograms = gridPrograms + viewModel.repository.programmesFor(chunk, windowStart, windowEnd)
+            val more = viewModel.repository.programmesFor(chunk, windowStart, windowEnd)
+            val moreSlots = withContext(Dispatchers.Default) { slotsByChannel(more, windowStart) }
+            gridPrograms = gridPrograms + more
+            gridSlots = gridSlots + moreSlots
         }
     }
 
@@ -894,6 +905,7 @@ fun LiveTvScreen(
                     EpgGridColumn(
                         channels = gridChannels,
                         programsByChannel = gridPrograms,
+                        slotsByChannel = gridSlots,
                         // The group the rows actually belong to (prefix stripping must match the rows),
                         // not the one just selected and still loading.
                         groupName = gridLoadedFor?.groupName,

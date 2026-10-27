@@ -46,6 +46,13 @@ const val WINDOW_MINUTES = PAST_MINUTES + FUTURE_MINUTES
 /** The grid window's start for a given clock: [PAST_MINUTES] before the current half-hour. */
 fun gridWindowStart(now: Long): Long = floorToHalfHour(now) - PAST_MINUTES * MINUTE_MS
 
+/**
+ * Every row's slots for one category, built once when its listings arrive (off the main thread)
+ * instead of per row while the grid composes - a category change composes 9-10 rows in one frame.
+ */
+fun slotsByChannel(programmes: Map<String, List<EpgProgramEntity>>, windowStart: Long): Map<String, List<EpgSlot>> =
+    programmes.mapValues { slotsFor(it.value, windowStart, windowStart + WINDOW_MINUTES * MINUTE_MS) }
+
 fun slotsFor(programmes: List<EpgProgramEntity>, windowStart: Long, windowEnd: Long): List<EpgSlot> {
     val out = mutableListOf<EpgSlot>()
     var cursor = windowStart
