@@ -78,6 +78,7 @@ fun <T> OptionPickerDialog(
                         colors = RedSurfFocus.rowColors(resting = SurfaceRaised),
                         border = RedSurfFocus.border(),
                         glow = RedSurfFocus.glow(),
+                        scale = RedSurfFocus.scale(),
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),

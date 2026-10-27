@@ -54,6 +54,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
+import com.redsurf.tv.R
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -1066,11 +1068,11 @@ private fun ActionRow(
         // only, no -extended dependency - same constraint as History's DateRange stand-in above).
         // Call/Create/Build are the closest available shapes; the label text is what actually
         // carries the meaning here, same reasoning as that earlier substitution.
-        Tile(icon = Icons.Filled.Call, label = "Audio", onClick = onAudio)
-        Tile(icon = Icons.Filled.Create, label = "Subtitles", onClick = onSubtitles)
-        Tile(icon = Icons.Filled.Build, label = aspectLabel, onClick = onAspect)
+        Tile(icon = ImageVector.vectorResource(R.drawable.ic_player_audio), label = "Audio", onClick = onAudio)
+        Tile(icon = ImageVector.vectorResource(R.drawable.ic_player_subtitles), label = "Subtitles", onClick = onSubtitles)
+        Tile(icon = ImageVector.vectorResource(R.drawable.ic_player_aspect), label = aspectLabel, onClick = onAspect)
         Tile(icon = Icons.Filled.Info, label = "Video info", onClick = onVideoInfo)
-        Tile(icon = Icons.Filled.Refresh, label = if (statsOn) "Stats: on" else "Stats: off", onClick = onToggleStats)
+        Tile(icon = ImageVector.vectorResource(R.drawable.ic_player_stats), label = if (statsOn) "Stats: on" else "Stats: off", onClick = onToggleStats)
     }
 }
 

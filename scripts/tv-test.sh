@@ -74,17 +74,24 @@ key() {
 # is before each step instead of assuming, so it works from any starting state. UP first because
 # from any content area that's the one direction that reliably reaches the strip.
 nav_to_pill() {
-  local target="$1"
-  key KEYCODE_DPAD_UP 1
-  local i info
-  for i in 1 2 3 4 5 6 7 8; do
+  local target="$1" i info y found=0
+  # UP until focus is inside the strip (top band, y < 140) - one UP is not enough from deep in a
+  # pane (2026-10-27: a single UP left focus on a Settings toggle and the final OK flipped it).
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
     info=$(focused_info)
-    [[ "$info" == *"'$target'"* ]] && break
-    # Pills are left-to-right: Home, Live TV, Movies, Series, Guide, Search, Settings.
-    key KEYCODE_DPAD_RIGHT 0.4
+    y=$(echo "$info" | sed -E 's/.*bounds=\[[0-9]+,([0-9]+)\].*/\1/')
+    [[ "$y" =~ ^[0-9]+$ ]] && (( y < 140 )) && break
+    key KEYCODE_DPAD_UP 0.5
   done
-  focused_info
-  key KEYCODE_DPAD_CENTER 1
+  # Pills are left-to-right: Home, Live TV, Movies, Series, Search, Settings - sweep right, then left.
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+    info=$(focused_info)
+    [[ "$info" == *"'$target'"* ]] && { found=1; break; }
+    if (( i <= 7 )); then key KEYCODE_DPAD_RIGHT 0.4; else key KEYCODE_DPAD_LEFT 0.4; fi
+  done
+  echo "$info"
+  # Never press OK unless focus is verifiably on the target pill.
+  if (( found )); then key KEYCODE_DPAD_CENTER 1; else echo "nav_to_pill: '$target' not reached - no OK sent"; return 1; fi
 }
 nav_to_settings() { nav_to_pill "Settings"; }
 nav_to_livetv()   { nav_to_pill "Live TV"; }

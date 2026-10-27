@@ -141,6 +141,7 @@ fun PinDialog(
                                 colors = RedSurfFocus.rowColors(resting = SurfaceRaised),
                                 border = RedSurfFocus.border(),
                                 glow = RedSurfFocus.glow(),
+                                scale = RedSurfFocus.scale(),
                             ) {
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     Text(k, fontSize = if (k.length == 1) 20.sp else 16.sp)

@@ -59,6 +59,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.filter
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -352,6 +354,20 @@ fun EpgGridColumn(
                     val last = visible.lastOrNull()?.index ?: 0
                     if (jump.index < first) runCatching { rowsState.scrollToItem(jump.index) }
                     else if (jump.index >= last) runCatching { rowsState.scrollToItem((first + (jump.index - last) + 1).coerceAtLeast(0)) }
+                }
+                // Whole rows only (found on device 2026-10-27: focus scrolling left the top row
+                // half-cut under the time header, reading as an overlap; TiviMate never shows a cut
+                // row). Once a scroll settles, align the first row's top edge - back up to it unless
+                // the cut is past half the row or the cursor is on the last visible row.
+                LaunchedEffect(rowsState) {
+                    snapshotFlow { rowsState.isScrollInProgress }.filter { !it }.collect {
+                        val visible = rowsState.layoutInfo.visibleItemsInfo
+                        val first = visible.firstOrNull() ?: return@collect
+                        val cut = rowsState.firstVisibleItemScrollOffset
+                        if (cut == 0) return@collect
+                        val forward = cut > first.size / 2 || visible.lastOrNull()?.index == cursorRow
+                        runCatching { rowsState.scrollToItem(if (forward) first.index + 1 else first.index) }
+                    }
                 }
                 LazyColumn(state = rowsState, modifier = Modifier.fillMaxSize()) {
                     // One content type for every row, so rows leaving the list (a category change)
