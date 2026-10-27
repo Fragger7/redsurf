@@ -581,8 +581,9 @@ private fun EpgChannelRow(
     // BringIntoViewRequester to not be used before parents are placed" (crash log, 2026-10-19
     // 01:54). A plain holder - written at placement, read only by the effect below.
     val placed = remember { BooleanArray(1) }
-    LaunchedEffect(jump?.nonce) {
-        if (jump == null) return@LaunchedEffect
+    // Effects only while they have work: a row rebuilt for a new category would otherwise launch
+    // two coroutines that return at once (onRemembered was ~4ms of the commit frame, 2026-10-27).
+    if (jump != null) LaunchedEffect(jump.nonce) {
         pendingStart[0] = slots.getOrNull(slotIndexAt(slots, jump.time))?.start ?: Long.MIN_VALUE
         repeat(15) {
             withFrameNanos { }
@@ -605,8 +606,8 @@ private fun EpgChannelRow(
     val columns = WINDOW_MINUTES / 30
     // The selection drives the hero and keeps itself in view - TiviMate holds the hours still
     // until the cursor reaches an edge; a programme already partly visible doesn't scroll.
-    LaunchedEffect(selected, rowHasFocus) {
-        if (!rowHasFocus || selected !in slots.indices) return@LaunchedEffect
+    if (rowHasFocus) LaunchedEffect(selected) {
+        if (selected !in slots.indices) return@LaunchedEffect
         val slot = slots[selected]
         onCursor(CursorKey(channel.playlistId, channel.streamId, slot.start), slot)
         val width = (slot.end - slot.start) / MINUTE_MS.toFloat() * pxPerMinutePx
@@ -630,9 +631,6 @@ private fun EpgChannelRow(
             is GapSlot -> onTune(channel)
         }
     }
-    val description = slots.getOrNull(if (selected >= 0) selected else nowIndex)
-        .let { slot -> "${channel.num} $displayName · ${(slot as? AiredSlot)?.programme?.title ?: "No listings"}" }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -714,7 +712,11 @@ private fun EpgChannelRow(
             .focusable()
             // One accessibility node per row (number, name, selected programme) instead of a node
             // per text and per cell - the diff that runs on every change stays small.
-            .clearAndSetSemantics { contentDescription = description }
+            .clearAndSetSemantics {
+                // Built here, not in composition: only an accessibility pass pays for the string.
+                val slot = slots.getOrNull(if (selected >= 0) selected else nowIndex)
+                contentDescription = "${channel.num} $displayName · ${(slot as? AiredSlot)?.programme?.title ?: "No listings"}"
+            }
             // Own drawing layer per row: a scroll step only moves the layers, and the Wash, the
             // marquee or a selection change re-records just this row, not the whole grid.
             .graphicsLayer()
