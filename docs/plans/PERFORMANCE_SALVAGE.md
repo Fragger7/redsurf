@@ -668,3 +668,9 @@ kernel input; `input keyevent` doesn't show there) - verified with a real Home p
 - Trace (12x UP, 0.25s pacing): UI-thread slow frames are mostly waiting (`postAndWait` 270ms of ~600ms traversal); the RenderThread spends ~6.5ms/slow frame in `dequeueBuffer` - the GPU is behind. ~20 TextureOps + ~26 FillRectOps per frame, 2 PathStencilCoverOps (likely `CrestCut` over the hero video).
 - Fix tried: overdraw cut (window background dropped after first draw; idle EPG rows paint nothing). Result: neutral within noise (see SPRINT_LOG 04:10). Kept.
 - Still open, diminishing returns: cache `CrestCut` paths (`drawWithCache`), cache the now-line brush, avoid the double scroll per press (rowJump scrollToItem + whole-row snap), now-line overlaps "No listings".
+
+## Perf Max step 3 - category move, 2026-10-27 (unattended)
+
+- Category commit frame (~80ms): `Compose:recompose` 37.5ms, `EpgRow` x9 20ms (`EpgRow:label` 6ms), `applyChanges` 20ms, `onRemembered` 4.3ms.
+- Surf backdrop re-baked per move - fixed by memoising the bitmap (5369712): DOWN p90 ~halved, janky ~-10pts. Kept.
+- Positional keys: neutral, reverted. Remaining: fewer per-row lambdas/remembers/effects in `EpgChannelRow`, cheaper `ChannelLabelBlock` logo path, pre-warm N±1 categories.
