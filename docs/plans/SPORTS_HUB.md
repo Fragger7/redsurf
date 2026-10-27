@@ -246,8 +246,10 @@ Performance gate before each phase: Sports-screen jank no worse than the guide's
 
 ## 10. Layout decision (user, 2026-10-27)
 
-- **v1.0 = C · Game Day** (`docs/vision/sports-hub/mockups.html`). Ask the user later about
-  upgrading to a richer view - the dynamic hero from A (Marquee) is "very appealing".
+- **v1.0 = B · Live Desk** (`docs/vision/sports-hub/mockups.html`), per the user's 2026-10-27
+  follow-up message. This replaces the earlier C · Game Day pick in the same section. Reel back to C
+  (or A's hero) if Live Desk measures badly on the TV. Ask the user later about a richer view - the
+  dynamic hero from A (Marquee) is "very appealing".
 - **Hold OK in the hub = the source picker.** Fullscreen keeps long-press OK = context menu.
 - **Logos:** team, channel and provider logos, loaded dynamically, wherever free APIs allow and
   performance holds. If frame times suffer, fall back to team logos only (measure first).
