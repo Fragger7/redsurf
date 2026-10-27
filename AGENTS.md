@@ -22,7 +22,23 @@ a Next.js web portal at the repo root.
 **`docs/archive/` is superseded — do not trust it.** It is previous agents' claims, most of which
 were false. It is kept for provenance only.
 
-## ▶ RESUME HERE - unattended run 2026-10-26 (01:58-13:10 CDT) ended at its stop point
+## ▶ RESUME HERE - unattended run 2026-10-27 (02:00-06:00 CDT, stopped 14:35)
+
+- **Done:** OTA fix (CI versionCode = 1000 + run number); polish sprint built (VERIFY-PENDING,
+  incl. stats-for-nerds overlay); Perf Max steps 1-3 (overdraw cut, surf memo, drawn time header,
+  lean rows, slots off the main thread) - per-step numbers in `SPRINT_LOG.md` 2026-10-27.
+  Category moves still ~28-31% janky (target <=12%); p90 improved. Sports Hub S0 batch 1
+  (normaliser, ESPN parser, 13 tests) - no UI.
+- **TV:** v0.58.8-local, **versionCode 1208** - the next CI build must exceed 1208 (bump the base
+  in the workflow or install manually) or OTA won't land. Test state reverted (PIN off, nothing
+  hidden); Chromecast settings restored.
+- **Next:** Perf Max step 4 (semantics diet; one app `ImageLoader` with `allowHardware(false)`,
+  ~8MB byte-sized LRU + disk cache replacing `ChannelLogos.kt`'s `LruCache<String, ImageBitmap>(400)`),
+  then 5 (scale-based shrink/expand, capture TiviMate's SurfaceFlinger latency first), 6
+  (macrobenchmark + profiles, `.dm` OTA at `UpdateManager.kt:113`), 7 (sync I/O), 8 (gate).
+  Then Search, then Sports Hub S0 (matcher tiers, ESPN fetch, Philly aliases from real names).
+
+## Previous - unattended run 2026-10-26 (01:58-13:10 CDT) ended at its stop point
 
 Most of the 7-step plan below got built in one run (commits 27dff84..HEAD, CI releases v0.44.x;
 per-step account in `docs/plans/SPRINT_LOG.md`'s 2026-10-26 entry):

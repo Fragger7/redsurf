@@ -151,3 +151,6 @@ Deferred, with reasons: Stalker serial/device ID (needs a Room migration; Stalke
 Enable toggle (belongs with Cloud Sync's global enable/disable), update-on-start/interval, groups
 management, logo priority, M3U reachability probe (a HEAD on a 327 MB list is cheap but some
 providers count it as a connection - not worth it untested).
+
+**Open check (2026-10-27):** RedSurf's hero now says "Ended" / "Starts in N min" for aired and
+upcoming slots (bd0cf65); TiviMate's own wording for these was not checked - compare on the TV.

@@ -195,6 +195,11 @@ Order matters: measure, then the cheap high-confidence wins, then structural wor
 | 7 | Sync I/O (item 8) | category query <=20ms during a forced EPG sync |
 | 8 | Gate decision: guide still >10%? then prototype item 5, then 11 | written verdict |
 
+**Status 2026-10-27:** steps 0-3 done. Step 3 acceptance **not met** (categories ~28-31% janky,
+a11y on; p90 down to ~53-97ms). Heavy frame is now `EpgGridColumn:measure` ~29ms (recompose 13.8,
+applyChanges 7.5). The bench's 0.25s gap commits every press (worst case); a held key commits once.
+Next: step 4. Details: `SPRINT_LOG.md` 2026-10-27.
+
 **Measurement protocol** (from the salvage's lessons, all of them learned the hard way):
 - Always `adb shell cmd package compile -m speed-profile -f com.redsurf.tv` (or `compile_app` in
   `scripts/perf-measure.sh`) after install; a fresh install sits at `verify` and reads ~10
