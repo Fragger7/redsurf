@@ -2,6 +2,7 @@ package com.redsurf.tv
 
 import androidx.compose.ui.graphics.RectangleShape
 import android.os.Bundle
+import androidx.core.view.OneShotPreDrawListener
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -62,6 +63,12 @@ class MainActivity : ComponentActivity() {
         
         val db = RedSurfDatabase.getDatabase(this)
         viewModel.setDatabase(db, this)
+
+        // The theme's black windowBackground only covers the cold-start window before Compose's
+        // first frame. After that the root Box below paints Background over the whole screen, so
+        // keeping the window fill doubled every frame's full-screen fill (overdraw capture,
+        // PERFORMANCE_MAX.md step 1). Dropped just before the first draw, when Compose is laid out.
+        OneShotPreDrawListener.add(window.decorView) { window.setBackgroundDrawable(null) }
 
         setContent {
             RedSurfTheme {

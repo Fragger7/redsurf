@@ -719,9 +719,10 @@ private fun EpgChannelRow(
             // marquee or a selection change re-records just this row, not the whole grid.
             .graphicsLayer()
             .drawBehind {
-                // Crest: rows separate by a background gutter, not a line.
-                drawRect(if (rowHasFocus) SurfaceBand else Background)
-                drawRect(Background, Offset(0f, size.height - gutterPx), Size(size.width, gutterPx))
+                // Crest: rows separate by a background gutter, not a line. Idle rows draw nothing:
+                // the screen's own Background is already behind them (re-filling it was a whole
+                // extra layer of overdraw per row, PERFORMANCE_MAX.md step 1).
+                if (rowHasFocus) drawRect(SurfaceBand, size = Size(size.width, size.height - gutterPx))
             }
             .padding(bottom = RedSurfDensity.GridGutter),
         verticalAlignment = Alignment.CenterVertically,

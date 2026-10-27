@@ -662,3 +662,9 @@ kernel input; `input keyevent` doesn't show there) - verified with a real Home p
 ## Answers already given to the user (don't re-ask)
 - #5: indicators exist but are too faint - planned P3 fix above.
 - #7b: yes, TiviMate's overlay shows the current programme - planned P3.
+
+## Perf Max step 1 - guide jank, 2026-10-27 (unattended)
+
+- Trace (12x UP, 0.25s pacing): UI-thread slow frames are mostly waiting (`postAndWait` 270ms of ~600ms traversal); the RenderThread spends ~6.5ms/slow frame in `dequeueBuffer` - the GPU is behind. ~20 TextureOps + ~26 FillRectOps per frame, 2 PathStencilCoverOps (likely `CrestCut` over the hero video).
+- Fix tried: overdraw cut (window background dropped after first draw; idle EPG rows paint nothing). Result: neutral within noise (see SPRINT_LOG 04:10). Kept.
+- Still open, diminishing returns: cache `CrestCut` paths (`drawWithCache`), cache the now-line brush, avoid the double scroll per press (rowJump scrollToItem + whole-row snap), now-line overlaps "No listings".
