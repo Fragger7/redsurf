@@ -961,6 +961,11 @@ private fun DrawScope.drawSlot(
 ) {
     val h = size.height
     val isCurrent = slot is AiredSlot && now >= slot.start && now < slot.end
+    // The now-line crosses the gap cell airing now; its label and hairline start just past it,
+    // not under it (seen on device 2026-10-27: the line cut through "No listings").
+    val gapShift = if (slot is GapSlot && isNowCell && slot.end > slot.start) {
+        (w * (now - slot.start) / (slot.end - slot.start).toFloat()).coerceIn(0f, w)
+    } else 0f
     when (slot) {
         is AiredSlot -> {
             // Public-supplement listings (EPG_WRAPUP.md 2.2; AGENTS.md's indicator decision,
@@ -983,7 +988,12 @@ private fun DrawScope.drawSlot(
             }
         }
         is GapSlot -> {
-            val dashStart = if (isNowCell) m.labelClearance else 0f
+            // labelClearance covers padStart + the label; it sits after the now-line when it can't fit before.
+            val dashStart = when {
+                !isNowCell -> 0f
+                gapShift >= m.labelClearance + m.padEnd -> m.labelClearance
+                else -> minOf(gapShift + m.labelClearance, w)
+            }
             if (w > dashStart) drawRect(GapLine, Offset(dashStart, (h - m.hairline) / 2f), Size(w - dashStart, m.hairline))
         }
     }
@@ -1025,8 +1035,15 @@ private fun DrawScope.drawSlot(
             times?.let { drawText(it, color = NoListings, topLeft = Offset(textLeft, top + title.size.height)) }
         }
         is GapSlot -> if (isNowCell) {
-            val label = textMeasurer.measure("No listings", style = m.metaStyle, maxLines = 1, constraints = constraints)
-            drawText(label, color = NoListings, topLeft = Offset(textLeft, (h - label.size.height) / 2f))
+            val label = textMeasurer.measure("No listings", style = m.metaStyle, maxLines = 1)
+            // Before the now-line if it fits there, else after it, else the plain start (clipped).
+            val labelW = label.size.width
+            val x = when {
+                textLeft + labelW + m.padEnd <= gapShift -> textLeft
+                gapShift + m.padStart + labelW + m.padEnd <= w -> gapShift + m.padStart
+                else -> textLeft
+            }
+            drawText(label, color = NoListings, topLeft = Offset(x, (h - label.size.height) / 2f))
         }
     }
 }
