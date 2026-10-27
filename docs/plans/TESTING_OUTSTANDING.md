@@ -30,6 +30,15 @@ Categories UP escaping to the nav strip early (fixed Sprint 2 #24). Section D fe
 true top), #25 (focus lands on "now"), overall sluggishness after Sprint 1, and the 2026-09-28
 Settings crash fix.
 
+## N - USER FEEL CHECK RECEIVED 2026-10-27 (installed v0.44.37/204) - do not re-ask
+- Performance generally looks better.
+- Nav strip doesn't seem to auto-hide. Confirmed in code: the 5s timer restarts on every key press and only runs on Live TV, so while browsing it never hides. Fix: hide once focus leaves the strip.
+- Back-to-exit goes to the Home tab first. The user expected the current tab's pill, then another Back exits (TiviMate F17). Fix agreed.
+- Fullscreen/shrink feedback: already on record (abrupt; Performance Max).
+- Parental PIN 1234 works.
+- Playlist management: the user has only seen name editing. Credential editor 1455d02 and Account section 05040c0 aren't on the TV yet. The user wants TiviMate-parity: every Xtream/Stalker field editable, Live/VOD/Both, expiry, and active/dead status (ping, auth errors).
+- Asked for: a player "stats for nerds" overlay (codec, buffer ahead, bandwidth) to see Buffer size working.
+
 ## M - USER RESULTS RECEIVED 2026-10-20 (morning) - do not re-ask
 1. Overall: the app feels zippier - "actually usable" now.
 2. **Preview ↔ fullscreen (both ways) is the choppiest thing left** - make it performant by code

@@ -232,3 +232,14 @@ Performance gate before each phase: Sports-screen jank no worse than the guide's
 6. **Languages for games:** English only, or English and Spanish (Fox Deportes, ESPN Deportes)?
 7. **Unofficial failover:** off by default behind its own toggle, and last in the order? Who maintains the manifest: you, or Claude on request?
 8. **Layout:** do B+ with the live corner and the sources sheet match what you pictured? And should follows, mappings and picks sync through Cloud Sync?
+
+## 9. User decisions, 2026-10-27 (supersede sections 5 and 8 where they differ)
+1. **Home market:** not needed at launch. Later: searchable US cities, pulled from data. Demo with **Philadelphia** (Eagles, 76ers, Phillies, Flyers, Union).
+2. **Spoilers:** scores shown by default. A setting switches to blurred or blank scores.
+3. **Show every game** whether or not a stream was matched. A "Show only available streams" toggle comes later, and only if matching proves very reliable.
+4. **Free data only for now.** ESPN plus the league APIs; no $9/mo TheSportsDB.
+5. **Leagues:** NFL, NBA, MLB, NHL, UFC, boxing. Cricket and soccer later.
+6. **Layout (user's vision; check it against Apple TV / Peacock / Max sports before building):** Stremio/Nuvio-style rows - one per category (Live now, Philadelphia, NFL, NBA...). Each game is a rectangular card: Away vs Home with logos, local start time, network if known, LIVE badge. OK on a card opens a Teleport-style modal listing matching streams with their playlist, best match first (a confidence label is allowed). OK in the modal plays. Not tied to TivraTV.
+7. **Matching hint (user):** streaming-exclusive games (Amazon, Peacock, Netflix, ESPN+) usually also air on the teams' home-market local stations or RSNs, and ESPN games are often simulcast on ABC. For example, an Amazon Eagles game is on Philadelphia's CBS/NBC/FOX/ABC stations, and a Peacock 76ers game is on NBC Philadelphia / NBC Sports Philadelphia. So candidates are the listed networks, their simulcast partners, and both teams' home-market affiliates and RSNs. Verify the rule per league in the S0 spike.
+8. **Unofficial failover streams:** deferred until the repo goes private. Who maintains the list depends on how sources are found.
+9. **Repo goes private as its own sprint, together with the failover streams.** Hybrid approach: a public repo that holds only APKs, so OTA keeps working.
