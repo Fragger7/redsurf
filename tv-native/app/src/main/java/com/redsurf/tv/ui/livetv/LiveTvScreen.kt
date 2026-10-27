@@ -1376,13 +1376,16 @@ private fun ChannelFallbackThumbnail(channel: ChannelEntity) {
 
 /** The red progress track + "N min remaining" (TiviMate parity, `RedThemedEPGLiveTVScreen.jpg`),
  * driven by the screen's ticking clock (G.7) rather than a timestamp captured once at
- * composition, which is how the previous version quietly stopped counting down. */
+ * composition, which is how the previous version quietly stopped counting down.
+ * The track shows only while the programme airs: the cursor can rest on an aired (catch-up) or
+ * upcoming slot, which read "0 min remaining" under a full bar before (seen on device 2026-10-27). */
 @Composable
 internal fun ProgrammeProgressRow(programme: EpgProgramEntity, now: Long) {
     val total = (programme.endTime - programme.startTime).coerceAtLeast(1L)
     val elapsed = (now - programme.startTime).coerceIn(0L, total)
     val fraction = elapsed.toFloat() / total.toFloat()
     val minRemaining = ((programme.endTime - now) / 60_000L).coerceAtLeast(0L)
+    val airing = now >= programme.startTime && now < programme.endTime
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             "${heroTimeFormat.format(Date(programme.startTime))} – ${heroTimeFormat.format(Date(programme.endTime))}",
@@ -1391,6 +1394,15 @@ internal fun ProgrammeProgressRow(programme: EpgProgramEntity, now: Long) {
             maxLines = 1,
         )
         Spacer(modifier = Modifier.width(10.dp))
+        if (!airing) {
+            Text(
+                if (now >= programme.endTime) "Ended" else "Starts in ${durationLabel(programme.startTime - now)}",
+                style = RedSurfType.rowSecondary,
+                color = TextSecondary,
+                maxLines = 1,
+            )
+            return@Row
+        }
         Box(
             modifier = Modifier
                 .width(70.dp)
@@ -1407,6 +1419,18 @@ internal fun ProgrammeProgressRow(programme: EpgProgramEntity, now: Long) {
         }
         Spacer(modifier = Modifier.width(10.dp))
         Text("$minRemaining min remaining", style = RedSurfType.rowSecondary, color = TextSecondary, maxLines = 1)
+    }
+}
+
+/** "45 min", "2 h", "1 h 20 min" - rounded up to the minute so a programme never "starts in 0 min". */
+internal fun durationLabel(ms: Long): String {
+    val minutes = ((ms + 59_999L) / 60_000L).coerceAtLeast(1L)
+    val h = minutes / 60
+    val m = minutes % 60
+    return when {
+        h == 0L -> "$m min"
+        m == 0L -> "$h h"
+        else -> "$h h $m min"
     }
 }
 
