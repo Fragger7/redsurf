@@ -68,7 +68,23 @@ per-step account in `docs/plans/SPRINT_LOG.md`'s 2026-10-26 entry):
   the CI APK with uninstall/reinstall or bump the run count. **Test state left on the TV:** parental
   PIN 1234, and "US| NFHS PPV · Faraz Strong" hidden (undo in Settings → Parental controls).
 
-**Next:** the user's feel-check of this run, then Cloud Sync's interview (item 7). Still grey in
+**Next (user, 2026-10-26 evening - this supersedes the 7-step order's remaining items):**
+1. **Next unattended window, on the user's signal only (they're using the TV):** first fix OTA - offset
+   CI's versionCode so it exceeds the installed 204 (e.g. run number + a fixed base), cut a release,
+   install it; then the device-test sprint for every VERIFY-PENDING item above.
+2. **Performance Max sprint** - squeeze every drop; rewrites are on the table if the gain is big.
+   Research brief: `docs/plans/PERFORMANCE_MAX.md`. Includes making the preview ↔ fullscreen
+   shrink/expand **smooth like TiviMate** (user: faster now, "more useable", but abrupt).
+3. **Search sprint** - soon.
+4. **Sports Hub** - a new screen/feature; **starts with an interview** of the user, then design + build.
+5. **Multi-View** - probably after Live TV, Search and Sports Hub.
+6. **VOD (Movies/Series)** - not before Search and Sports Hub are done.
+7. **Cloud Sync** - interview (D1-D4) still owed.
+- **Recents (TiviMate parity, user 2026-10-26):** a "Clear" button on the recent-channels strip, and
+  long-press OK on a recent channel → "Remove" to drop one entry.
+- **Deferred:** the Full visual tier / Shield builds (user, 2026-10-26).
+- **Process (user, 2026-10-26):** mass-build several sprints, then one extensive device-testing
+  sprint - don't ADB-test every small change. Still grey in
 Settings, by choice: Language (English only), Accent (themes sprint), Backup & restore (Cloud
 Sync D1). "Show full category name on hold" was retired (marquee covers it; hold-OK is Hide).
 

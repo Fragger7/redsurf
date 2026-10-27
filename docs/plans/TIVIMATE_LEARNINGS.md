@@ -129,3 +129,9 @@ tabular figures at all - keep it off numbers.)
   "Catch-up"). RedSurf keeps Back fixed (Back-peel + long-press Teleport/jump are its own model)
   and offers the remap only for Long-press OK, with TiviMate's three most useful actions. A full
   remap table can come later if asked for.
+
+## Sports Hub (2026-10-26) - TiviMate has no equivalent
+
+Researched for `SPORTS_HUB.md`: TiviMate (like IPTV Smarters and OTT Navigator) has no sports
+guide or game-to-channel finder - only its EPG grid. Nothing to copy; RedSurf leads here. Closest
+prior art is Teamarr (AGPL - ideas only, no code) and Apple TV's "My Sports" for the 10-foot UI.
