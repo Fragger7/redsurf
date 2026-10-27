@@ -310,6 +310,7 @@ fun EpgGridColumn(
                 timelineContentWidth = timelineContentWidth,
                 sharedScroll = sharedScroll,
                 showSupplementKey = hasSupplemented,
+                textMeasurer = textMeasurer,
             )
             if (!hasRows) {
                 Text(
@@ -445,6 +446,7 @@ private fun GridTimeHeader(
     timelineContentWidth: Dp,
     sharedScroll: ScrollState,
     showSupplementKey: Boolean,
+    textMeasurer: TextMeasurer,
 ) {
     val density = LocalDensity.current
     val hairlinePx = with(density) { RedSurfDensity.Hairline.toPx() }
@@ -490,34 +492,45 @@ private fun GridTimeHeader(
                 )
             }
         }
+        // Painted, not composed (Perf Max step 2): one spacer the scroll re-places, its labels
+        // measured once per window and drawn only where they're in view - was ~24 Texts.
+        val columns = WINDOW_MINUTES / 30
+        val hourStyle = RedSurfType.gridHeaderHour.copy(color = HeaderHour)
+        val halfStyle = RedSurfType.gridHeaderHalf.copy(color = HeaderHalf)
+        val labels = remember(windowStart, textMeasurer, halfHourPx, hourStyle, halfStyle) {
+            val labelWidth = with(density) { (halfHourPx - 4.dp.toPx()).toInt().coerceAtLeast(0) }
+            List(columns) { i ->
+                val t = windowStart + i * HALF_HOUR_MS
+                val onHour = isOnTheHour(t)
+                textMeasurer.measure(
+                    if (onHour) hourFormat.format(Date(t)) else halfHourFormat.format(Date(t)),
+                    style = if (onHour) hourStyle else halfStyle,
+                    overflow = TextOverflow.Clip,
+                    maxLines = 1,
+                    constraints = Constraints(maxWidth = labelWidth),
+                )
+            }
+        }
+        val labelStartPx = with(density) { 4.dp.toPx() }
+        val labelBottomPx = with(density) { 5.dp.toPx() }
         Box(modifier = Modifier.weight(1f).fillMaxHeight().horizontalScroll(sharedScroll)) {
-            val columns = WINDOW_MINUTES / 30
-            Row(
+            Spacer(
                 modifier = Modifier
                     .width(timelineContentWidth)
                     .fillMaxHeight()
                     .drawBehind {
+                        val left = sharedScroll.value.toFloat()
+                        val right = left + sharedScroll.viewportSize
                         for (i in 0..columns) {
                             val x = i * halfHourPx
+                            if (x + halfHourPx < left || x > right) continue
                             val onHour = isOnTheHour(windowStart + i * HALF_HOUR_MS)
                             drawLine(if (onHour) TickHour else TickHalf, Offset(x, size.height - tickPx), Offset(x, size.height), hairlinePx)
+                            val label = labels.getOrNull(i) ?: continue
+                            drawText(label, topLeft = Offset(x + labelStartPx, size.height - labelBottomPx - label.size.height))
                         }
                     },
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                repeat(columns) { i ->
-                    val t = windowStart + i * HALF_HOUR_MS
-                    val onHour = isOnTheHour(t)
-                    Text(
-                        if (onHour) hourFormat.format(Date(t)) else halfHourFormat.format(Date(t)),
-                        style = if (onHour) RedSurfType.gridHeaderHour else RedSurfType.gridHeaderHalf,
-                        color = if (onHour) HeaderHour else HeaderHalf,
-                        maxLines = 1,
-                        overflow = TextOverflow.Clip,
-                        modifier = Modifier.width(pxPerMinute * 30).padding(start = 4.dp, bottom = 5.dp),
-                    )
-                }
-            }
+            )
         }
     }
 }
