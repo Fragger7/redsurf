@@ -1,0 +1,15 @@
+#!/bin/sh
+# RedSurf guard: never commit signing material or secrets (the repo is public).
+# Applies to every tool that commits here - Claude, Sonnet subagents, Antigravity/Gemini, a human.
+# Enabled per clone with: git config core.hooksPath .githooks
+
+blocked=$(git diff --cached --name-only --diff-filter=ACMR | grep -E \
+  '(\.jks|\.keystore|\.p12|\.pem|\.dmg|signing\.properties|local\.properties|(^|/)\.env(\.[^/]*)?)$' \
+  | grep -v -E '(^|/)\.env\.example$')
+
+if [ -n "$blocked" ]; then
+  echo "pre-commit: BLOCKED - signing material or secrets staged:" >&2
+  echo "$blocked" | sed 's/^/  /' >&2
+  echo "Unstage them (git restore --staged <file>). Never commit these; the repo is public." >&2
+  exit 1
+fi

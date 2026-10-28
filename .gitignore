@@ -11,6 +11,12 @@ coverage/
 *.keystore
 signing.properties
 local.properties
+*.dmg
+*.p12
+*.pem
+
+# marks a builder agent's worktree (see .githooks/pre-push)
+.builder-worktree
 
 # Android build output
 build/

@@ -1,0 +1,20 @@
+#!/bin/sh
+# RedSurf guard: builder agents outside Claude Code (Antigravity/Gemini) work on agy/* branches in
+# their own worktree and never push main - a push to main cuts a signed release that the TV installs.
+# A worktree is marked as a builder's by a .builder-worktree file at its root (gitignored).
+# Claude Code sessions in the main checkout keep the user's standing permission to push main.
+
+root=$(git rev-parse --show-toplevel)
+[ -f "$root/.builder-worktree" ] || exit 0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/agy/*) ;;
+    *)
+      echo "pre-push: BLOCKED - this builder worktree may only push agy/* branches (tried $remote_ref)." >&2
+      echo "Push your branch and leave a hand-off note; the lead reviews and merges." >&2
+      exit 1
+      ;;
+  esac
+done
+exit 0

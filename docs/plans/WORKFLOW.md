@@ -206,3 +206,21 @@ change nothing shippable — docs, comments, this file — put `[skip ci]` in th
 GitHub will skip the run entirely.
 
 Reserve real releases for changes that actually alter the APK.
+
+## Lead and builders (user decision, 2026-10-28)
+
+To stretch the usage allowance, Opus is the **lead** (plans, writes briefs, reviews) and does as
+little hands-on building as possible. Builders execute:
+
+- **Sonnet subagents** - summoned by the lead only for token-heavy building, one brief per call,
+  written from `BUILDER_BRIEF_TEMPLATE.md`. Work on `main` in the normal checkout.
+- **Gemini Flash in Antigravity** - a new hire on a trust ladder (`GEMINI.md`, once written).
+  Works only in its own worktree on `agy/*` branches; never pushes `main`.
+
+Rules for both:
+1. A builder executes a brief; a gap in the brief is a **stop and report**, never a guess.
+2. The lead reviews every builder diff (about daily) before it counts as done or reaches `main`.
+   "Builds clean / tests pass / verified on device" in a builder report are re-checked, not trusted.
+3. Guardrails live outside the model where possible: `.githooks/` (enable once per clone with
+   `git config core.hooksPath .githooks`) blocks committing signing material/secrets for every
+   tool, and blocks pushes other than `agy/*` from a worktree marked with `.builder-worktree`.
