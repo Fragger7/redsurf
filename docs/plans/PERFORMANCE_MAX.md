@@ -199,6 +199,12 @@ Order matters: measure, then the cheap high-confidence wins, then structural wor
 a11y on; p90 down to ~53-97ms). Heavy frame is now `EpgGridColumn:measure` ~29ms (recompose 13.8,
 applyChanges 7.5). The bench's 0.25s gap commits every press (worst case); a held key commits once.
 Next: step 4. Details: `SPRINT_LOG.md` 2026-10-27.
+**Step 4 built 2026-10-28 (builds clean, 57/57 tests, not measured on device):** one app
+`ImageLoader` (`RedSurfApp`: software bitmaps, 8MB byte-sized memory cache, 32MB disk cache);
+`ChannelLogos` reads Coil's memory cache by URL key instead of its own 400-entry `LruCache`; the
+now-line wake gradient is built once; guide rows cache their number/name and per-slot title/times
+layouts. Semantics were already one node per row (guide, categories). Acceptance (a11y-on penalty
+<=2 points, no GC slice in a key frame) still needs the 20-press gfxinfo + Perfetto run.
 
 **Measurement protocol** (from the salvage's lessons, all of them learned the hard way):
 - Always `adb shell cmd package compile -m speed-profile -f com.redsurf.tv` (or `compile_app` in

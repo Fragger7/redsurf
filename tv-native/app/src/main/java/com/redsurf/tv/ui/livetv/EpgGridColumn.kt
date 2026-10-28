@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -251,6 +252,12 @@ fun EpgGridColumn(
         val nowCapPx = with(density) { 4.5.dp.toPx() }
         val nowCapStroke = remember(density) { Stroke(width = with(density) { 2.dp.toPx() }, cap = StrokeCap.Round) }
         val wakePx = with(density) { 28.dp.toPx() }
+        // Built once, in the wake's own space (0..wakePx) and translated to the line at draw time -
+        // a new gradient per frame was a shader allocation on every scroll step (PERFORMANCE_MAX
+        // item 9).
+        val wakeBrush = remember(wakePx) {
+            Brush.horizontalGradient(0f to NowWakeStart, 1f to NowWakeEnd, startX = 0f, endX = wakePx)
+        }
         val hasRows = channels.isNotEmpty()
         val nowOffsetPx = ((floorToHalfHour(now) - windowStart) / MINUTE_MS) * pxPerMinutePx
         // Found live 2026-09-30: a single scrollTo here could run before the rows had measured,
@@ -277,16 +284,13 @@ fun EpgGridColumn(
                     val x = labelWidthPx + minutesIn * pxPerMinutePx - sharedScroll.value
                     if (x < labelWidthPx || x > size.width) return@drawWithContent
                     clipRect(left = labelWidthPx, top = 0f, right = size.width, bottom = size.height) {
-                        drawRect(
-                            brush = Brush.horizontalGradient(
-                                0f to NowWakeStart,
-                                1f to NowWakeEnd,
-                                startX = x - wakePx,
-                                endX = x,
-                            ),
-                            topLeft = Offset(x - wakePx, headerHeightPx),
-                            size = Size(wakePx, size.height - headerHeightPx),
-                        )
+                        translate(left = x - wakePx) {
+                            drawRect(
+                                brush = wakeBrush,
+                                topLeft = Offset(0f, headerHeightPx),
+                                size = Size(wakePx, size.height - headerHeightPx),
+                            )
+                        }
                         drawLine(Accent, Offset(x, headerHeightPx), Offset(x, size.height), strokeWidth = nowStrokePx)
                         // Crest's crest cap: the mark's crescent, open to the upper right like the
                         // wave (RESEARCH.md "A. Crest" - one of its two ornaments).
@@ -621,8 +625,10 @@ private fun EpgChannelRow(
     val labelWidthPx = with(density) { RedSurfDensity.GridLabelWidth.toPx() }
     val context = LocalContext.current
     val icon = channel.streamIcon?.takeIf { it.isNotBlank() }
-    var logo by remember(icon) { mutableStateOf(icon?.let { ChannelLogos.peek(it) }) }
+    var logo by remember(icon) { mutableStateOf(icon?.let { ChannelLogos.peek(context, it) }) }
     var logoFailed by remember(icon) { mutableStateOf(icon == null) }
+    val labelCache = remember(channel.num, displayName, metrics) { LabelLayouts() }
+    val slotLayouts = remember(slots, metrics) { SlotLayouts(slots.size) }
     if (icon != null && logo == null && !logoFailed) {
         LaunchedEffect(icon) {
             val loaded = ChannelLogos.load(context, icon, (metrics.logo * 2).toInt())
@@ -658,6 +664,8 @@ private fun EpgChannelRow(
                         expanded = expanded,
                         stickyShift = (-left).coerceIn(0f, (width - metrics.minText).coerceAtLeast(0f)),
                         textMeasurer = textMeasurer,
+                        layouts = slotLayouts,
+                        index = index,
                         m = metrics,
                     )
                 }
@@ -795,7 +803,7 @@ private fun EpgChannelRow(
                     // Crest: the label column is one tone (Panel) on idle rows; the focused row's
                     // band runs straight through it.
                     if (!rowHasFocus) drawRect(SurfacePanel)
-                    drawChannelLabel(channel, displayName, rowHasFocus && !expanded, logo, logoFailed, textMeasurer, metrics, expanded, isPlaying)
+                    drawChannelLabel(channel, displayName, rowHasFocus && !expanded, logo, logoFailed, textMeasurer, labelCache, metrics, expanded, isPlaying)
                 }
                 inset(left = labelW, top = 0f, right = 0f, bottom = gutterPx) {
                     clipRect { drawTimeline() }
@@ -837,6 +845,7 @@ private fun DrawScope.drawChannelLabel(
     logo: ImageBitmap?,
     logoFailed: Boolean,
     textMeasurer: TextMeasurer,
+    cache: LabelLayouts,
     m: SlotMetrics,
     expanded: Boolean,
     isPlaying: Boolean,
@@ -844,7 +853,8 @@ private fun DrawScope.drawChannelLabel(
     val h = size.height
     val glyphsWidth = m.glyphsWidth(channel, isPlaying)
     // Number, right-aligned in its 26dp.
-    val number = textMeasurer.measure(channel.num.toString(), style = m.metaStyle, maxLines = 1)
+    val number = cache.number
+        ?: textMeasurer.measure(channel.num.toString(), style = m.metaStyle, maxLines = 1).also { cache.number = it }
     drawText(number, color = ChannelNumber, topLeft = Offset(m.labelPad + m.numberWidth - number.size.width, (h - number.size.height) / 2f))
     // Logo chip.
     val chipLeft = m.labelPad + m.numberWidth + m.numberGap
@@ -869,13 +879,18 @@ private fun DrawScope.drawChannelLabel(
     val nameLeft = chipLeft + m.logo + m.logoGap
     val nameWidth = (size.width - nameLeft - m.labelPad - glyphsWidth).toInt()
     if (!marquee && nameWidth > 0) {
-        val name = textMeasurer.measure(
-            displayName,
-            style = m.channelStyle,
-            overflow = TextOverflow.Ellipsis,
-            maxLines = if (expanded) 2 else 1,
-            constraints = Constraints(maxWidth = nameWidth),
-        )
+        val name = cache.name?.takeIf { cache.nameWidth == nameWidth && cache.nameExpanded == expanded }
+            ?: textMeasurer.measure(
+                displayName,
+                style = m.channelStyle,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = if (expanded) 2 else 1,
+                constraints = Constraints(maxWidth = nameWidth),
+            ).also {
+                cache.name = it
+                cache.nameWidth = nameWidth
+                cache.nameExpanded = expanded
+            }
         drawText(name, color = ChannelName, topLeft = Offset(nameLeft, (h - name.size.height) / 2f))
     }
     // TiviMate's own order (EPG_WRAPUP.md 1.6): name, then the blue ▶ when this channel is
@@ -890,6 +905,26 @@ private fun DrawScope.drawChannelLabel(
         x += m.glyphGap
         translate(x, (h - m.catchupGlyph) / 2f) { drawCatchupGlyph(m.catchupGlyph) }
     }
+}
+
+/** A row's own label layouts (PERFORMANCE_MAX item 9): the row's layer re-records on every
+ * scroll step and focus change, and a [TextMeasurer] cache hit still allocates its lookup key -
+ * the number and name only change with the channel, the width or the row height. */
+/** Per-slot title and times layouts, same reason as [LabelLayouts]; the times string was also two
+ * date formats and a concatenation per visible cell per redraw. Keyed by width, so the sticky
+ * cell (whose text width shrinks as it scrolls) re-measures and the rest don't. */
+private class SlotLayouts(n: Int) {
+    val titles = arrayOfNulls<TextLayoutResult>(n)
+    val titleWidth = IntArray(n) { -1 }
+    val times = arrayOfNulls<TextLayoutResult>(n)
+    val timesWidth = IntArray(n) { -1 }
+}
+
+private class LabelLayouts {
+    var number: TextLayoutResult? = null
+    var name: TextLayoutResult? = null
+    var nameWidth = -1
+    var nameExpanded = false
 }
 
 /** Pixel sizes and text styles for [drawSlot], resolved once (styles are read in composition). */
@@ -949,6 +984,8 @@ private fun DrawScope.drawSlot(
     expanded: Boolean,
     stickyShift: Float,
     textMeasurer: TextMeasurer,
+    layouts: SlotLayouts,
+    index: Int,
     m: SlotMetrics,
 ) {
     val h = size.height
@@ -1000,22 +1037,30 @@ private fun DrawScope.drawSlot(
     val constraints = Constraints(maxWidth = maxWidth)
     when (slot) {
         is AiredSlot -> {
-            val title = textMeasurer.measure(
-                slot.programme.title.ifBlank { "Untitled" },
-                style = m.cellStyle,
-                overflow = TextOverflow.Ellipsis,
-                maxLines = 1,
-                constraints = constraints,
-            )
-            // Double-height row: the second line carries the times (TiviMate).
-            val times = if (expanded) {
-                textMeasurer.measure(
-                    "${cellTimeFormat.format(Date(slot.start))} – ${cellTimeFormat.format(Date(slot.end))}",
-                    style = m.metaStyle,
-                    overflow = TextOverflow.Clip,
+            val title = layouts.titles[index]?.takeIf { layouts.titleWidth[index] == maxWidth }
+                ?: textMeasurer.measure(
+                    slot.programme.title.ifBlank { "Untitled" },
+                    style = m.cellStyle,
+                    overflow = TextOverflow.Ellipsis,
                     maxLines = 1,
                     constraints = constraints,
-                )
+                ).also {
+                    layouts.titles[index] = it
+                    layouts.titleWidth[index] = maxWidth
+                }
+            // Double-height row: the second line carries the times (TiviMate).
+            val times = if (expanded) {
+                layouts.times[index]?.takeIf { layouts.timesWidth[index] == maxWidth }
+                    ?: textMeasurer.measure(
+                        "${cellTimeFormat.format(Date(slot.start))} – ${cellTimeFormat.format(Date(slot.end))}",
+                        style = m.metaStyle,
+                        overflow = TextOverflow.Clip,
+                        maxLines = 1,
+                        constraints = constraints,
+                    ).also {
+                        layouts.times[index] = it
+                        layouts.timesWidth[index] = maxWidth
+                    }
             } else null
             val top = (h - title.size.height - (times?.size?.height ?: 0)) / 2f
             val titleColor = when {
