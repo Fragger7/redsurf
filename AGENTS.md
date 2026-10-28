@@ -38,7 +38,7 @@ were false. It is kept for provenance only.
   guide 13-19%, p90 30-34. `synchronous=1` confirmed in logcat. Perfetto (GC in key frames) not run.
 - **Next:** Perf Max step 4 Perfetto check (GC slice per key frame), step 7's sync-time category query, then 5 (scale-based shrink/expand, capture TiviMate's SurfaceFlinger latency first), 6
   (macrobenchmark + profiles, `.dm` OTA at `UpdateManager.kt:113`), 7 (sync I/O), 8 (gate).
-  Then Search (draft brief `docs/plans/SEARCH.md`, decisions S1-S4 for the user), then Sports Hub S0 (matcher tiers, ESPN fetch, Philly aliases from real names).
+  Then Search (draft brief `docs/plans/SEARCH.md`, decisions S1-S4 for the user), then Sports Hub S0 (matcher tiers - ranker built 2026-10-28, ESPN fetch, Philly aliases from real names).
 
 ## Previous - unattended run 2026-10-26 (01:58-13:10 CDT) ended at its stop point
 
