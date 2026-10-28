@@ -161,6 +161,10 @@ class ChannelRepository(
      * untouched). Also drops the cold-launch resume target, which reads the newest row. */
     suspend fun clearRecentChannels() = recentChannelDao.deleteAll()
 
+    /** Drops one channel from the recency index (long-press OK on a player recent tile). */
+    suspend fun removeRecentChannel(playlistId: String, streamId: String) =
+        recentChannelDao.delete(playlistId, streamId)
+
     /** RIGHT's last-channel zap (decision 14) - the second-newest row, since the newest one is
      * whatever's actually playing right now. */
     suspend fun secondMostRecentChannel(): ChannelEntity? = recentChannelDao.getSecondMostRecentChannel()

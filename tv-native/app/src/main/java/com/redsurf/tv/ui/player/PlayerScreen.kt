@@ -759,6 +759,17 @@ fun PlayerScreen(
                                 },
                                 // Same clear as the History picker's; closing the controls hands
                                 // focus back to the root, since the tiles that held it are gone.
+                                // Long-press OK on a recent tile drops just that entry. The tile
+                                // that held focus is gone, so focus goes back to the row's own
+                                // initial target once the shorter list has composed.
+                                onRemoveRecent = { channel ->
+                                    scope.launch {
+                                        repository.removeRecentChannel(channel.playlistId, channel.streamId)
+                                        favoriteToast = "Removed from recents"
+                                        delay(100)
+                                        runCatching { tilesFloorFocus.requestFocus() }
+                                    }
+                                },
                                 onClearRecents = {
                                     scope.launch { repository.clearRecentChannels() }
                                     overlay = PlayerOverlay.None
@@ -989,7 +1000,8 @@ private fun ContextMenuPanel(
  * The tile row (decision 8, Tiles floor): TV guide, History, then up to 8 recent channels. OK on
  * a channel tile tunes and shows the zap banner (stays fullscreen); OK on TV guide exits
  * fullscreen to the browse screen (the merged guide is Phase 3); OK on History opens the picker.
- * A trailing Clear tile (TiviMate parity) empties the recents, shown only when there are some.
+ * A trailing Clear tile (TiviMate parity) empties the recents, shown only when there are some;
+ * long-press OK on a channel tile removes just that one.
  */
 @Composable
 private fun TileRow(
@@ -998,6 +1010,7 @@ private fun TileRow(
     onOpenGuide: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenChannel: (ChannelEntity) -> Unit,
+    onRemoveRecent: (ChannelEntity) -> Unit,
     onClearRecents: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1020,6 +1033,7 @@ private fun TileRow(
             ChannelTile(
                 channel = channel,
                 onClick = { onOpenChannel(channel) },
+                onLongClick = { onRemoveRecent(channel) },
                 modifier = if (!focusGuide && index == 0) Modifier.focusRequester(initialFocus) else Modifier,
             )
         }
@@ -1115,9 +1129,15 @@ private fun Tile(icon: ImageVector, label: String, onClick: () -> Unit, modifier
 }
 
 @Composable
-private fun ChannelTile(channel: ChannelEntity, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ChannelTile(
+    channel: ChannelEntity,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
     TvSurface(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = modifier.size(TileWidth, TileHeight),
         shape = RedSurfFocus.shape(10.dp),
         colors = RedSurfFocus.rowColors(resting = SurfaceRaised.copy(alpha = 0.85f)),

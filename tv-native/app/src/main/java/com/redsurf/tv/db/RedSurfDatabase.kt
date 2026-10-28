@@ -278,6 +278,10 @@ interface RecentChannelDao {
     /** Testing-enablement, matching every other table's own reset path. */
     @Query("DELETE FROM recent_channels")
     suspend fun deleteAll()
+
+    /** Long-press OK on a recent tile → drop that one entry (TiviMate parity). */
+    @Query("DELETE FROM recent_channels WHERE playlistId = :playlistId AND streamId = :streamId")
+    suspend fun delete(playlistId: String, streamId: String)
 }
 
 /**
