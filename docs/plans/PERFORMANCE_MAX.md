@@ -211,6 +211,10 @@ WAL pinned (and `ro.config.low_ram` is unset on this TV, so it was never at risk
 transactions. New: `PRAGMA synchronous=NORMAL` on open (`RedSurfDatabase`), so a commit no longer
 fsyncs; logcat `RedSurfDb open synchronous=1` confirms it. Acceptance: category query <=20ms during
 a forced EPG sync (compare `XmlTvParser flush ... tookMs` with the 1.4-6s measured before).
+**Item 10 (2026-10-28):** `core-ktx`/`lifecycle-runtime-ktx` declarations raised to what the
+Compose BOM already resolved (1.16.0/2.9.4) - no change to the APK. `activity-compose` is really
+1.8.2; bumping it (1.10.x) changes the library under every `BackHandler`, so it waits for a
+device-test sprint with a full Back/long-press-Back sweep.
 
 **Measurement protocol** (from the salvage's lessons, all of them learned the hard way):
 - Always `adb shell cmd package compile -m speed-profile -f com.redsurf.tv` (or `compile_app` in

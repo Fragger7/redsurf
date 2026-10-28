@@ -89,8 +89,8 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     testImplementation("org.json:json:20260814")
 
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.core:core-ktx:1.16.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
     implementation("androidx.activity:activity-compose:1.8.2")
     // Compose 1.11 (performance salvage, 2026-10-20; BOM 2026.05.01). The tv-foundation alpha
     // lists were replaced by foundation's own LazyColumn/LazyRow (TvLazy* deprecated upstream).
