@@ -117,3 +117,42 @@ object NationalNetworks {
      */
     fun canonicalFor(name: String): String? = canonicalByAlias[ChannelNameNormalizer.normalize(name).key]
 }
+
+/** Whether a market channel is a regional sports network or a local broadcast affiliate. */
+enum class MarketKind { RSN, AFFILIATE }
+
+/** A home-market channel: its canonical key, what kind it is, and the national network it carries (affiliates only). */
+data class MarketChannel(val canonical: String, val kind: MarketKind, val network: String? = null)
+
+/**
+ * Home-market RSNs and affiliates (`SPORTS_HUB.md` §3a). Seeded with only the Philadelphia
+ * spellings the brief itself records; check each against the user's real channel names before
+ * adding more (same rule as [NationalNetworks]).
+ */
+object MarketNetworks {
+
+    private val markets: Map<String, Map<MarketChannel, List<String>>> = mapOf(
+        "philadelphia" to mapOf(
+            MarketChannel("nbc sports philadelphia", MarketKind.RSN) to
+                listOf("nbc sports philadelphia", "nbc sports phil", "nbcsp"),
+            MarketChannel("wtxf", MarketKind.AFFILIATE, "fox") to listOf("fox 29", "wtxf"),
+            MarketChannel("kyw", MarketKind.AFFILIATE, "cbs") to listOf("cbs 3", "kyw"),
+            MarketChannel("wcau", MarketKind.AFFILIATE, "nbc") to listOf("nbc 10", "wcau"),
+            MarketChannel("wpvi", MarketKind.AFFILIATE, "abc") to listOf("6abc", "wpvi"),
+        ),
+    )
+
+    private val byAlias: Map<String, Map<String, MarketChannel>> = markets.mapValues { (_, channels) ->
+        buildMap {
+            for ((channel, names) in channels) for (name in names) put(ChannelNameNormalizer.normalize(name).key, channel)
+        }
+    }
+
+    /** The [market] channel a provider-or-ESPN name refers to, or null. */
+    fun channelFor(name: String, market: String): MarketChannel? =
+        byAlias[market]?.get(ChannelNameNormalizer.normalize(name).key)
+
+    /** The [market]'s affiliate for a national broadcast network ("fox" -> wtxf in Philadelphia), or null. */
+    fun affiliateFor(network: String, market: String): MarketChannel? =
+        markets[market]?.keys?.firstOrNull { it.kind == MarketKind.AFFILIATE && it.network == network }
+}
