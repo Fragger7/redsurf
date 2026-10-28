@@ -62,3 +62,36 @@ class SourceRankerTest {
         assertEquals(SourceRanker.MAX_SOURCES, SourceRanker.rank((1..30).map { c(it, MatchTier.MAYBE) }).sources.size)
     }
 }
+
+class SourceFilterTest {
+
+    private fun n(key: String, q: Quality? = null, vararg f: ChannelFlag) = ChannelName(key, "US", q, f.toSet())
+    private fun c(id: Int, pl: String = "a", tier: MatchTier = MatchTier.NATIONAL) = SourceCandidate(pl, id, tier)
+
+    @Test
+    fun dropsTestBackupAndTwentyFourSeven() {
+        val out = SourceFilter.apply(listOf(
+            c(1) to n("espn"),
+            c(2) to n("espn2", null, ChannelFlag.TEST),
+            c(3) to n("fs1", null, ChannelFlag.BACKUP),
+            c(4) to n("nfl", null, ChannelFlag.TWENTY_FOUR_SEVEN),
+        ))
+        assertEquals(listOf(1), out.map { it.streamId })
+    }
+
+    @Test
+    fun mergesQualityVariantsToBestTier() {
+        val out = SourceFilter.apply(listOf(c(1) to n("espn", Quality.HD), c(2) to n("espn", Quality.FHD), c(3) to n("espn")))
+        assertEquals(listOf(2), out.map { it.streamId })
+    }
+
+    @Test
+    fun keepsVariantsAcrossPlaylistsAndPrefersStrongerEvidence() {
+        val out = SourceFilter.apply(listOf(
+            c(1, "a") to n("espn", Quality.UHD),
+            c(2, "a", MatchTier.EPG_TITLE) to n("espn", Quality.SD),
+            c(3, "b") to n("espn", Quality.HD),
+        ))
+        assertEquals(setOf(2, 3), out.map { it.streamId }.toSet())
+    }
+}

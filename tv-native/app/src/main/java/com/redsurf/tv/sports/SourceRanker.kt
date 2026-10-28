@@ -74,3 +74,24 @@ object SourceRanker {
         return sorted.count { it.tier == sorted[0].tier } == 1
     }
 }
+
+/**
+ * Pre-ranking filter (`SPORTS_HUB.md` §3): drops TEST, BACKUP and 24/7 channels, and merges
+ * quality variants of one network in one playlist (`US| ESPN HD` / `US| ESPN FHD`) into its best
+ * tier, so the sources sheet lists networks, not every resolution of the same feed.
+ */
+object SourceFilter {
+
+    private val dropped = setOf(ChannelFlag.TEST, ChannelFlag.BACKUP, ChannelFlag.TWENTY_FOUR_SEVEN)
+
+    fun apply(candidates: List<Pair<SourceCandidate, ChannelName>>): List<SourceCandidate> =
+        candidates
+            .filter { (_, name) -> name.flags.none { it in dropped } }
+            .groupBy { (c, name) -> Triple(c.playlistId, name.key, name.country) }
+            .map { (_, variants) ->
+                variants.maxWith(
+                    compareBy<Pair<SourceCandidate, ChannelName>> { -it.first.tier.ordinal }
+                        .thenBy { it.second.quality?.ordinal ?: -1 },
+                ).first
+            }
+}
