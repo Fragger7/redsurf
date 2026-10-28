@@ -226,8 +226,10 @@ interface ChannelDao {
     @Query("DELETE FROM channels")
     suspend fun deleteAllChannels()
     
-    @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' AND isHidden = 0")
-    suspend fun searchChannels(query: String): List<ChannelEntity>
+    /** Bounded (HARDWARE.md memory discipline): a 2-letter query on a ~28K list matched thousands
+     * of rows into memory. The real Search index is SEARCH.md's job; this only caps the stub. */
+    @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' AND isHidden = 0 LIMIT :limit")
+    suspend fun searchChannels(query: String, limit: Int = 50): List<ChannelEntity>
 }
 
 /**

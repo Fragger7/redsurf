@@ -1021,3 +1021,4 @@ Commits e1817a9..f11332c. All build clean and unit tests pass; device status per
 - 2026-10-28 00:17 Search draft brief written (docs/plans/SEARCH.md): current searchChannels is unbounded (memory-discipline breach), proposed FTS4 prefix index + LIMIT 50 sections, decisions S1-S4 for the user. Docs only.
 - 2026-10-28 00:19 device test start: CEC off, stayon, sleep -1, screensaver 0 (recorded: sleep 1200000, screensaver 1, hdmi 1).
 - 2026-10-28 00:22 measured CI v0.59.0/2210 (installed by adb install -r): categories 23-31% janky (no clear change vs step 3), guide 13-19% (numbers in PERFORMANCE_MAX.md). TV restored: CEC unset (on), stayon false, sleep 1200000, screensaver 1, left on Home. No test state changed. Stop: no cron, caffeinate killed.
+- 2026-10-28 00:24 searchChannels capped at LIMIT 50 (memory discipline; the stub isn't wired to UI). Builds clean, 57/57. Run stopped; caffeinate killed.
