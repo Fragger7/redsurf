@@ -36,7 +36,7 @@ were false. It is kept for provenance only.
   measured on device** (`PERFORMANCE_MAX.md` status). Run its gfxinfo/Perfetto acceptance first. Step 7's `synchronous=NORMAL` also built, unmeasured.
 - **Next:** Perf Max step 4 measurement, then 5 (scale-based shrink/expand, capture TiviMate's SurfaceFlinger latency first), 6
   (macrobenchmark + profiles, `.dm` OTA at `UpdateManager.kt:113`), 7 (sync I/O), 8 (gate).
-  Then Search, then Sports Hub S0 (matcher tiers, ESPN fetch, Philly aliases from real names).
+  Then Search (draft brief `docs/plans/SEARCH.md`, decisions S1-S4 for the user), then Sports Hub S0 (matcher tiers, ESPN fetch, Philly aliases from real names).
 
 ## Previous - unattended run 2026-10-26 (01:58-13:10 CDT) ended at its stop point
 
