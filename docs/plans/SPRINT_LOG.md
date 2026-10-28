@@ -1026,3 +1026,4 @@ Commits e1817a9..f11332c. All build clean and unit tests pass; device status per
 - 2026-10-28 00:27 `SourceFilter` (drop TEST/BACKUP/24-7, merge quality variants per playlist+network) + 3 tests. Builds clean, 68/68.
 - 2026-10-28 00:28 `MarketNetworks` (Philadelphia RSN + 4 affiliates, only the spellings SPORTS_HUB §3a records; `affiliateFor("fox")` -> wtxf) + 3 tests. Builds clean, 71/71. Real provider names still to check.
 - 2026-10-28 00:32 ESPN date ranges tested live: HTTP 400 for NFL/NBA/MLB/NHL; day and YYYYMM work, month capped at 100 unless limit=500 (SPORTS_HUB.md open questions). Stop at 00:40: caffeinate killed, no cron, TV untouched since the 00:22 restore.
+- 2026-10-28 00:59 `EspnScoreboardUrl` (day / month+limit=500, ranges rejected) + 2 tests. Builds clean, 73/73. Overran the 00:40 stop by ~19 min (slow Gradle run).

@@ -27,3 +27,26 @@ data class Game(
     val state: GameState,
     val networks: List<String>,
 )
+
+/**
+ * ESPN scoreboard URLs. Date ranges (`YYYYMMDD-YYYYMMDD`) return HTTP 400 for every league
+ * (tested 2026-10-28, `SPORTS_HUB.md` open questions), so only a single day or a whole month is
+ * built; the month query needs `limit` or ESPN stops at 100 events.
+ */
+object EspnScoreboardUrl {
+
+    private const val BASE = "https://site.api.espn.com/apis/site/v2/sports"
+    const val MONTH_LIMIT = 500
+
+    /** One day's games, [day] as `yyyyMMdd` in US Eastern (ESPN's own day boundary). */
+    fun forDay(league: League, day: String): String {
+        require(day.length == 8 && day.all { it.isDigit() }) { "day must be yyyyMMdd: $day" }
+        return "$BASE/${league.espnPath}/scoreboard?dates=$day"
+    }
+
+    /** A whole month's games, [month] as `yyyyMM`. */
+    fun forMonth(league: League, month: String): String {
+        require(month.length == 6 && month.all { it.isDigit() }) { "month must be yyyyMM: $month" }
+        return "$BASE/${league.espnPath}/scoreboard?dates=$month&limit=$MONTH_LIMIT"
+    }
+}
