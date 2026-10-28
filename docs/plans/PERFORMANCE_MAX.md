@@ -205,6 +205,12 @@ Next: step 4. Details: `SPRINT_LOG.md` 2026-10-27.
 now-line wake gradient is built once; guide rows cache their number/name and per-slot title/times
 layouts. Semantics were already one node per row (guide, categories). Acceptance (a11y-on penalty
 <=2 points, no GC slice in a key frame) still needs the 20-press gfxinfo + Perfetto run.
+**Step 7 (2026-10-28, builds clean, 57/57, not measured):** already in place before this step -
+WAL pinned (and `ro.config.low_ram` is unset on this TV, so it was never at risk), sync threads at
+`THREAD_PRIORITY_BACKGROUND`, `UserActivity.awaitQuiet()` before each flush, 2,000-row
+transactions. New: `PRAGMA synchronous=NORMAL` on open (`RedSurfDatabase`), so a commit no longer
+fsyncs; logcat `RedSurfDb open synchronous=1` confirms it. Acceptance: category query <=20ms during
+a forced EPG sync (compare `XmlTvParser flush ... tookMs` with the 1.4-6s measured before).
 
 **Measurement protocol** (from the salvage's lessons, all of them learned the hard way):
 - Always `adb shell cmd package compile -m speed-profile -f com.redsurf.tv` (or `compile_app` in

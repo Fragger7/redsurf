@@ -1015,3 +1015,4 @@ Commits e1817a9..f11332c. All build clean and unit tests pass; device status per
 
 - 2026-10-27 unattended start: TV answers (serial adb-0C101HFDD16JPN-7XKm2D). Recorded before changes: sleep_timeout=1200000, screensaver_enabled=1, hdmi_control_enabled=1 (explicitly set, not unset). Build-only to start; TV settings untouched.
 - 2026-10-28 00:05 Perf Max step 4 built (see PERFORMANCE_MAX.md status): app ImageLoader, ChannelLogos on Coil's cache, wake brush once, cached row/slot text layouts. Builds clean, 57/57 tests. Not device-measured. Run hard-stopped at the user's 00:40 window end (weekly usage low); no wake-ups were scheduled.
+- 2026-10-28 00:10 user extended the run to 00:40. Perf Max step 7: WAL synchronous=NORMAL (see PERFORMANCE_MAX.md). Builds clean, 57/57; not device-measured.

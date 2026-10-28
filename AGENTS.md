@@ -33,7 +33,7 @@ were false. It is kept for provenance only.
   v0.58.8-local/1208; a local build must use 2000 + the next run number. Test state reverted (PIN off, nothing
   hidden); Chromecast settings restored.
 - **2026-10-28 (short run to 00:40):** Perf Max step 4 built - builds clean, 57/57 tests, **not
-  measured on device** (`PERFORMANCE_MAX.md` status). Run its gfxinfo/Perfetto acceptance first.
+  measured on device** (`PERFORMANCE_MAX.md` status). Run its gfxinfo/Perfetto acceptance first. Step 7's `synchronous=NORMAL` also built, unmeasured.
 - **Next:** Perf Max step 4 measurement, then 5 (scale-based shrink/expand, capture TiviMate's SurfaceFlinger latency first), 6
   (macrobenchmark + profiles, `.dm` OTA at `UpdateManager.kt:113`), 7 (sync I/O), 8 (gate).
   Then Search, then Sports Hub S0 (matcher tiers, ESPN fetch, Philly aliases from real names).

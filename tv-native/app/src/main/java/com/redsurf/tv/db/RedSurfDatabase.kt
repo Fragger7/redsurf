@@ -1,6 +1,7 @@
 package com.redsurf.tv.db
 
 import android.content.Context
+import android.util.Log
 import androidx.paging.PagingSource
 import androidx.room.*
 import androidx.room.migration.Migration
@@ -574,6 +575,19 @@ abstract class RedSurfDatabase : RoomDatabase() {
                     // outside, so a future low-RAM device this app targets can't silently regress
                     // to the old behavior.
                     .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
+                    // Perf Max step 7 (2026-10-28): in WAL, NORMAL skips the fsync on every
+                    // commit (it syncs at checkpoints instead) and can't corrupt the database; a
+                    // power cut may drop the last commits, which for this app is an EPG batch or
+                    // a just-toggled favourite. The EPG flushes measured 1.4-6s per 2,000 rows on
+                    // this TV's storage and slowed the guide's reads meanwhile. Set on the primary
+                    // connection, the only one that writes; logged so a sweep can confirm it.
+                    .addCallback(object : RoomDatabase.Callback() {
+                        override fun onOpen(db: SupportSQLiteDatabase) {
+                            db.query("PRAGMA synchronous=NORMAL").close()
+                            val mode = db.query("PRAGMA synchronous").use { if (it.moveToFirst()) it.getInt(0) else -1 }
+                            Log.d("RedSurfDb", "open synchronous=$mode (1=NORMAL)")
+                        }
+                    })
                     .setQueryExecutor(queryExecutor)
                     .setTransactionExecutor(transactionExecutor)
                     .build()
