@@ -1025,3 +1025,4 @@ Commits e1817a9..f11332c. All build clean and unit tests pass; device status per
 - 2026-10-28 00:26 Sports Hub S0 batch 2: `sports/SourceRanker.kt` (tiers 0-6, tie-breaks, dedupe, cap 20, isConfident) + 8 tests. Builds clean, 65/65. No UI, not wired.
 - 2026-10-28 00:27 `SourceFilter` (drop TEST/BACKUP/24-7, merge quality variants per playlist+network) + 3 tests. Builds clean, 68/68.
 - 2026-10-28 00:28 `MarketNetworks` (Philadelphia RSN + 4 affiliates, only the spellings SPORTS_HUB §3a records; `affiliateFor("fox")` -> wtxf) + 3 tests. Builds clean, 71/71. Real provider names still to check.
+- 2026-10-28 00:32 ESPN date ranges tested live: HTTP 400 for NFL/NBA/MLB/NHL; day and YYYYMM work, month capped at 100 unless limit=500 (SPORTS_HUB.md open questions). Stop at 00:40: caffeinate killed, no cron, TV untouched since the 00:22 restore.

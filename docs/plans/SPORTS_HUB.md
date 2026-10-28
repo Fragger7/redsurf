@@ -219,7 +219,7 @@ Performance gate before each phase: Sports-screen jank no worse than the guide's
 - TivraTV's behaviour, which comes from its own guide, not hands-on use.
 - Samsung TV Plus and Tubi lists.
 - Pluto stream URL construction.
-- ESPN date-range behaviour per league.
+- ESPN date-range behaviour per league - **tested 2026-10-28 00:30 CDT:** `dates=YYYYMMDD-YYYYMMDD` returns **HTTP 400** for NFL, NBA, MLB and NHL (7-day and 2-day ranges alike); single days and `dates=YYYYMM` return 200. The month query is capped at 100 events by default (NBA October: 100; with `&limit=500`: 155). So: fetch per day for the live window, or one month query with `limit=500`. UFC not re-checked.
 - Every number about unofficial-site risk comes from the 2016 study and press coverage, not from testing.
 
 ## 8. Open questions for the next interview
