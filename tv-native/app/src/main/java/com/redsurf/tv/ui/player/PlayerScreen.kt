@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Info
@@ -756,6 +757,12 @@ fun PlayerScreen(
                                     onChannelChanged(channel)
                                     overlay = PlayerOverlay.ZapBanner
                                 },
+                                // Same clear as the History picker's; closing the controls hands
+                                // focus back to the root, since the tiles that held it are gone.
+                                onClearRecents = {
+                                    scope.launch { repository.clearRecentChannels() }
+                                    overlay = PlayerOverlay.None
+                                },
                                 modifier = Modifier.padding(horizontal = 24.dp),
                             )
                             // The five real actions (decision 9) - only ones that work, no
@@ -982,6 +989,7 @@ private fun ContextMenuPanel(
  * The tile row (decision 8, Tiles floor): TV guide, History, then up to 8 recent channels. OK on
  * a channel tile tunes and shows the zap banner (stays fullscreen); OK on TV guide exits
  * fullscreen to the browse screen (the merged guide is Phase 3); OK on History opens the picker.
+ * A trailing Clear tile (TiviMate parity) empties the recents, shown only when there are some.
  */
 @Composable
 private fun TileRow(
@@ -990,6 +998,7 @@ private fun TileRow(
     onOpenGuide: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenChannel: (ChannelEntity) -> Unit,
+    onClearRecents: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusGuide = recentChannels.isEmpty()
@@ -1013,6 +1022,9 @@ private fun TileRow(
                 onClick = { onOpenChannel(channel) },
                 modifier = if (!focusGuide && index == 0) Modifier.focusRequester(initialFocus) else Modifier,
             )
+        }
+        if (recentChannels.isNotEmpty()) {
+            Tile(icon = Icons.Filled.Clear, label = "Clear", onClick = onClearRecents)
         }
     }
 }

@@ -108,7 +108,9 @@ per-step account in `docs/plans/SPRINT_LOG.md`'s 2026-10-26 entry):
   app). Route: build FFmpeg from LGPL-only components as a dynamic `.so` with Media3's Apache-2.0
   ffmpeg extension. If ever sold, check Dolby E-AC-3 licensing.
 - **Recents (TiviMate parity, user 2026-10-26):** a "Clear" button on the recent-channels strip, and
-  long-press OK on a recent channel → "Remove" to drop one entry.
+  long-press OK on a recent channel → "Remove" to drop one entry. **Clear tile built 2026-10-28**
+  (player Tiles floor, after the recents; builds clean, 57/57, VERIFY-PENDING). "Remove" still open
+  (needs a per-entry DAO delete).
 - **Deferred:** the Full visual tier / Shield builds (user, 2026-10-26).
 - **Process (user, 2026-10-26):** mass-build several sprints, then one extensive device-testing
   sprint - don't ADB-test every small change. Still grey in
