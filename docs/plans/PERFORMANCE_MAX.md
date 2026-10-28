@@ -230,3 +230,7 @@ device-test sprint with a full Back/long-press-Back sweep.
 
 **Not in scope:** Lite/Full effect tiers, themes, VOD. Devices: the Shield Pro can confirm a
 "Full" tier later; it is not a stand-in for the Chromecast's numbers.
+**Steps 4 + 7 measured 2026-10-28 00:20 (CI v0.59.0/2210, compile_app, a11y on, 0.25s gap x20, 2 runs):**
+categories DOWN 30.8/23.2% p90 101/53, UP 27.1/24.3% p90 61/48 - within step 3's noise band (24-37%),
+**no clear gain**; guide DOWN 13.0/13.3% p90 34/30, UP 19.1/19.3% p90 32/31. Logcat `RedSurfDb open
+synchronous=1`. Not done: Perfetto (GC slice in key frames), the a11y-off comparison, the sync-time query.

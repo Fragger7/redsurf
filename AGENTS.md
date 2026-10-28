@@ -32,9 +32,11 @@ were false. It is kept for provenance only.
 - **TV:** CI base bumped to **2000 + run number** (2026-10-27) so CI releases out-rank the local
   v0.58.8-local/1208; a local build must use 2000 + the next run number. Test state reverted (PIN off, nothing
   hidden); Chromecast settings restored.
-- **2026-10-28 (short run to 00:40):** Perf Max step 4 built - builds clean, 57/57 tests, **not
-  measured on device** (`PERFORMANCE_MAX.md` status). Run its gfxinfo/Perfetto acceptance first. Step 7's `synchronous=NORMAL` also built, unmeasured.
-- **Next:** Perf Max step 4 measurement, then 5 (scale-based shrink/expand, capture TiviMate's SurfaceFlinger latency first), 6
+- **2026-10-28 (short run to 00:40):** Perf Max steps 4 + 7 built; recents Clear/Remove
+  built; Search draft brief. TV now on **CI v0.59.0/2210** (installed by hand, settings restored). Quick gfxinfo
+  on it (a11y on, 2 runs): categories 23-31% janky, p90 48-101 - **no clear change from step 3**;
+  guide 13-19%, p90 30-34. `synchronous=1` confirmed in logcat. Perfetto (GC in key frames) not run.
+- **Next:** Perf Max step 4 Perfetto check (GC slice per key frame), step 7's sync-time category query, then 5 (scale-based shrink/expand, capture TiviMate's SurfaceFlinger latency first), 6
   (macrobenchmark + profiles, `.dm` OTA at `UpdateManager.kt:113`), 7 (sync I/O), 8 (gate).
   Then Search (draft brief `docs/plans/SEARCH.md`, decisions S1-S4 for the user), then Sports Hub S0 (matcher tiers, ESPN fetch, Philly aliases from real names).
 
