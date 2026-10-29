@@ -140,3 +140,8 @@ Rules:
   nothing, didn't retry. Minor: report lines duplicated. To be rerun in the morning test sprint.
 - 007 ESPN fetcher (2026-10-29, L2): blocked - the lead's agy allow-list (made for TV tasks) denied
   `./gradlew`; nothing written, nothing committed. Not Gemini's fault. Reassigned.
+- 006 rerun (03:50): blocked - the lead's task file had a `sleep 8` step and `sleep` isn't on the
+  allow-list. Not Gemini's fault.
+- 008 (006 without sleep, 03:53): blocked after `nav "Live TV"` - agy's headless mode soft-denied
+  a ReadFile; no report, no commit. Not Gemini's fault; the allow-list needs a read rule. TV left
+  on Live TV, watcher ended by the lead. TV tasks parked until the user widens the allow-list.
