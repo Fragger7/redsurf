@@ -154,3 +154,12 @@ providers count it as a connection - not worth it untested).
 
 **Open check (2026-10-27):** RedSurf's hero now says "Ended" / "Starts in N min" for aired and
 upcoming slots (bd0cf65); TiviMate's own wording for these was not checked - compare on the TV.
+
+## Search (2026-10-29) - from 5.3.3's `strings.xml`
+
+Leanback `SearchBar` (`lb_search_bar_hint`, "Speak to search", "Voice search", "Clear query") -
+the system keyboard plus voice, no in-app letter grid. Result sections "Channels", "Programs",
+"Movies", "Shows". "Search history" with "Remove from History", "Clear history?", "No history".
+Settings: "Prefer voice search", "Show search history", "Stay on search screen when switching
+channels". Per-keystroke updating: not visible in strings, check on the TV. Used for
+`SEARCH.md` S1-S4.

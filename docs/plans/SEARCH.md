@@ -38,17 +38,28 @@ are the user's; everything marked *(check TiviMate)* needs the standing-rule loo
 6. **Performance:** results are lean rows (Crest density, one semantics node per row, cached
    text layouts - the step-4 patterns), no animation per keystroke.
 
-## Decisions for the user
+## Decisions (user, 2026-10-29)
 
-- **S1 - input:** the system TV keyboard (Gboard on this TV, with voice) **or** an in-app letter
-  grid (no IME pop-up, works with the D-pad alone, more to build). *(check TiviMate: which one it
-  uses, and whether results update while typing.)*
-- **S2 - scope at launch:** channels only, or channels + EPG programmes (On now / Later today).
-- **S3 - entry points:** the Search pill only, or also a "Search" action in the player's context
-  menu and Live TV (TiviMate lists "Search" among its long-press actions, `TIVIMATE_LEARNINGS.md`
-  line ~128).
-- **S4 - recent searches:** keep the last ~10 queries (Room, per device; Cloud Sync could carry
-  them later) or none.
+TiviMate check first (`TIVIMATE_LEARNINGS.md` "Search"): its search screen is Leanback's
+`SearchBar` (system keyboard + "Speak to search"), results in sections **Channels / Programs**
+(plus Movies / Shows), a **Search history** with "Remove from History" and "Clear history?", and
+settings "Prefer voice search", "Show search history", "Stay on search screen when switching
+channels". Whether it updates results per keystroke isn't visible in the strings - check on the TV.
+
+- **S1 - input: the system TV keyboard, with voice.** Same as TiviMate. A mic action on the
+  search field starts voice input directly.
+- **S2 - scope:** grows over time - **Channels** (grouped by playlist), **Programs**, later
+  **VOD**, later **Sports Hub**. Launch with Channels + Programs. Playlist grouping: a
+  playlist sub-header only when matches come from more than one playlist (one playlist = flat
+  list, no extra D-pad presses). Programs need their own FTS index (`epg_programs` has none) -
+  measure its rebuild cost after an EPG sync before committing to it.
+- **S3 - entry points:** the Search pill; a "Search" row in the Teleport menu; the remote's
+  `KEYCODE_SEARCH` where a remote sends one to apps. The Chromecast remote's Assistant button
+  goes to Google Assistant, not to apps, so it can't be used. Google TV's system-wide search
+  (a searchable content provider) is a separate, later item.
+- **S4 - recent searches: yes**, last ~10 queries in Room, per device. Same pattern as recent
+  channels: a trailing "Clear" tile clears all, long-press OK on one removes it ("Removed from
+  search history" toast, no menu step).
 
 ## Acceptance (Chromecast, a11y on, compiled)
 
