@@ -239,3 +239,15 @@ updater (PackageInstaller session, base.apk + base.dm 484B, one system confirm);
 install `status=speed-profile reason=install-dm`. Fix that made it work (048cbb3): ART on SDK 34 only
 reads profile format 015 from a .dm; `scripts/make-dm.sh` now transcodes the APK's 010 profile with
 profileinstaller's own transcoder (`scripts/dm/ProfileToS.java`). Playlist intact after the update.
+**Step 5 (scale-based shrink/expand, 604df23 + 820f3a0), 2026-10-29:** functionally **verified on device**
+(SurfaceFlinger: the SurfaceView's display frame is the hero rect in preview and the full window in
+fullscreen, 640x360 buffer never resized; Back lands on the same row). Jank, gfxinfo single transitions,
+3 runs: v0.65.4 expand 28.6-60% (p90 46-250), shrink 35.7-40% (p90 53-97); v0.65.5 (ModulateAlpha on
+PlayerScreen's fade - a plain alpha layer cost a 38ms GPU flush on the last expand frame) expand
+6.3-28.6% (p90 38-61), shrink 18.8-26.7% (p90 42-53). **Acceptance not met yet.** Left: the shrink's
+first frame is ~38ms main thread (recompose + PlayerScreen dispose + 9.7ms measure/layout); deferring
+the dispose only moves it past the landing and risks key routing, so not done. **Caveat for every
+overnight number (step 4's GC check is clean: no GC slice in any key frame):** the Chromecast was in an
+HDCP failure loop with the panel in standby, ueventd ate ~1 of 4 cores, and Perfetto shows slow
+RenderThread frames runnable-not-running for 13-34ms. Re-measure steps 3 and 5 with the TV panel on
+before step 8's verdict.
