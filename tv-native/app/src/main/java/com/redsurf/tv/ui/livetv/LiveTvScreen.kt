@@ -557,6 +557,9 @@ fun LiveTvScreen(
     // `targetChannelStreamId` below - falls back to row 0/"now" when null) instead of each effect
     // targeting something different, and every path gets the same bounded retry - the grid's row
     // for a freshly-selected category may not be composed yet the instant any of these run.
+    // Search -> fullscreen -> Back hands the screen back to Search (AppShell): a claim on the
+    // now-hidden grid would steal focus from Search's own restore, so every claim stops there.
+    val isVisible by androidx.compose.runtime.rememberUpdatedState(visible)
     suspend fun claimGridFocus() {
         // Sprint 2 device verification, 2026-09-22 - a real cold cache DB read for one group
         // measured 5.23s (`gridQuery ... tookMs=5230`, this session's own logcat), longer than the
@@ -586,6 +589,7 @@ fun LiveTvScreen(
         }
         repeat(20) { attempt ->
             delay(if (attempt == 0) 16 else 300)
+            if (!isVisible) return
             if (selectedGroup != null && gridLoadedFor != selectedGroup) return@repeat
             gridScrollNonce++
             delay(50)

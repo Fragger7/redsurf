@@ -169,9 +169,11 @@ fun SearchScreen(
         val idx = restoreKey?.let { k -> rows.indices.firstOrNull { rowKey(rows, it) == k } }
         if (idx != null) {
             runCatching { listState.scrollToItem(idx) }
+            // A cancelled request doesn't throw, so success is focus really inside this screen.
             repeat(10) {
-                if (runCatching { restoreFocusRequester.requestFocus() }.isSuccess) return@LaunchedEffect
+                runCatching { restoreFocusRequester.requestFocus() }
                 delay(50)
+                if (anyFocused) return@LaunchedEffect
             }
         }
         runCatching { fieldFocusRequester.requestFocus() }
