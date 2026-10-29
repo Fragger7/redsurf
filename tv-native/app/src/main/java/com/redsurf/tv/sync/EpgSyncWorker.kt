@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.redsurf.tv.db.RedSurfDatabase
+import com.redsurf.tv.db.SearchIndex
 import com.redsurf.tv.epg.PublicEpg
 import com.redsurf.tv.player.Catchup
 import com.redsurf.tv.settings.AppPreferences
@@ -180,6 +181,9 @@ class EpgSyncWorker(
             // knows which channels the provider actually covered. Best effort, like catch-up.
             runCatching { supplementFromPublic(db, playlistId) }
                 .onFailure { Log.w(TAG, "public EPG supplement failed for playlist $playlistId", it) }
+            // SEARCH.md - re-index programme titles now the guide data is final.
+            runCatching { SearchIndex.rebuild(db.openHelper.writableDatabase, channels = false) }
+                .onFailure { Log.w(TAG, "search index rebuild failed for playlist $playlistId", it) }
             EpgSyncState.markCompleted(applicationContext, playlistId, now)
             EpgSyncState.markAttempt(applicationContext, playlistId, null, now)
             Log.d(TAG, "epgSync -> done playlist=$playlistId inserted=$inserted")
