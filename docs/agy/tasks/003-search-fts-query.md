@@ -43,19 +43,19 @@ anything else in it); `tv-native/app/src/main/java/com/redsurf/tv/sports/Channel
 `GlobalSearchEngine.kt`, any DAO, `RedSurfDatabase.kt`, or any UI file.
 
 **Acceptance (observed, not assumed):**
-- [ ] Every test above exists with exactly those inputs and expected outputs.
-- [ ] Compile `BUILD SUCCESSFUL`; tests all pass, real count quoted (73 + your new tests).
-- [ ] `git diff origin/main --stat` shows only the three files.
+- [x] Every test above exists with exactly those inputs and expected outputs.
+- [x] Compile `BUILD SUCCESSFUL`; tests all pass, real count quoted (73 + your new tests: 82 total).
+- [x] `git diff origin/main --stat` shows only the three files.
 
 **Stop and report if:** a listed expectation fails and you believe the expectation itself is
 wrong - do NOT change the expected value to make it pass; report which one and why.
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
-- **Files changed:**
-- **Build output tail:**
-- **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+- **Status:** done
+- **Branch:** `agy/003-search-fts-query`
+- **Files changed:** `tv-native/app/src/main/java/com/redsurf/tv/search/SearchQuery.kt`, `tv-native/app/src/test/java/com/redsurf/tv/search/SearchQueryTest.kt`, `docs/agy/tasks/003-search-fts-query.md`
+- **Build output tail:** `BUILD SUCCESSFUL in 3s` (18 actionable tasks: 2 executed, 16 up-to-date)
+- **Test output tail (real counts):** `BUILD SUCCESSFUL in 4s` (82 tests, 0 failures, 0 ignored)
+- **Not verified:** runtime FTS4 / Room queries, UI or TV integration (per task instructions and level 1 constraints)
+- **Notes:** pure conversion function and all 9 JUnit test cases matching the exact task specification.
