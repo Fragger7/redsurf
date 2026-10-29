@@ -163,3 +163,15 @@ the system keyboard plus voice, no in-app letter grid. Result sections "Channels
 Settings: "Prefer voice search", "Show search history", "Stay on search screen when switching
 channels". Per-keystroke updating: not visible in strings, check on the TV. Used for
 `SEARCH.md` S1-S4.
+
+## Preview <-> fullscreen surface (Perf Max step 5, measured 2026-10-29 on the TV)
+TiviMate 5.3.3, `dumpsys SurfaceFlinger`, preview playing then OK/Back:
+- **One SurfaceView for both states.** The same BLAST layer (`SurfaceView[...MainActivity](BLAST)#14346`)
+  survives preview -> fullscreen -> preview; no new layer, no TextureView.
+- **Fixed buffer, scaled by the layer transform.** Buffer stays 1280x720 throughout. Preview:
+  matrix `scale 0.5, translate (32,24)` (640x360 at the hero position). Fullscreen: `scale 1.5`,
+  no translate. So it's a scale/translation of one fixed-size surface (option B in
+  `PERFORMANCE_MAX.md` §3), not a relayout/resize.
+- **Animated.** App-window frames after OK: first at +183ms, then 13 frames at 16.7ms (~220ms of
+  steady 60fps), then UI settling at 17-33ms. Back: first frame +291ms, 16 frames, rougher
+  (17-50ms gaps). The 0.5 -> 1.5 steps were too quick to sample mid-way (dumpsys ~180ms each).
