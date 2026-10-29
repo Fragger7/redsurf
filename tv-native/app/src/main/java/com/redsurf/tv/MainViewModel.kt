@@ -362,6 +362,7 @@ class MainViewModel : ViewModel() {
             localDb?.channelDao()?.deleteAllChannels()
             localDb?.favoriteChannelDao()?.deleteAll()
             localDb?.playlistDao()?.deleteAllPlaylists()
+            rebuildChannelSearchIndex()
             currentPlaylistId = null
             withContext(Dispatchers.Main) { checkLocalCache() }
         }
@@ -379,6 +380,8 @@ class MainViewModel : ViewModel() {
             localDb?.channelDao()?.deleteChannelsByPlaylist(playlistId)
             localDb?.favoriteChannelDao()?.deleteByPlaylist(playlistId)
             localDb?.playlistDao()?.deletePlaylist(playlistId)
+            // No FTS sync triggers (SearchEntities.kt): re-point the name index at what's left.
+            rebuildChannelSearchIndex()
             // An orphaned periodic sync would keep firing forever for a playlist that no longer
             // exists (PHASE_3.md decision 2).
             appContext?.let {

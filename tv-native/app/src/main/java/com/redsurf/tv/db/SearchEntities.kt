@@ -14,8 +14,14 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * SEARCH.md - full-text indexes (FTS4, external content: the index stores no copy of the text, it
- * points back into `channels` / `epg_programs` by rowid). Room creates the content-sync triggers
- * on a fresh database; MIGRATION_13_14 writes the same triggers by hand for upgrades.
+ * points back into `channels` / `epg_programs` by rowid).
+ *
+ * **No content-sync triggers.** Room creates four per index on a fresh database; the DB's onOpen
+ * callback drops them ([SearchIndex.DROP_SYNC_TRIGGERS_SQL]) and MIGRATION_13_14 never makes them.
+ * They would fire per row on every EPG ingest (~200K rows), every playlist import and every
+ * hide/favourite update - sync-time I/O is exactly what PERFORMANCE_MAX.md step 7 cuts. Instead,
+ * every bulk write calls [SearchIndex.rebuild] once afterwards. Between the write and the rebuild
+ * a docid can point at a stale rowid, so a search may briefly miss or mis-match; accepted.
  */
 @Entity(tableName = "channels_fts")
 @Fts4(contentEntity = ChannelEntity::class)
@@ -95,20 +101,23 @@ object SearchIndex {
         Log.d(TAG, "rebuild channels=$channels programs=$programs took ${System.currentTimeMillis() - start}ms")
     }
 
-    /** Statements that create both indexes, their sync triggers and the history table - the
-     * shape Room generates, so schema validation passes after the upgrade. */
+    /** Drops Room's per-row FTS sync triggers (see the file header for why). Idempotent; run on
+     * every open, since Room's createAllTables makes them on a fresh install. */
+    val DROP_SYNC_TRIGGERS_SQL: List<String> = buildList {
+        for (fts in listOf("channels_fts", "epg_programs_fts")) {
+            for (t in listOf("BEFORE_UPDATE", "BEFORE_DELETE", "AFTER_UPDATE", "AFTER_INSERT")) {
+                add("DROP TRIGGER IF EXISTS room_fts_content_sync_${fts}_$t")
+            }
+        }
+    }
+
+    /** Creates both indexes (the shape Room generates, so schema validation passes - Room checks
+     * FTS columns/options, not triggers), the programme-join index on `channels` and the history
+     * table, then fills the indexes. Purely additive. */
     val MIGRATION_13_14_SQL: List<String> = buildList {
         add("CREATE VIRTUAL TABLE IF NOT EXISTS `channels_fts` USING FTS4(`name` TEXT NOT NULL, content=`channels`)")
         add("CREATE VIRTUAL TABLE IF NOT EXISTS `epg_programs_fts` USING FTS4(`title` TEXT NOT NULL, content=`epg_programs`)")
-        for ((fts, content, col) in listOf(
-            Triple("channels_fts", "channels", "name"),
-            Triple("epg_programs_fts", "epg_programs", "title"),
-        )) {
-            add("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_${fts}_BEFORE_UPDATE BEFORE UPDATE ON `$content` BEGIN DELETE FROM `$fts` WHERE `docid`=OLD.`rowid`; END")
-            add("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_${fts}_BEFORE_DELETE BEFORE DELETE ON `$content` BEGIN DELETE FROM `$fts` WHERE `docid`=OLD.`rowid`; END")
-            add("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_${fts}_AFTER_UPDATE AFTER UPDATE ON `$content` BEGIN INSERT INTO `$fts`(`docid`, `$col`) VALUES (NEW.`rowid`, NEW.`$col`); END")
-            add("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_${fts}_AFTER_INSERT AFTER INSERT ON `$content` BEGIN INSERT INTO `$fts`(`docid`, `$col`) VALUES (NEW.`rowid`, NEW.`$col`); END")
-        }
+        add("CREATE INDEX IF NOT EXISTS `index_channels_playlistId_epgChannelId` ON `channels` (`playlistId`, `epgChannelId`)")
         add("CREATE TABLE IF NOT EXISTS `search_history` (`query` TEXT NOT NULL, `searchedAt` INTEGER NOT NULL, PRIMARY KEY(`query`))")
         add("INSERT INTO `channels_fts`(`channels_fts`) VALUES('rebuild')")
         add("INSERT INTO `epg_programs_fts`(`epg_programs_fts`) VALUES('rebuild')")

@@ -601,6 +601,8 @@ abstract class RedSurfDatabase : RoomDatabase() {
                             db.query("PRAGMA synchronous=NORMAL").close()
                             val mode = db.query("PRAGMA synchronous").use { if (it.moveToFirst()) it.getInt(0) else -1 }
                             Log.d("RedSurfDb", "open synchronous=$mode (1=NORMAL)")
+                            // SEARCH.md: FTS indexes are rebuilt after bulk writes, not synced per row.
+                            SearchIndex.DROP_SYNC_TRIGGERS_SQL.forEach { db.execSQL(it) }
                         }
                     })
                     .setQueryExecutor(queryExecutor)

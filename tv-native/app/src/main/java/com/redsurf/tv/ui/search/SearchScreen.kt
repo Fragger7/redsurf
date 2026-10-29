@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -134,7 +135,7 @@ fun SearchScreen(
 
     LaunchedEffect(anyFocused) { onInnerFocusChanged(anyFocused) }
     // Leaving the destination must not leave a stale "inner focus" claim behind.
-    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { onInnerFocusChanged(false) } }
+    DisposableEffect(Unit) { onDispose { onInnerFocusChanged(false) } }
 
     // Back peel (SEARCH.md): results -> field -> pill. Both are mutually exclusive with each other
     // and with AppShell's handler through `enabled`.
@@ -166,7 +167,7 @@ fun SearchScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 32.dp, vertical = 12.dp)
-            .androidx_onFocusChanged { anyFocused = it.hasFocus },
+            .onFocusChanged { anyFocused = it.hasFocus },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
@@ -250,11 +251,6 @@ fun SearchScreen(
     }
 }
 
-// `Modifier.onFocusChanged` is imported under its own name above; this alias keeps the Column
-// chain readable without shadowing the field's lambda parameter.
-private fun Modifier.androidx_onFocusChanged(block: (androidx.compose.ui.focus.FocusState) -> Unit): Modifier =
-    this.onFocusChanged(block)
-
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ResultRow(title: String, subtitle: String?, channel: ChannelEntity, onOpen: () -> Unit) {
@@ -273,7 +269,7 @@ private fun ResultRow(title: String, subtitle: String?, channel: ChannelEntity, 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             androidx.compose.foundation.layout.Box(
-                modifier = Modifier.size(32.dp).clip(RectangleShape).androidx_bg(),
+                modifier = Modifier.size(32.dp).clip(RectangleShape).background(SurfaceRaised),
                 contentAlignment = Alignment.Center,
             ) {
                 LogoOrLetter(channel.streamIcon, channel.name, RedSurfType.rowTitle, TextPrimary, Modifier.fillMaxSize().padding(3.dp))
@@ -295,8 +291,6 @@ private fun ResultRow(title: String, subtitle: String?, channel: ChannelEntity, 
         }
     }
 }
-
-private fun Modifier.androidx_bg(): Modifier = this.background(SurfaceRaised)
 
 /** Recent queries: tiles, then a trailing Clear tile. Long-press OK on a tile removes it. */
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
