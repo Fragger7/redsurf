@@ -27,7 +27,9 @@ data class ChannelName(
  */
 object ChannelNameNormalizer {
 
-    private val countryPrefix = Regex("""^\s*([a-z]{2,3})\s*\|""")
+    // `US| ESPN`, or the dash form a real provider uses (`US - FOX 29 ...`, `LAT - TELEMUNDO`). The dash
+    // form takes 2 letters or `lat` only: a 3-letter word before " - " is as likely a network (`ABC - ...`).
+    private val countryPrefix = Regex("""^\s*(?:([a-z]{2,3})\s*\||([a-z]{2}|lat)\s+-\s)""")
     private val qualityTokens = mapOf(
         "sd" to Quality.SD,
         "hd" to Quality.HD,
@@ -51,8 +53,9 @@ object ChannelNameNormalizer {
         // NFKC folds superscript and fullwidth letters (ᴴᴰ -> HD, ＨＤ -> HD) before any token check.
         var text = Normalizer.normalize(raw, Normalizer.Form.NFKC).lowercase()
 
-        val country = countryPrefix.find(text)?.groupValues?.get(1)?.uppercase()
-        if (country != null) text = text.substring(countryPrefix.find(text)!!.range.last + 1)
+        val prefix = countryPrefix.find(text)
+        val country = prefix?.groupValues?.drop(1)?.firstOrNull { it.isNotEmpty() }?.uppercase()
+        if (prefix != null) text = text.substring(prefix.range.last + 1)
 
         text = text.replace('[', ' ').replace(']', ' ').replace('(', ' ').replace(')', ' ')
         text = text.replace("&", " and ")
@@ -128,9 +131,13 @@ enum class MarketKind { RSN, AFFILIATE }
 data class MarketChannel(val canonical: String, val kind: MarketKind, val network: String? = null)
 
 /**
- * Home-market RSNs and affiliates (`SPORTS_HUB.md` §3a). Seeded with only the Philadelphia
- * spellings the brief itself records; check each against the user's real channel names before
- * adding more (same rule as [NationalNetworks]).
+ * Home-market RSNs and affiliates (`SPORTS_HUB.md` §3a). Philadelphia's aliases were checked
+ * against the test provider's real live names, 2026-10-29 (e.g. `US - FOX 29 PHILADELPHIA PA (WTXF) HD`,
+ * `US - NBC SPORTS PHILADELPHIA PLUS HD`); check any new market the same way before adding it.
+ *
+ * Matching is by contiguous tokens, not the whole key, because provider names carry the city, state
+ * and call sign around the network. A bare "fox 29" / "cbs 3" / "nbc 10" is never an alias: other
+ * markets reuse those numbers (`US - FOX 29 BUFFALO NY (WUTV)`). The call sign or number + city is.
  */
 object MarketNetworks {
 
@@ -138,22 +145,32 @@ object MarketNetworks {
         "philadelphia" to mapOf(
             MarketChannel("nbc sports philadelphia", MarketKind.RSN) to
                 listOf("nbc sports philadelphia", "nbc sports phil", "nbcsp"),
-            MarketChannel("wtxf", MarketKind.AFFILIATE, "fox") to listOf("fox 29", "wtxf"),
-            MarketChannel("kyw", MarketKind.AFFILIATE, "cbs") to listOf("cbs 3", "kyw"),
-            MarketChannel("wcau", MarketKind.AFFILIATE, "nbc") to listOf("nbc 10", "wcau"),
-            MarketChannel("wpvi", MarketKind.AFFILIATE, "abc") to listOf("6abc", "wpvi"),
+            MarketChannel("nbc sports philadelphia plus", MarketKind.RSN) to
+                listOf("nbc sports philadelphia plus", "nbcsp plus"),
+            MarketChannel("wtxf", MarketKind.AFFILIATE, "fox") to listOf("fox 29 philadelphia", "wtxf"),
+            MarketChannel("kyw", MarketKind.AFFILIATE, "cbs") to listOf("cbs 3 philadelphia", "kyw"),
+            MarketChannel("wcau", MarketKind.AFFILIATE, "nbc") to listOf("nbc 10 philadelphia", "wcau"),
+            MarketChannel("wpvi", MarketKind.AFFILIATE, "abc") to
+                listOf("6abc", "abc 6 philadelphia", "abc 06 philadelphia", "wpvi"),
         ),
     )
 
-    private val byAlias: Map<String, Map<String, MarketChannel>> = markets.mapValues { (_, channels) ->
-        buildMap {
-            for ((channel, names) in channels) for (name in names) put(ChannelNameNormalizer.normalize(name).key, channel)
-        }
+    // Per market: (alias tokens, channel), longest alias first so `... PHILADELPHIA PLUS` beats the
+    // plain RSN it contains.
+    private val aliasTokens: Map<String, List<Pair<List<String>, MarketChannel>>> = markets.mapValues { (_, channels) ->
+        channels.flatMap { (channel, names) ->
+            names.map { ChannelNameNormalizer.normalize(it).key.split(' ') to channel }
+        }.sortedByDescending { it.first.size }
     }
 
     /** The [market] channel a provider-or-ESPN name refers to, or null. */
-    fun channelFor(name: String, market: String): MarketChannel? =
-        byAlias[market]?.get(ChannelNameNormalizer.normalize(name).key)
+    fun channelFor(name: String, market: String): MarketChannel? {
+        val tokens = ChannelNameNormalizer.normalize(name).key.split(' ')
+        return aliasTokens[market]?.firstOrNull { (alias, _) -> containsRun(tokens, alias) }?.second
+    }
+
+    private fun containsRun(tokens: List<String>, run: List<String>): Boolean =
+        run.size <= tokens.size && (0..tokens.size - run.size).any { i -> tokens.subList(i, i + run.size) == run }
 
     /** The [market]'s affiliate for a national broadcast network ("fox" -> wtxf in Philadelphia), or null. */
     fun affiliateFor(network: String, market: String): MarketChannel? =

@@ -23,6 +23,23 @@ class ChannelNameNormalizerTest {
     }
 
     @Test
+    fun dashCountryPrefixIsStripped() {
+        val n = ChannelNameNormalizer.normalize("US - FOX 29 PHILADELPHIA PA (WTXF) HD")
+        assertEquals("US", n.country)
+        assertEquals("fox 29 philadelphia pa wtxf", n.key)
+        assertEquals("LAT", ChannelNameNormalizer.normalize("LAT - TELEMUNDO 62 [PHILADELPHIA] HD").country)
+        assertEquals("espn", NationalNetworks.canonicalFor("US - ESPN HD"))
+        assertNull(NationalNetworks.canonicalFor("US - FOX 29 PHILADELPHIA PA (WTXF) HD"))
+    }
+
+    @Test
+    fun threeLetterNetworkBeforeDashIsNotACountry() {
+        val n = ChannelNameNormalizer.normalize("ABC - NEWS LIVE")
+        assertNull(n.country)
+        assertEquals("abc news live", n.key)
+    }
+
+    @Test
     fun ampersandBecomesAnd() {
         assertEquals("nbc and nfl", ChannelNameNormalizer.normalize("NBC & NFL").key)
     }
