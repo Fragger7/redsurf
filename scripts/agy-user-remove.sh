@@ -25,8 +25,14 @@ else
   echo "TV not connected - skipping (nothing runs there after a reboot anyway)"
 fi
 
-step "2/6 sudo rules"
-rm -f /etc/sudoers.d/redsurf-agy && echo "ok"
+step "2/6 sudo rules + the adb-server firewall rule"
+rm -f /etc/sudoers.d/redsurf-agy
+launchctl bootout system/com.redsurf.agy-pf 2>/dev/null
+rm -f /Library/LaunchDaemons/com.redsurf.agy-pf.plist /etc/pf.anchors/redsurf-agy
+pfctl -a com.apple/redsurf-agy -F all 2>/dev/null
+[ -s /var/run/redsurf-agy-pf.token ] && pfctl -X "$(cat /var/run/redsurf-agy-pf.token)" 2>/dev/null
+rm -f /var/run/redsurf-agy-pf.token
+echo "ok"
 
 step "3/6 TV wrapper + screenshot folder"
 rm -f /usr/local/libexec/redsurf-tv
@@ -56,4 +62,5 @@ id "$U" >/dev/null 2>&1 && { echo "FAIL: user $U still exists"; fail=1; }
 [ -e "/Users/$U" ] && { echo "FAIL: /Users/$U still exists"; fail=1; }
 [ -e /etc/sudoers.d/redsurf-agy ] && { echo "FAIL: sudo rule still there"; fail=1; }
 [ -e /usr/local/libexec/redsurf-tv ] && { echo "FAIL: wrapper still there"; fail=1; }
+[ -e /Library/LaunchDaemons/com.redsurf.agy-pf.plist ] && { echo "FAIL: firewall daemon still there"; fail=1; }
 [ $fail = 0 ] && echo "ALL REMOVED" || { echo "SOMETHING WAS LEFT - tell Claude"; exit 1; }

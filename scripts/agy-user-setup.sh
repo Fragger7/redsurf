@@ -18,7 +18,7 @@ H=/Users/$U
 step() { printf '\n== %s\n' "$*"; }
 cd /                                           # agy can't enter admin's folders once they're locked
 
-step "1/8 user '$U'"
+step "1/9 user '$U'"
 if id "$U" >/dev/null 2>&1; then
   echo "exists - skipping"
 else
@@ -29,18 +29,24 @@ else
 fi
 id "$U" | grep -q '(admin)' && { echo "STOP: $U is an admin - remove that first"; exit 1; }
 
-step "2/8 lock admin's home (other users can't look in)"
+step "2/9 lock admin's home (other users can't look in)"
 chmod 700 "/Users/$ADMIN"
 chmod 750 "$H"                                 # admin (group staff) can fetch agy's commits
 
-step "3/8 toolchain copies for $U (no adb)"
+step "3/9 toolchain copies for $U (no adb)"
 sudo -u "$U" mkdir -p "$H/.local/opt" "$H/.local/bin" "$H/Library/Android"
 [ -d "$H/.local/opt/jdk17" ] || ditto "/Users/$ADMIN/.local/opt/jdk17" "$H/.local/opt/jdk17"
-rsync -a --delete --exclude platform-tools "/Users/$ADMIN/Library/Android/sdk/" "$H/Library/Android/sdk/"
+# platform-tools is copied minus adb itself: without its package.xml, Gradle downloads the whole
+# package (adb included) into the SDK on the first build - seen 2026-10-29.
+rsync -a --delete --exclude 'platform-tools/adb' "/Users/$ADMIN/Library/Android/sdk/" "$H/Library/Android/sdk/"
+rm -f "$H/Library/Android/sdk/platform-tools/adb"
 install -m 755 "/Users/$ADMIN/.local/bin/agy" "$H/.local/bin/agy"
-chown -R "$U:staff" "$H/.local" "$H/Library/Android"
+chown -R "$U:staff" "$H/.local"
+chown "$U:staff" "$H/Library/Android"
+# The SDK is root-owned and read-only to agy, so no build can install anything into it.
+chown -R root:wheel "$H/Library/Android/sdk" && chmod -R a+rX,go-w "$H/Library/Android/sdk"
 
-step "4/8 $U's own clone (public HTTPS, no GitHub login - it cannot push)"
+step "4/9 $U's own clone (public HTTPS, no GitHub login - it cannot push)"
 if [ ! -d "$H/RedSurf-agy/.git" ]; then
   sudo -u "$U" git clone -q https://github.com/Fragger7/redsurf.git "$H/RedSurf-agy"
 fi
@@ -49,13 +55,13 @@ sudo -u "$U" git -C "$H/RedSurf-agy" config core.hooksPath .githooks
 sudo -u "$ADMIN" git config --global --get-all safe.directory | grep -qx "$H/RedSurf-agy" ||
   sudo -u "$ADMIN" git config --global --add safe.directory "$H/RedSurf-agy"
 
-step "5/8 install the TV wrapper (root-owned; $U can't change it)"
+step "5/9 install the TV wrapper (root-owned; $U can't change it)"
 mkdir -p /usr/local/libexec && chown root:wheel /usr/local/libexec && chmod 755 /usr/local/libexec
 install -o root -g wheel -m 755 "$REPO/scripts/redsurf-tv" /usr/local/libexec/redsurf-tv
 mkdir -p /Users/Shared/redsurf-tv
 chown "$ADMIN:staff" /Users/Shared/redsurf-tv && chmod 755 /Users/Shared/redsurf-tv
 
-step "6/8 sudo rules"
+step "6/9 sudo rules"
 TMP=$(mktemp)
 cat > "$TMP" <<EOF
 # RedSurf: agy may run the TV wrapper as admin, nothing else. admin may act as agy (to launch it).
@@ -66,7 +72,7 @@ visudo -cf "$TMP" >/dev/null || { echo "STOP: sudoers rule failed validation"; r
 install -o root -g wheel -m 440 "$TMP" /etc/sudoers.d/redsurf-agy
 rm -f "$TMP"
 
-step "7/8 $U's shell: PATH + the redsurf-tv shim"
+step "7/9 $U's shell: PATH + the redsurf-tv shim"
 sudo -u "$U" tee "$H/.local/bin/redsurf-tv" >/dev/null <<'EOF'
 #!/bin/sh
 exec sudo -n -u admin /usr/local/libexec/redsurf-tv "$@"
@@ -74,11 +80,36 @@ EOF
 chmod 755 "$H/.local/bin/redsurf-tv"
 grep -qs '.local/bin' "$H/.zshenv" || sudo -u "$U" sh -c "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> '$H/.zshenv'"
 
-step "8/8 checks"
+step "8/9 firewall: $U can't reach admin's adb server (127.0.0.1:5037 has no login of its own)"
+cat > /etc/pf.anchors/redsurf-agy <<EOF
+block return out quick proto { tcp udp } from any to any port 5037 user $U
+EOF
+cat > /Library/LaunchDaemons/com.redsurf.agy-pf.plist <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.redsurf.agy-pf</string>
+  <key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string>
+    <string>/sbin/pfctl -E 2>&amp;1 | awk '/Token/{print $3}' > /var/run/redsurf-agy-pf.token; /sbin/pfctl -a com.apple/redsurf-agy -f /etc/pf.anchors/redsurf-agy</string></array>
+  <key>RunAtLoad</key><true/>
+</dict></plist>
+EOF
+chown root:wheel /etc/pf.anchors/redsurf-agy /Library/LaunchDaemons/com.redsurf.agy-pf.plist
+chmod 644 /etc/pf.anchors/redsurf-agy /Library/LaunchDaemons/com.redsurf.agy-pf.plist
+launchctl bootout system/com.redsurf.agy-pf 2>/dev/null || true
+launchctl bootstrap system /Library/LaunchDaemons/com.redsurf.agy-pf.plist
+sleep 2
+pfctl -a com.apple/redsurf-agy -s rules 2>/dev/null | grep -q 5037 && echo "ok: rule loaded (and at every boot)"
+
+step "9/9 checks"
 fail=0
+pfctl -a com.apple/redsurf-agy -s rules 2>/dev/null | grep -q 5037 || { echo "FAIL: firewall rule not loaded"; fail=1; }
+sudo -u "$ADMIN" "/Users/$ADMIN/Library/Android/sdk/platform-tools/adb" start-server >/dev/null 2>&1
+sudo -u "$U" nc -z -G 2 127.0.0.1 5037 >/dev/null 2>&1 && { echo "FAIL: $U can reach admin's adb server"; fail=1; }
+sudo -u "$U" test -w "$H/Library/Android/sdk" && { echo "FAIL: $U can write the SDK"; fail=1; }
 sudo -u "$U" test -r "/Users/$ADMIN/.redsurf" 2>/dev/null && { echo "FAIL: $U can read ~/.redsurf"; fail=1; }
 sudo -u "$U" ls "/Users/$ADMIN" >/dev/null 2>&1 && { echo "FAIL: $U can list admin's home"; fail=1; }
-sudo -u "$U" test -e "$H/Library/Android/sdk/platform-tools" && { echo "FAIL: $U has adb"; fail=1; }
+sudo -u "$U" test -e "$H/Library/Android/sdk/platform-tools/adb" && { echo "FAIL: $U has adb"; fail=1; }
 sudo -u "$U" sudo -n -u "$ADMIN" /bin/ls >/dev/null 2>&1 && { echo "FAIL: $U can sudo beyond the wrapper"; fail=1; }
 sudo -u "$U" sudo -n -u "$ADMIN" /usr/local/libexec/redsurf-tv version >/dev/null 2>&1 \
   && echo "ok: wrapper reachable (TV answered)" || echo "ok: wrapper runs (TV not connected right now - fine)"
