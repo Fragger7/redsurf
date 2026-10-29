@@ -138,3 +138,5 @@ Rules:
   outputs matching the screenshots, `end` ran, TV left clean, only the task file. Promoted to level 3.
 - 006 TV polish check (2026-10-29, L3): correct stop - `begin` said asleep, it ran `end`, pressed
   nothing, didn't retry. Minor: report lines duplicated. To be rerun in the morning test sprint.
+- 007 ESPN fetcher (2026-10-29, L2): blocked - the lead's agy allow-list (made for TV tasks) denied
+  `./gradlew`; nothing written, nothing committed. Not Gemini's fault. Reassigned.

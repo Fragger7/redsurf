@@ -1027,3 +1027,10 @@ Commits e1817a9..f11332c. All build clean and unit tests pass; device status per
 - 2026-10-28 00:28 `MarketNetworks` (Philadelphia RSN + 4 affiliates, only the spellings SPORTS_HUB §3a records; `affiliateFor("fox")` -> wtxf) + 3 tests. Builds clean, 71/71. Real provider names still to check.
 - 2026-10-28 00:32 ESPN date ranges tested live: HTTP 400 for NFL/NBA/MLB/NHL; day and YYYYMM work, month capped at 100 unless limit=500 (SPORTS_HUB.md open questions). Stop at 00:40: caffeinate killed, no cron, TV untouched since the 00:22 restore.
 - 2026-10-28 00:59 `EspnScoreboardUrl` (day / month+limit=500, ranges rejected) + 2 tests. Builds clean, 73/73. Overran the 00:40 stop by ~19 min (slow Gradle run).
+
+## 2026-10-29 unattended run (01:55-07:43 CDT)
+
+- 01:56 start: AC power, caffeinate 5h15m, 363Gi free. TV before any change: sleep_timeout=1200000, screensaver_enabled=1, hdmi_control_enabled=null (unset, CEC on). Wake-ups: 03:02 (window 2), 07:43 (hard stop). TV free till 08:00 (user).
+- 02:01 Gemini task 006 (TV polish observation) started; Sonnet Search build started in a worktree (data + UI, S1-S4).
+- 02:03 Gemini 006: TV asleep (stay-awake not yet applied) - correct stop, 0 keys. Rerun in the final test sprint.
+- 02:10 Gemini 007 (ESPN fetcher) failed rc=3: agy's settings.json allow-list (added for TV tasks: git, redsurf-tv, writes to docs/agy/tasks/ only) blocks `./gradlew` and source writes - before it existed the sandbox approved everything, which is why 001-004 ran. Needs the user to add allow rules (paste command in the morning report). 007 reassigned to Sonnet (+ OkHttp adapter `EspnHttp.kt`). Gemini limited to TV observation tasks until then.
