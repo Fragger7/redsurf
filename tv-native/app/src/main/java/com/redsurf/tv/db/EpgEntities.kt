@@ -55,6 +55,9 @@ data class ChannelGroupEntity(
         // dumpsys dbinfo this pass, this query blocked a real cold-launch read for 3.3s doing a
         // full scan of ~140K rows plus a temp B-tree GROUP BY, on every launch, unindexed.
         Index(value = ["streamType", "isHidden", "playlistId", "groupName"]),
+        // v14 (SEARCH.md): serves SearchDao.searchPrograms' join from a matched programme to its
+        // channel on (playlistId, epgChannelId) - without it each hit is a scan of `channels`.
+        Index(value = ["playlistId", "epgChannelId"]),
     ],
 )
 data class ChannelEntity(

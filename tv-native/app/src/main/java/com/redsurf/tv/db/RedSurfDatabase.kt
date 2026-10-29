@@ -225,11 +225,6 @@ interface ChannelDao {
      * so resetting doesn't leave orphaned channel rows behind on a storage-constrained device. */
     @Query("DELETE FROM channels")
     suspend fun deleteAllChannels()
-    
-    /** Bounded (HARDWARE.md memory discipline): a 2-letter query on a ~28K list matched thousands
-     * of rows into memory. The real Search index is SEARCH.md's job; this only caps the stub. */
-    @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' AND isHidden = 0 LIMIT :limit")
-    suspend fun searchChannels(query: String, limit: Int = 50): List<ChannelEntity>
 }
 
 /**
@@ -423,7 +418,10 @@ interface PlaylistDao {
     ChannelGroupEntity::class,
     RecentChannelEntity::class,
     FavoriteChannelEntity::class,
-], version = 13, exportSchema = false)
+    ChannelFts::class,
+    EpgProgramFts::class,
+    SearchHistoryEntity::class,
+], version = 14, exportSchema = false)
 // v6: added the (playlistId, streamType, groupName) index (PHASE_1.md #2b).
 // v7: ChannelEntity's primary key is now composite (playlistId, streamId) - see EpgEntities.kt's
 // doc comment on ChannelEntity (BACKLOG_SWEEP.md #13). Destructive migration was acceptable then -
@@ -451,6 +449,8 @@ interface PlaylistDao {
 // v11: favorite_channels (Teleport finish sprint, 2026-09-29) - additive, see MIGRATION_10_11.
 // v12: channels.tvArchiveDays (catch-up, EPG_WRAPUP.md 1.4) - additive, see MIGRATION_11_12.
 // v13: channels.epgFallbackId (public EPG supplement, EPG_WRAPUP.md 2.1) - additive.
+// v14: SEARCH.md - FTS4 indexes over channel names and programme titles, plus search_history.
+//      Additive (MIGRATION_13_14); never destructive.
 abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
     abstract fun epgDao(): EpgDao
@@ -458,6 +458,7 @@ abstract class RedSurfDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
     abstract fun recentChannelDao(): RecentChannelDao
     abstract fun favoriteChannelDao(): FavoriteChannelDao
+    abstract fun searchDao(): SearchDao
 
     companion object {
         @Volatile
@@ -542,6 +543,14 @@ abstract class RedSurfDatabase : RoomDatabase() {
             }
         }
 
+        // v14 - SEARCH.md: FTS indexes + search_history, then a one-off rebuild to index the rows
+        // already there. Additive; no user data is touched.
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                SearchIndex.MIGRATION_13_14_SQL.forEach { db.execSQL(it) }
+            }
+        }
+
         // Sprint 1 performance pass, 2026-09-22 (Opus consult, "must-do" M2/M3): a dedicated
         // single-thread transaction executor means EPG ingest's write transactions can never
         // occupy more than one slot of the shared pool the UI's own reads use - previously both
@@ -565,7 +574,7 @@ abstract class RedSurfDatabase : RoomDatabase() {
                     RedSurfDatabase::class.java,
                     "redsurf_tv_database"
                 )
-                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                     // Still the fallback for any *other* version jump this app doesn't carry an
                     // explicit migration for (e.g. a real install predating v6) - decision 14's
                     // protection is specifically for this release's own upgrade path (v7 -> v8),
@@ -592,6 +601,8 @@ abstract class RedSurfDatabase : RoomDatabase() {
                             db.query("PRAGMA synchronous=NORMAL").close()
                             val mode = db.query("PRAGMA synchronous").use { if (it.moveToFirst()) it.getInt(0) else -1 }
                             Log.d("RedSurfDb", "open synchronous=$mode (1=NORMAL)")
+                            // SEARCH.md: FTS indexes are rebuilt after bulk writes, not synced per row.
+                            SearchIndex.DROP_SYNC_TRIGGERS_SQL.forEach { db.execSQL(it) }
                         }
                     })
                     .setQueryExecutor(queryExecutor)

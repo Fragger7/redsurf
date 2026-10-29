@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.redsurf.tv.data.ChannelRepository
 import com.redsurf.tv.settings.AppPreferences
 import com.redsurf.tv.db.RedSurfDatabase
+import com.redsurf.tv.db.SearchIndex
 import com.redsurf.tv.db.ChannelEntity
 import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.parser.M3uParser
@@ -207,7 +208,7 @@ class MainViewModel : ViewModel() {
     fun setDatabase(db: RedSurfDatabase, context: Context) {
         localDb = db
         appContext = context.applicationContext
-        repository = ChannelRepository(db.channelDao(), db.playlistDao(), db.recentChannelDao(), db.epgDao(), db.favoriteChannelDao())
+        repository = ChannelRepository(db.channelDao(), db.playlistDao(), db.recentChannelDao(), db.epgDao(), db.favoriteChannelDao(), db.searchDao())
         repository.watchChannels(db.invalidationTracker)
         repository.hiddenGroups.value = com.redsurf.tv.settings.AppPreferences(context).hiddenGroups.value
         checkLocalCache(context)
@@ -335,6 +336,16 @@ class MainViewModel : ViewModel() {
         return if (host.isNullOrBlank()) label else "$label ($host)"
     }
 
+    /** SEARCH.md - re-index channel names after an import/refresh. Off the main thread; logs its
+     * own duration ("SearchIndex" tag). Best effort: a failed rebuild must never fail an import. */
+    private suspend fun rebuildChannelSearchIndex() {
+        val db = localDb ?: return
+        withContext(Dispatchers.IO) {
+            runCatching { SearchIndex.rebuild(db.openHelper.writableDatabase, programs = false) }
+                .onFailure { Log.w("SearchIndex", "channel index rebuild failed", it) }
+        }
+    }
+
     fun switchPlaylist(playlistId: String) {
         currentPlaylistId = playlistId
         checkLocalCache()
@@ -351,6 +362,7 @@ class MainViewModel : ViewModel() {
             localDb?.channelDao()?.deleteAllChannels()
             localDb?.favoriteChannelDao()?.deleteAll()
             localDb?.playlistDao()?.deleteAllPlaylists()
+            rebuildChannelSearchIndex()
             currentPlaylistId = null
             withContext(Dispatchers.Main) { checkLocalCache() }
         }
@@ -368,6 +380,8 @@ class MainViewModel : ViewModel() {
             localDb?.channelDao()?.deleteChannelsByPlaylist(playlistId)
             localDb?.favoriteChannelDao()?.deleteByPlaylist(playlistId)
             localDb?.playlistDao()?.deletePlaylist(playlistId)
+            // No FTS sync triggers (SearchEntities.kt): re-point the name index at what's left.
+            rebuildChannelSearchIndex()
             // An orphaned periodic sync would keep firing forever for a playlist that no longer
             // exists (PHASE_3.md decision 2).
             appContext?.let {
@@ -476,6 +490,7 @@ class MainViewModel : ViewModel() {
                 val stale = before.filter { it !in seen }
                 stale.chunked(500).forEach { dao.deleteChannels(playlistId, it) }
                 hidden.filter { it in seen }.chunked(500).forEach { dao.markHidden(playlistId, it) }
+                rebuildChannelSearchIndex()
                 // REPLACE dropped each row's public-EPG match; the guide sync recomputes it.
                 appContext?.let { EpgSyncScheduler.schedule(it, playlistId, runNow = true) }
                 val removed = if (stale.isNotEmpty()) " · ${stale.size} removed" else ""
@@ -601,6 +616,7 @@ class MainViewModel : ViewModel() {
                     _state.value = AppState.Loading("Importing $imported channels...")
                 }
 
+                rebuildChannelSearchIndex()
                 currentPlaylistId = playlistId
                 // PHASE_3.md decision 2 - schedule this playlist's own EPG sync now that its
                 // channels (and therefore a real channel URL to pull credentials from,
@@ -654,6 +670,7 @@ class MainViewModel : ViewModel() {
                     }
                 }
 
+                rebuildChannelSearchIndex()
                 currentPlaylistId = playlistId
                 checkLocalCache()
             } catch (e: Exception) {
@@ -732,6 +749,7 @@ class MainViewModel : ViewModel() {
                     }
                 }
 
+                rebuildChannelSearchIndex()
                 currentPlaylistId = playlistId
                 checkLocalCache()
             } catch (e: Exception) {

@@ -3,8 +3,6 @@ package com.redsurf.tv
 import org.junit.Test
 import org.junit.Assert.*
 import com.redsurf.tv.player.tracks.TrackManager
-import com.redsurf.tv.search.GlobalSearchEngine
-import com.redsurf.tv.search.SearchResults
 
 /**
  * REDSURF REGRESSION SUITE

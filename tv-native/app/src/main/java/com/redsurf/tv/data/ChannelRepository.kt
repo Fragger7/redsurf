@@ -17,6 +17,12 @@ import com.redsurf.tv.db.PlaylistDao
 import com.redsurf.tv.db.PlaylistEntity
 import com.redsurf.tv.db.RecentChannelDao
 import com.redsurf.tv.db.RecentChannelEntity
+import com.redsurf.tv.db.SearchDao
+import com.redsurf.tv.db.SearchHistoryEntity
+import com.redsurf.tv.search.ProgramResult
+import com.redsurf.tv.search.SEARCH_HISTORY_LIMIT
+import com.redsurf.tv.search.SearchQuery
+import com.redsurf.tv.search.SearchRanker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -50,7 +56,38 @@ class ChannelRepository(
     private val recentChannelDao: RecentChannelDao,
     private val epgDao: EpgDao,
     private val favoriteDao: FavoriteChannelDao,
+    private val searchDao: SearchDao,
 ) {
+    // ---- Search (SEARCH.md) ----
+
+    /** FTS prefix-per-word match, 50 rows max, re-ranked by [SearchRanker]. */
+    suspend fun searchChannels(raw: String): List<ChannelEntity> {
+        val match = SearchQuery.toFtsMatch(raw) ?: return emptyList()
+        return SearchRanker.rank(raw, searchDao.searchChannels(match)) { it.name }
+    }
+
+    /** Upcoming/airing programmes whose title matches, on the provider's own guide data. */
+    suspend fun searchPrograms(raw: String): List<ProgramResult> {
+        val match = SearchQuery.toFtsMatch(raw) ?: return emptyList()
+        val hits = searchDao.searchPrograms(match, System.currentTimeMillis())
+        return SearchRanker.rank(raw, hits) { it.progTitle }
+            .map { ProgramResult(it.channel, it.progTitle, it.progStart, it.progEnd) }
+    }
+
+    fun recentSearches(): Flow<List<String>> =
+        searchDao.recentQueries(SEARCH_HISTORY_LIMIT).map { rows -> rows.map { it.query } }
+
+    suspend fun recordSearch(query: String) {
+        val q = query.trim()
+        if (q.isEmpty()) return
+        searchDao.upsertHistory(SearchHistoryEntity(q, System.currentTimeMillis()))
+        searchDao.trimHistory(SEARCH_HISTORY_LIMIT)
+    }
+
+    suspend fun removeSearch(query: String) = searchDao.deleteHistory(query)
+
+    suspend fun clearSearches() = searchDao.clearHistory()
+
     fun playlists(): Flow<List<PlaylistEntity>> = playlistDao.getAllPlaylists()
 
     /** PLAYER_ENGINEERING_BRIEF.md §6/§9 - so the player's data source can use this playlist's
