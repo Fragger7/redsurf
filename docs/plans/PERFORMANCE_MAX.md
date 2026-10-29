@@ -215,7 +215,7 @@ a forced EPG sync (compare `XmlTvParser flush ... tookMs` with the 1.4-6s measur
 flushes 273-1038ms typical, outliers 1.8/2.7/4.1s (was 1.4-6s). Category moves during the sync:
 uncached `gridQuery+programmes` 44-65ms (one 327ms), cached 0-1ms. Big improvement, but the
 <=20ms acceptance is **not met** for uncached groups; the cold query itself (not lock wait - the
-same groups take ~40-60ms idle) is the next target, e.g. prefetching neighbour categories.
+uncached groups measured 35-84ms with no sync running, same session) is the next target, e.g. prefetching neighbour categories.
 **Item 10 (2026-10-28):** `core-ktx`/`lifecycle-runtime-ktx` declarations raised to what the
 Compose BOM already resolved (1.16.0/2.9.4) - no change to the APK. `activity-compose` is really
 1.8.2; bumping it (1.10.x) changes the library under every `BackHandler`, so it waits for a
