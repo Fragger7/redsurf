@@ -709,7 +709,9 @@ fun PlayerScreen(
                     ),
             )
 
-            if (breadcrumb.isNotBlank()) {
+            // The channel list draws its own "CATEGORIES" header in this corner; the breadcrumb
+            // would print on top of it (seen on the TV, 2026-10-29).
+            if (breadcrumb.isNotBlank() && overlay != PlayerOverlay.ChannelList) {
                 Text(
                     breadcrumb,
                     style = RedSurfType.rowSecondary,

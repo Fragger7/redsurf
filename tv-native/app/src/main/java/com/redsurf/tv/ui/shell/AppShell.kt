@@ -147,6 +147,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf(SearchResults()) }
     var searchInnerFocus by remember { mutableStateOf(false) }
+    // Back from a fullscreen opened from a Search result returns to Search, on that result
+    // (Back retraces the path; TiviMate's "Stay on search screen"). Any other exit clears it.
+    var returnToSearchAfterFullscreen by remember { mutableStateOf(false) }
+    var searchReturnKey by remember { mutableStateOf<String?>(null) }
     val searchFieldRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         SearchLogic.runDebounced(snapshotFlow { searchQuery }) { q ->
@@ -384,6 +388,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // first when the menu was opened there, then places focus through an explicit, verified
     // mechanism - never by hoping a single requestFocus() landed.
     suspend fun leaveFullscreenForTeleport() {
+        returnToSearchAfterFullscreen = false
         if (!liveTvFullscreen) return
         liveTvExitFullscreenRequest = System.nanoTime()
         repeat(20) {
@@ -739,7 +744,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 traced("NavStrip") {
                     NavStrip(
                         current = destination,
-                        onSelect = { destination = it },
+                        onSelect = { returnToSearchAfterFullscreen = false; destination = it },
                         focusRequesters = navPillFocusRequesters,
                         guideSyncing = guideSyncing,
                         modifier = Modifier.tracedMeasure("NavStrip:measure").onFocusChanged {
@@ -775,7 +780,14 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                             viewModel.repository.hiddenGroups.value = appPreferences.hiddenGroups.value
                         },
                         visible = destination == NavDestination.LiveTv,
-                        onFullscreenChanged = { liveTvFullscreen = it },
+                        onFullscreenChanged = { full ->
+                            val back = !full && liveTvFullscreen && returnToSearchAfterFullscreen
+                            liveTvFullscreen = full
+                            if (back) {
+                                returnToSearchAfterFullscreen = false
+                                destination = NavDestination.Search
+                            }
+                        },
                         onChannelsFocusChanged = { liveTvChannelsFocused = it },
                         blackScreenBetweenZaps = blackScreenBetweenZaps,
                         digitKeysEnabled = digitKeysEnabled,
@@ -930,13 +942,14 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     val playlistNames = remember(allPlaylists) { allPlaylists.associate { it.id to it.name } }
                     SearchScreen(
                         query = searchQuery,
-                        onQueryChange = { searchQuery = it },
+                        onQueryChange = { searchQuery = it; searchReturnKey = null },
                         results = searchResults,
                         recents = recents,
                         playlistNames = playlistNames,
                         fieldFocusRequester = searchFieldRequester,
-                        onOpenChannel = { teleportToFullscreen(it) },
-                        onOpenProgram = { teleportToFullscreen(it.channel) },
+                        restoreKey = searchReturnKey,
+                        onOpenChannel = { key, ch -> searchReturnKey = key; teleportToFullscreen(ch); returnToSearchAfterFullscreen = true },
+                        onOpenProgram = { key, p -> searchReturnKey = key; teleportToFullscreen(p.channel); returnToSearchAfterFullscreen = true },
                         onRecordSearch = {
                             val q = searchQuery
                             scope.launch { runCatching { viewModel.repository.recordSearch(q) } }

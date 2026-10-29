@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -118,8 +119,10 @@ fun SearchScreen(
     recents: List<String>,
     playlistNames: Map<String, String>,
     fieldFocusRequester: FocusRequester,
-    onOpenChannel: (ChannelEntity) -> Unit,
-    onOpenProgram: (ProgramResult) -> Unit,
+    /** Key of the result last opened; on entry focus lands on it instead of the field. */
+    restoreKey: String?,
+    onOpenChannel: (key: String, ChannelEntity) -> Unit,
+    onOpenProgram: (key: String, ProgramResult) -> Unit,
     onRecordSearch: () -> Unit,
     onRemoveRecent: (String) -> Unit,
     onClearRecents: () -> Unit,
@@ -132,6 +135,8 @@ fun SearchScreen(
     var anyFocused by remember { mutableStateOf(false) }
     val rows = remember(results, playlistNames) { buildRows(results, playlistNames) }
     val resultsFocusRequester = remember { FocusRequester() }
+    val restoreFocusRequester = remember { FocusRequester() }
+    val listState = rememberLazyListState()
 
     LaunchedEffect(anyFocused) { onInnerFocusChanged(anyFocused) }
     // Leaving the destination must not leave a stale "inner focus" claim behind.
@@ -158,8 +163,17 @@ fun SearchScreen(
     }
 
     // Claim initial focus on the field, like every screen's initial-focus pattern.
+    // Returning from a result's fullscreen lands on that result (state/focus discipline).
     LaunchedEffect(Unit) {
         delay(50)
+        val idx = restoreKey?.let { k -> rows.indices.firstOrNull { rowKey(rows, it) == k } }
+        if (idx != null) {
+            runCatching { listState.scrollToItem(idx) }
+            repeat(10) {
+                if (runCatching { restoreFocusRequester.requestFocus() }.isSuccess) return@LaunchedEffect
+                delay(50)
+            }
+        }
         runCatching { fieldFocusRequester.requestFocus() }
     }
 
@@ -215,15 +229,12 @@ fun SearchScreen(
             rows.isEmpty() -> Text("No matches for \"${query.trim()}\"", style = RedSurfType.rowTitle, color = TextSecondary)
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().focusRequester(resultsFocusRequester),
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                items(rows.size, key = { i ->
-                    when (val r = rows[i]) {
-                        is SearchRow.Header -> "h:$i:${r.text}"
-                        is SearchRow.Channel -> "c:${r.channel.playlistId}:${r.channel.streamId}"
-                        is SearchRow.Program -> "p:$i"
-                    }
-                }) { i ->
+                items(rows.size, key = { i -> rowKey(rows, i) }) { i ->
+                    val key = rowKey(rows, i)
+                    val rowMod = if (key == restoreKey) Modifier.focusRequester(restoreFocusRequester) else Modifier
                     when (val r = rows[i]) {
                         is SearchRow.Header -> Text(
                             r.text,
@@ -235,14 +246,16 @@ fun SearchScreen(
                             title = r.channel.name,
                             subtitle = null,
                             channel = r.channel,
-                            onOpen = { onRecordSearch(); onOpenChannel(r.channel) },
+                            modifier = rowMod,
+                            onOpen = { onRecordSearch(); onOpenChannel(key, r.channel) },
                         )
                         is SearchRow.Program -> ResultRow(
                             title = r.program.title,
                             subtitle = "${r.program.channel.name}  ·  " +
                                 DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(r.program.startTime)),
                             channel = r.program.channel,
-                            onOpen = { onRecordSearch(); onOpenProgram(r.program) },
+                            modifier = rowMod,
+                            onOpen = { onRecordSearch(); onOpenProgram(key, r.program) },
                         )
                     }
                 }
@@ -251,13 +264,25 @@ fun SearchScreen(
     }
 }
 
+private fun rowKey(rows: List<SearchRow>, i: Int): String = when (val r = rows[i]) {
+    is SearchRow.Header -> "h:$i:${r.text}"
+    is SearchRow.Channel -> "c:${r.channel.playlistId}:${r.channel.streamId}"
+    is SearchRow.Program -> "p:$i"
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ResultRow(title: String, subtitle: String?, channel: ChannelEntity, onOpen: () -> Unit) {
+private fun ResultRow(
+    title: String,
+    subtitle: String?,
+    channel: ChannelEntity,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var focused by remember { mutableStateOf(false) }
     Surface(
         onClick = onOpen,
-        modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+        modifier = modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
         shape = RedSurfFocus.shape(12.dp),
         colors = RedSurfFocus.rowColors(resting = SurfaceColor),
         scale = RedSurfFocus.scale(),
