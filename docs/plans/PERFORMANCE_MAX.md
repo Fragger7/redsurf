@@ -211,6 +211,11 @@ WAL pinned (and `ro.config.low_ram` is unset on this TV, so it was never at risk
 transactions. New: `PRAGMA synchronous=NORMAL` on open (`RedSurfDatabase`), so a commit no longer
 fsyncs; logcat `RedSurfDb open synchronous=1` confirms it. Acceptance: category query <=20ms during
 a forced EPG sync (compare `XmlTvParser flush ... tookMs` with the 1.4-6s measured before).
+**Step 7 measured 2026-10-29 on v0.65.5 (forced "Update EPG now", 83,451 rows, HDCP-starved CPU):**
+flushes 273-1038ms typical, outliers 1.8/2.7/4.1s (was 1.4-6s). Category moves during the sync:
+uncached `gridQuery+programmes` 44-65ms (one 327ms), cached 0-1ms. Big improvement, but the
+<=20ms acceptance is **not met** for uncached groups; the cold query itself (not lock wait - the
+same groups take ~40-60ms idle) is the next target, e.g. prefetching neighbour categories.
 **Item 10 (2026-10-28):** `core-ktx`/`lifecycle-runtime-ktx` declarations raised to what the
 Compose BOM already resolved (1.16.0/2.9.4) - no change to the APK. `activity-compose` is really
 1.8.2; bumping it (1.10.x) changes the library under every `BackHandler`, so it waits for a
