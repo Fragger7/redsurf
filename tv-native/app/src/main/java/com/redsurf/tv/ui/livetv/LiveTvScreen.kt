@@ -943,19 +943,40 @@ fun LiveTvScreen(
         // fullscreen it covers the window in black, so a letterboxed channel never shows the guide.
         val videoError by livePlayer.errorPresentation.collectAsState()
         val previewVideo = !isFullscreen && previewingChannel != null && videoError == null && heroThumbBounds != null
+        // Perf Max step 5 (PERFORMANCE_MAX.md 3B, TIVIMATE_LEARNINGS "Preview <-> fullscreen surface"):
+        // the video box is always laid out at window size; preview is only a layer transform (scale +
+        // translation to the hero's top-left), so the SurfaceView's buffer never resizes and the
+        // switch is one animated transform. [expand] 0 = hero, 1 = fullscreen, read ONLY in
+        // graphicsLayer lambdas (no per-frame recomposition/relayout); animateTo starts from the
+        // current value, so Back mid-expand reverses in place.
+        val expand = remember { androidx.compose.animation.core.Animatable(if (isFullscreen) 1f else 0f) }
+        LaunchedEffect(isFullscreen) {
+            expand.animateTo(
+                if (isFullscreen) 1f else 0f,
+                androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            )
+        }
+        val previewSettled by remember { androidx.compose.runtime.derivedStateOf { expand.value == 0f } }
         if (visible && (isFullscreen || previewVideo)) {
             Box(
                 modifier = Modifier
                     .placedAt {
                         val origin = screenBounds?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero
+                        androidx.compose.ui.unit.IntRect(-origin.x.toInt(), -origin.y.toInt(),
+                            windowSize.width - origin.x.toInt(), windowSize.height - origin.y.toInt())
+                    }
+                    .graphicsLayer {
+                        // The hero rect is read from layout coordinates every frame, so nav auto-hide /
+                        // double-height moves keep the preview on it (draw-phase read only).
                         val hero = heroThumbBounds
-                        if (isFullscreen || hero == null) {
-                            androidx.compose.ui.unit.IntRect(-origin.x.toInt(), -origin.y.toInt(),
-                                windowSize.width - origin.x.toInt(), windowSize.height - origin.y.toInt())
-                        } else {
-                            val r = hero.translate(-origin.x, -origin.y)
-                            androidx.compose.ui.unit.IntRect(r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt())
-                        }
+                        val t = expand.value
+                        val s0 = if (hero == null || windowSize.width == 0) 1f else hero.width / windowSize.width
+                        val s = s0 + (1f - s0) * t
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                        scaleX = s
+                        scaleY = s
+                        translationX = (hero?.left ?: 0f) * (1f - t)
+                        translationY = (hero?.top ?: 0f) * (1f - t)
                     }
                     .background(Color.Black),
             ) {
@@ -967,7 +988,20 @@ fun LiveTvScreen(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                if (!isFullscreen) {
+            }
+            // Hero ornaments sit outside the scaled box (they'd scale with it): gone at frame 0 of the
+            // expand, back once the shrink has landed.
+            if (!isFullscreen && previewSettled) {
+                Box(
+                    modifier = Modifier.placedAt {
+                        val origin = screenBounds?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero
+                        val hero = heroThumbBounds
+                        if (hero == null) androidx.compose.ui.unit.IntRect(0, 0, 0, 0) else {
+                            val r = hero.translate(-origin.x, -origin.y)
+                            androidx.compose.ui.unit.IntRect(r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt())
+                        }
+                    },
+                ) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopStart)
@@ -1076,7 +1110,11 @@ fun LiveTvScreen(
                     digitKeysEnabled = digitKeysEnabled,
                     longPressOk = longPressOk,
                     controller = livePlayer,
-                    modifier = Modifier.fillWindow(windowSize) { screenBounds?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero },
+                    modifier = Modifier
+                        // Overlays fade in once the expand has landed (they're composed at once so
+                        // key routing and focus are unchanged).
+                        .graphicsLayer { alpha = ((expand.value - 0.85f) / 0.15f).coerceIn(0f, 1f) }
+                        .fillWindow(windowSize) { screenBounds?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero },
                 )
             }
         }
