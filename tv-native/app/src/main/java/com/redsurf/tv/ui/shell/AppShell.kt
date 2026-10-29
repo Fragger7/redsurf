@@ -52,7 +52,13 @@ import com.redsurf.tv.ui.livetv.key
 import com.redsurf.tv.ui.livetv.LiveTvScreen
 import com.redsurf.tv.ui.theme.surfBackdrop
 import com.redsurf.tv.ui.theme.tvSafeArea
+import com.redsurf.tv.search.SearchLogic
+import com.redsurf.tv.search.SearchResults
+import com.redsurf.tv.ui.search.SearchScreen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -137,6 +143,22 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // this app session, not a process death/relaunch (that needs real disk persistence, a
     // separate, bigger piece - AGENTS.md backlog).
     var liveTvSelectedGroup by remember { mutableStateOf<GroupKey?>(null) }
+    // SEARCH.md: query/results hoisted here so leaving Search and returning keeps them.
+    var searchQuery by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf(SearchResults()) }
+    var searchInnerFocus by remember { mutableStateOf(false) }
+    val searchFieldRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        SearchLogic.runDebounced(snapshotFlow { searchQuery }) { q ->
+            searchResults = if (q.isBlank()) {
+                SearchResults()
+            } else {
+                val channels = withContext(Dispatchers.IO) { runCatching { viewModel.repository.searchChannels(q) }.getOrDefault(emptyList()) }
+                val programs = withContext(Dispatchers.IO) { runCatching { viewModel.repository.searchPrograms(q) }.getOrDefault(emptyList()) }
+                SearchResults(q, channels, programs)
+            }
+        }
+    }
     var liveTvFocusedChannel by remember { mutableStateOf<ChannelEntity?>(null) }
     // Recent channels no longer hoisted here (PHASE_2.md decision 14, 2026-09-17) - they're a
     // real Room table now (`ChannelRepository.recentChannels()`), which is already reactive and
@@ -451,6 +473,20 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     // every category (~2,200 here) and the list holds fresh lambdas - recomputed on every AppShell
     // recomposition, i.e. every category commit, they also made the hidden menu recompose. While
     // closed (including its close animation) the last list is reused, same instance.
+    /** Teleport row and the remote's Search key (S3): leave fullscreen, show Search, focus the field. */
+    fun openSearch() {
+        scope.launch {
+            leaveFullscreenForTeleport()
+            destination = NavDestination.Search
+            delay(120)
+            repeat(10) {
+                runCatching { searchFieldRequester.requestFocus() }
+                delay(60)
+                if (searchInnerFocus) return@launch
+            }
+        }
+    }
+
     fun buildTeleportRows(): List<TeleportRow> {
         val favoritesTarget = teleportPlaylistId
             ?.let { GroupKey(it, FAVORITES_GROUP) }
@@ -459,6 +495,7 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
         val lastGroupTarget = resolveLastGroupTarget(groups, teleportPlaylistId)
         return buildList {
             add(TeleportRow.Live("Nav-Strip") { teleportToNavStrip() })
+            add(TeleportRow.Live("Search") { openSearch() })
             add(
                 if (teleportPlaylistId != null) {
                     TeleportRow.Live("Playlist Root") {
@@ -535,7 +572,8 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
     BackHandler(
         enabled = !liveTvFullscreen &&
             !teleportMenuOpen &&
-            !(destination == NavDestination.LiveTv && liveTvChannelsFocused),
+            !(destination == NavDestination.LiveTv && liveTvChannelsFocused) &&
+            !(destination == NavDestination.Search && searchInnerFocus),
     ) {
         val now = SystemClock.uptimeMillis()
         if (navHasFocus && now - exitArmedAt < EXIT_CONFIRM_MS) {
@@ -641,6 +679,10 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                 }
             }
             if (!teleportMenuOpen) {
+                if (event.key == Key.Search && !liveTvFullscreen) {
+                    if (isDown) openSearch()
+                    return@onPreviewKeyEvent true
+                }
                 if (navHasFocus && destination == NavDestination.Settings && event.key == Key.DirectionDown) {
                     if (isDown) settingsRailEntryRequest = System.nanoTime()
                     return@onPreviewKeyEvent true
@@ -882,6 +924,34 @@ fun AppShell(viewModel: MainViewModel, activePlaylistId: String?) {
                     PlaceholderScreen("Live TV", "No active playlist")
                 // Rendered unconditionally above now (see comment there); nothing left to do here.
                 destination == NavDestination.Settings -> {}
+                destination == NavDestination.Search -> {
+                    val recents by remember { viewModel.repository.recentSearches() }
+                        .collectAsState(initial = emptyList())
+                    val playlistNames = remember(allPlaylists) { allPlaylists.associate { it.id to it.name } }
+                    SearchScreen(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        results = searchResults,
+                        recents = recents,
+                        playlistNames = playlistNames,
+                        fieldFocusRequester = searchFieldRequester,
+                        onOpenChannel = { teleportToFullscreen(it) },
+                        onOpenProgram = { teleportToFullscreen(it.channel) },
+                        onRecordSearch = {
+                            val q = searchQuery
+                            scope.launch { runCatching { viewModel.repository.recordSearch(q) } }
+                        },
+                        onRemoveRecent = { q ->
+                            scope.launch { runCatching { viewModel.repository.removeSearch(q) } }
+                            showHint("Removed from search history")
+                        },
+                        onClearRecents = {
+                            scope.launch { runCatching { viewModel.repository.clearSearches() } }
+                        },
+                        onEscapeUp = { runCatching { navPillFocusRequesters[NavDestination.Search]?.requestFocus() } },
+                        onInnerFocusChanged = { searchInnerFocus = it },
+                    )
+                }
                 else ->
                     PlaceholderScreen(destination.label, "Coming in a later phase")
             }
