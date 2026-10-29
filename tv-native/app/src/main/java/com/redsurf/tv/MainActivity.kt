@@ -106,7 +106,7 @@ class MainActivity : ComponentActivity() {
                                 if (UpdateManager.canInstallUnknownApps(this@MainActivity)) {
                                     retryInstallOnResume = null
                                     showInstallPermissionPrompt = false
-                                    download = UpdateManager.downloadAndInstall(this@MainActivity, info.downloadUrl, info.newVersion) to info.newVersion
+                                    download = UpdateManager.downloadAndInstall(this@MainActivity, info.downloadUrl, info.newVersion, info.dmUrl) to info.newVersion
                                     viewModel.dismissUpdatePrompt()
                                 }
                             }
@@ -187,7 +187,7 @@ class MainActivity : ComponentActivity() {
                             versionName = availableUpdate.newVersion,
                             onInstall = {
                                 if (UpdateManager.canInstallUnknownApps(this@MainActivity)) {
-                                    download = UpdateManager.downloadAndInstall(this@MainActivity, availableUpdate.downloadUrl, availableUpdate.newVersion) to availableUpdate.newVersion
+                                    download = UpdateManager.downloadAndInstall(this@MainActivity, availableUpdate.downloadUrl, availableUpdate.newVersion, availableUpdate.dmUrl) to availableUpdate.newVersion
                                     viewModel.dismissUpdatePrompt()
                                 } else {
                                     showInstallPermissionPrompt = true

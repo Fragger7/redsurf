@@ -87,6 +87,17 @@ jobs:
           mv tv-native/app/build/outputs/apk/release/app-release.apk \
              tv-native/app/build/outputs/apk/release/RedSurf-${{ steps.version.outputs.new_tag }}.apk
 
+      # Dex metadata for install-time compilation: the app's UpdateManager installs the APK and
+      # this .dm together through PackageInstaller (falls back to a plain install without it).
+      # Same base name as the APK, which is what ART's pairing needs.
+      - name: Build dex metadata (.dm)
+        # Optional extra: a failure here must never block the release itself.
+        continue-on-error: true
+        run: |
+          scripts/make-dm.sh \
+            tv-native/app/build/outputs/apk/release/RedSurf-${{ steps.version.outputs.new_tag }}.apk \
+            tv-native/app/build/outputs/apk/release/RedSurf-${{ steps.version.outputs.new_tag }}.dm
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -98,4 +109,6 @@ jobs:
           # builds a conventional-commits changelog from the commit messages since the last tag
           # (this repo's commits already use feat:/fix:/docs: prefixes) - use that instead.
           body: ${{ steps.version.outputs.changelog }}
-          files: tv-native/app/build/outputs/apk/release/RedSurf-${{ steps.version.outputs.new_tag }}.apk
+          files: |
+            tv-native/app/build/outputs/apk/release/RedSurf-${{ steps.version.outputs.new_tag }}.apk
+            tv-native/app/build/outputs/apk/release/RedSurf-${{ steps.version.outputs.new_tag }}.dm

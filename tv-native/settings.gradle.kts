@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "RedSurf TV"
 include(":app")
+include(":benchmark")

@@ -1,5 +1,6 @@
 package com.redsurf.tv.updater
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -50,5 +51,25 @@ class UpdateManagerTest {
         assertFalse(UpdateManager.isNewerVersion("not-a-version", "v0.17.4"))
         assertFalse(UpdateManager.isNewerVersion("v0.17.4", "not-a-version"))
         assertFalse(UpdateManager.isNewerVersion("", "v0.17.4"))
+    }
+
+    @Test
+    fun pickAssets_findsApkAndDm_inAnyOrder() {
+        val r = UpdateManager.pickAssets(listOf("RedSurf-v1.dm" to "u/dm", "RedSurf-v1.apk" to "u/apk"))
+        assertEquals("u/apk", r!!.first)
+        assertEquals("u/dm", r.second)
+    }
+
+    @Test
+    fun pickAssets_withoutDm_hasNullDm() {
+        val r = UpdateManager.pickAssets(listOf("RedSurf-v1.apk" to "u/apk"))
+        assertEquals("u/apk", r!!.first)
+        assertEquals(null, r.second)
+    }
+
+    @Test
+    fun pickAssets_unrecognisedName_fallsBackToFirstAsset() {
+        assertEquals("u/x", UpdateManager.pickAssets(listOf("weird" to "u/x"))!!.first)
+        assertEquals(null, UpdateManager.pickAssets(emptyList()))
     }
 }
