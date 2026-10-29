@@ -1,0 +1,151 @@
+#!/bin/bash
+# redsurf-tv - the ONLY way the Gemini builder (macOS user "agy") touches the TV.
+#
+# Installed root-owned at /usr/local/libexec/redsurf-tv by scripts/agy-user-setup.sh; sudoers lets
+# agy run it as admin (adb's owner) and nothing else. agy has no adb of its own. Every argument is
+# checked against a fixed allowlist: no install/uninstall, no data clearing, no settings, no text
+# input, no other apps. Editing this file in the repo changes nothing until the setup script is
+# re-run - that is on purpose.
+#
+#   redsurf-tv begin            # refuses if the TV is asleep or in use; starts the remote-watch
+#   redsurf-tv key DPAD_DOWN [settle]   redsurf-tv longpress BACK
+#   redsurf-tv nav "Live TV"    redsurf-tv focused     redsurf-tv relaunch    redsurf-tv front
+#   redsurf-tv clearlogs        redsurf-tv logs        redsurf-tv shot        redsurf-tv version
+#   redsurf-tv gfx reset|dump   redsurf-tv compile     redsurf-tv end
+#
+# After `begin`, every command that presses a key refuses once a person has used the real remote.
+set -u
+export HOME=/Users/admin PATH=/usr/bin:/bin:/usr/sbin:/sbin
+ADBBIN=/Users/admin/Library/Android/sdk/platform-tools/adb
+PKG=com.redsurf.tv
+OUT=/Users/Shared/redsurf-tv
+HUMAN_LOG=/data/local/tmp/redsurf-human.log
+LOG_TAGS='SettingsScreen|PlayerScreen|LiveTvScreen|MainViewModel|PlayerHost|GroupsColumn|ChannelsColumn|AppShell|RedSurf'
+
+die() { echo "redsurf-tv: $*" >&2; exit 2; }
+D="$("$ADBBIN" devices 2>/dev/null | awk -F'\t' '($1 ~ /^adb-0C101HFDD16JPN.*_adb-tls-connect/ || $1=="192.172.7.160:35631") && $2=="device"{print $1; exit}')"
+[ -n "$D" ] || die "TV not connected (ask the lead)"
+ADB() { "$ADBBIN" -s "$D" "$@"; }
+
+human_pressed() {
+  local n; n=$(ADB shell "wc -c < $HUMAN_LOG 2>/dev/null" | tr -dc 0-9)
+  [ "${n:-0}" -gt 0 ]
+}
+guard() {
+  ADB shell "[ -f $HUMAN_LOG ]" || die "run 'redsurf-tv begin' first"
+  human_pressed && die "STOP: someone used the real remote - the TV is in use. End the task and report."
+  in_front || die "RedSurf is not in front - not pressing anything"
+}
+in_front() {
+  # mCurrentFocus is null for a moment while windows change (relaunch, dialogs) - retry briefly.
+  local f i
+  for i in 1 2 3 4; do
+    f=$(ADB shell dumpsys window | grep mCurrentFocus)
+    case "$f" in *"=null"*) sleep 1 ;; *) break ;; esac
+  done
+  case "$f" in *"$PKG"*) return 0 ;; esac
+  echo "not in front: $f"; return 1
+}
+settle() {
+  local s="${1:-0.5}"
+  [[ "$s" =~ ^[0-4](\.[0-9])?$ ]] || die "settle must be 0-4.9 seconds"
+  sleep "$s"
+}
+press() { ADB shell input keyevent "KEYCODE_$1"; }
+
+focused() {
+  local tmp; tmp=$(mktemp -t wd)
+  ADB shell rm -f /sdcard/window_dump.xml
+  ADB shell uiautomator dump /sdcard/window_dump.xml >/dev/null 2>&1
+  ADB pull /sdcard/window_dump.xml "$tmp" >/dev/null 2>&1
+  [ -s "$tmp" ] || { rm -f "$tmp"; echo 'focused: uiautomator dump failed (no fresh dump)'; return 1; }
+  /usr/bin/python3 -I - "$tmp" <<'PY'
+import re, sys
+data = open(sys.argv[1]).read()
+fb = None; own = None
+for m in re.finditer(r'<node ([^>]*)/?>', data):
+    if 'focused="true"' in m.group(1):
+        fb = re.search(r'bounds="([^"]*)"', m.group(1)).group(1)
+        om = re.search(r'content-desc="([^"]+)"', m.group(1)) or re.search(r' text="([^"]+)"', m.group(1))
+        own = om.group(1) if om else None
+if not fb:
+    print('no focused node found'); raise SystemExit
+x1,y1,x2,y2 = [int(v) for v in re.findall(r'-?\d+', fb)]
+best=None; bestd=1e9
+for m in re.finditer(r'<node [^>]*?(?:text|content-desc)="([^"]+)"[^>]*bounds="([^"]*)"', data):
+    text, b = m.groups()
+    if not text.strip(): continue
+    bx1,by1,bx2,by2 = [int(v) for v in re.findall(r'-?\d+', b)]
+    d = (((bx1+bx2)/2-(x1+x2)/2)**2+((by1+by2)/2-(y1+y2)/2)**2)**0.5
+    if d < bestd: bestd=d; best=text
+huge = (x2-x1) > 1000 and (y2-y1) > 500
+if own: best = own
+print('focused bounds=%s nearest_text=%r%s' % (fb, best, '  (huge bounds - label unreliable)' if huge and not own else ''))
+PY
+  rm -f "$tmp"
+}
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  begin)
+    ADB shell dumpsys power | grep -q "mWakefulness=Asleep" && die "TV is asleep - not waking it. Stop and report."
+    f=$(ADB shell dumpsys window | grep mCurrentFocus)
+    case "$f" in *"$PKG"*|*com.spocky.projengmenu*) ;; *) die "TV in use: $f";; esac
+    ADB shell dumpsys media_session | grep -q "state=3" && ! echo "$f" | grep -q "$PKG" && die "TV in use: media playing"
+    ADB shell "pkill -x getevent ; : > $HUMAN_LOG; nohup getevent -q > $HUMAN_LOG 2>/dev/null &" >/dev/null 2>&1
+    echo "ok: TV free, watching the real remote" ;;
+  end)
+    ADB shell "pkill -x getevent; rm -f $HUMAN_LOG" >/dev/null 2>&1; echo "ok: ended" ;;
+  key)
+    k="${1:-}"
+    case "$k" in
+      DPAD_UP|DPAD_DOWN|DPAD_LEFT|DPAD_RIGHT|DPAD_CENTER|BACK|ENTER|MENU|INFO|GUIDE|SEARCH|\
+      CHANNEL_UP|CHANNEL_DOWN|MEDIA_PLAY_PAUSE|[0-9]) ;;
+      *) die "key not allowed: $k" ;;
+    esac
+    guard; press "$k"; settle "${2:-0.5}" ;;
+  longpress)
+    case "${1:-}" in BACK|DPAD_CENTER) ;; *) die "longpress allows BACK or DPAD_CENTER" ;; esac
+    guard; ADB shell input keyevent --longpress "KEYCODE_$1"; settle "${2:-1}" ;;
+  nav)
+    target="${1:-}"
+    case "$target" in Home|"Live TV"|Movies|Series|Search|Settings) ;; *) die "nav target must be a pill name" ;; esac
+    guard
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+      info=$(focused); y=$(echo "$info" | sed -E 's/.*bounds=\[[0-9]+,([0-9]+)\].*/\1/')
+      [[ "$y" =~ ^[0-9]+$ ]] && (( y < 140 )) && break
+      guard; press DPAD_UP; sleep 0.5
+    done
+    found=0
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+      info=$(focused)
+      [[ "$info" == *"'$target'"* ]] && { found=1; break; }
+      guard
+      if (( i <= 7 )); then press DPAD_RIGHT; else press DPAD_LEFT; fi; sleep 0.4
+    done
+    echo "$info"
+    (( found )) || die "'$target' not reached - no OK sent"
+    guard; press DPAD_CENTER; sleep 1 ;;
+  focused) focused ;;
+  front) in_front && echo "ok: RedSurf in front" ;;
+  relaunch)
+    ADB shell "[ -f $HUMAN_LOG ]" || die "run 'redsurf-tv begin' first"
+    human_pressed && die "STOP: someone used the real remote - the TV is in use."
+    ADB shell am force-stop "$PKG"; ADB shell am start -n "$PKG/.MainActivity" >/dev/null; sleep 5
+    echo "ok: relaunched" ;;
+  clearlogs) ADB logcat -c; echo "ok" ;;
+  logs) ADB logcat -d 2>&1 | grep -E "$LOG_TAGS" | tail -n 300 ;;
+  shot)
+    mkdir -p "$OUT"; chmod 755 "$OUT"
+    p="$OUT/shot-$(date +%Y%m%d-%H%M%S).png"
+    ADB exec-out screencap -p > "$p" && chmod 644 "$p" && echo "$p" ;;
+  version) ADB shell dumpsys package "$PKG" | grep -E "versionName|versionCode" | head -2 ;;
+  gfx)
+    case "${1:-}" in
+      reset) ADB shell dumpsys gfxinfo "$PKG" reset >/dev/null; echo "ok: frame stats reset" ;;
+      dump) ADB shell dumpsys gfxinfo "$PKG" | grep -E "Total frames|Janky frames|percentile|Number " ;;
+      *) die "gfx reset|dump" ;;
+    esac ;;
+  compile) ADB shell cmd package compile -m speed-profile -f "$PKG" >/dev/null && echo "ok: compiled" ;;
+  *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
