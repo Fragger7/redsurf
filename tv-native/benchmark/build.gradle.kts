@@ -28,6 +28,14 @@ baselineProfile {
     useConnectedDevices = true
 }
 
+// The baselineprofile plugin wires the on-device run into `:benchmark:assemble`, and on 2026-10-29
+// that run uninstalled the app from the family TV. Anything that talks to a device needs an explicit
+// `-Predsurf.deviceRun=true` (e.g. `./gradlew :app:generateBaselineProfile -Predsurf.deviceRun=true`).
+val deviceRunAllowed = providers.gradleProperty("redsurf.deviceRun").orNull == "true"
+tasks.matching { it.name.startsWith("connected") || it.name.startsWith("collect") }.configureEach {
+    onlyIf("needs -Predsurf.deviceRun=true") { deviceRunAllowed }
+}
+
 dependencies {
     implementation("androidx.test.ext:junit:1.2.1")
     implementation("androidx.test.uiautomator:uiautomator:2.3.0")
