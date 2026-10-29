@@ -30,13 +30,16 @@ earlier agents reported hollow work as done. In your report, use only these word
 
 ## 3. Build and test (copy exactly)
 
-Each shell command runs in a fresh process, so set the environment in the same command:
+Each shell command may run in a fresh process, so run each one whole, from the worktree root:
 
 ```bash
-export JAVA_HOME="$HOME/.local/opt/jdk17/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk"
-cd tv-native && ./gradlew :app:compileDebugKotlin        # compile check
-cd tv-native && ./gradlew :app:testDebugUnitTest         # unit tests
+export JAVA_HOME="$HOME/.local/opt/jdk17/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk"; cd tv-native && ./gradlew :app:compileDebugKotlin   # compile check
+export JAVA_HOME="$HOME/.local/opt/jdk17/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk"; cd tv-native && ./gradlew :app:testDebugUnitTest    # unit tests
 ```
+
+Test counts: `BUILD SUCCESSFUL` alone doesn't give them - read
+`tv-native/app/build/reports/tests/testDebugUnitTest/index.html` (or the XML in
+`app/build/test-results/testDebugUnitTest/`).
 
 A cold build takes a few minutes; wait for it. Record the last lines of the output in your report.
 
@@ -90,3 +93,8 @@ a false claim (saying something works that did not, or hiding a failure).
 | 4 | Draft task files for the lead to edit and approve | Lead approves |
 
 Current level: **1** (set by the lead - only the lead changes this line).
+
+## 9. Lead's log of your work (lead edits only)
+
+- 001 onboarding (2026-10-28): clean. Only the allowed files, honest report, 73/73 tests
+  re-checked by the lead and matching. The command-block bug in section 3 was the lead's.

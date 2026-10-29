@@ -12,12 +12,11 @@ Use this skill whenever you need to compile-check Kotlin code or run JVM unit te
 
 ## Exact Commands
 
-Set the environment and run Gradle from `tv-native/` in each shell process:
+Run each line whole, from the worktree root (each shell process may be fresh):
 
 ```bash
-export JAVA_HOME="$HOME/.local/opt/jdk17/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk"
-cd tv-native && ./gradlew :app:compileDebugKotlin        # compile check
-cd tv-native && ./gradlew :app:testDebugUnitTest         # unit tests
+export JAVA_HOME="$HOME/.local/opt/jdk17/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk"; cd tv-native && ./gradlew :app:compileDebugKotlin   # compile check
+export JAVA_HOME="$HOME/.local/opt/jdk17/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk"; cd tv-native && ./gradlew :app:testDebugUnitTest    # unit tests
 ```
 
 ## Cold Build Duration
