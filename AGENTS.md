@@ -1,5 +1,8 @@
 # Agent instructions — RedSurf
 
+> **Gemini / Antigravity: stop here and follow `GEMINI.md`.** It overrides this file for you; the
+> permissions below (pushing `main`, the TV, merging) are Claude's, not yours.
+
 RedSurf is a **TiViMate-grade IPTV player for Android TV**, built for one family's own use, with a
 free-tier cloud account for managing playlists. Native Kotlin + Compose for TV in `tv-native/`;
 a Next.js web portal at the repo root.

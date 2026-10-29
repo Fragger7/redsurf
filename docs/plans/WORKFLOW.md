@@ -214,8 +214,14 @@ little hands-on building as possible. Builders execute:
 
 - **Sonnet subagents** - summoned by the lead only for token-heavy building, one brief per call,
   written from `BUILDER_BRIEF_TEMPLATE.md`. Work on `main` in the normal checkout.
-- **Gemini Flash in Antigravity** - a new hire on a trust ladder (`GEMINI.md`, once written).
-  Works only in its own worktree on `agy/*` branches; never pushes `main`.
+- **Gemini Flash in Antigravity** - a new hire on a trust ladder (`GEMINI.md`, the level lives
+  there). Works only in its worktree `~/Development/Claude/RedSurf-agy` (marked
+  `.builder-worktree`) on `agy/*` branches; never pushes `main`. Tasks: `docs/agy/tasks/NNN-*.md`,
+  one at a time, report at the bottom of each. Lead review: `git log origin/main..origin/agy/<x>`,
+  read the diff, re-run build + tests, then merge or delete the branch.
+- **Disk hygiene:** after a merged/rejected Gemini branch, delete it (local + remote). The
+  worktree's `tv-native/app/build` can be wiped any time (`./gradlew clean`); never delete the
+  worktree folder with `rm` - use `git worktree remove`.
 
 Rules for both:
 1. A builder executes a brief; a gap in the brief is a **stop and report**, never a guess.
