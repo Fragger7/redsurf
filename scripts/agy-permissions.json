@@ -1,0 +1,46 @@
+{
+    "permissions": {
+        "allow": [
+            "read_file(/Users/agy/RedSurf-agy)",
+            "read_file(/Users/Shared/redsurf-tv)",
+            "write_file(/Users/agy/RedSurf-agy)",
+            "command(export)",
+            "command(cd)",
+            "command(./gradlew)",
+            "command(git)",
+            "command(redsurf-tv)",
+            "command(sleep)",
+            "command(ls)",
+            "command(cat)",
+            "command(head)",
+            "command(tail)",
+            "command(grep)",
+            "command(find)",
+            "command(wc)",
+            "command(diff)",
+            "command(pwd)",
+            "command(echo)"
+        ],
+        "deny": [
+            "command(sudo)",
+            "command(adb)",
+            "command(rm -rf)",
+            "command(curl)",
+            "command(wget)",
+            "command(brew)",
+            "command(npm)",
+            "command(pip)",
+            "command(git push)",
+            "command(git config)",
+            "command(git remote)",
+            "command(regex:.*git .*(--force|--no-verify).*)",
+            "command(regex:.*(assembleRelease|bundleRelease|connected|:benchmark|deviceRun|BaselineProfile|uninstall|installDebug|installRelease).*)",
+            "read_file(/Users/agy/.redsurf)",
+            "write_file(/Users/agy/RedSurf-agy/.github)",
+            "write_file(/Users/agy/RedSurf-agy/.githooks)",
+            "write_file(/Users/agy/RedSurf-agy/GEMINI.md)",
+            "write_file(/Users/agy/RedSurf-agy/AGENTS.md)"
+        ],
+        "ask": []
+    }
+}
