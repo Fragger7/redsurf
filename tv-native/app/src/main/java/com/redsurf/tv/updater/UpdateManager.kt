@@ -203,6 +203,8 @@ object UpdateManager {
                         }
                     }
                     PackageInstaller.STATUS_SUCCESS -> ctx.unregisterReceiver(this)
+                    // The user pressed Cancel: don't put a second installer in front of them.
+                    PackageInstaller.STATUS_FAILURE_ABORTED -> ctx.unregisterReceiver(this)
                     else -> {
                         ctx.unregisterReceiver(this)
                         Log.w(TAG, "session install failed (status=$status), falling back to ACTION_VIEW")
