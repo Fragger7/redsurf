@@ -37,7 +37,7 @@ echo "ok"
 step "3/6 TV wrapper + screenshot folder"
 rm -f /usr/local/libexec/redsurf-tv
 rmdir /usr/local/libexec 2>/dev/null || true    # only if empty - it didn't exist before setup
-rm -rf /Users/Shared/redsurf-tv
+rm -rf /Users/Shared/redsurf-tv /Users/Shared/agy-logs
 echo "ok"
 
 step "4/6 user '$U' and its home"
