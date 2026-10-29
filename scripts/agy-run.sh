@@ -35,4 +35,9 @@ as_agy sh -c "echo '=== $(date '+%F %T') start $task ${sandbox:-(tv)} ===' >> '$
 # caffeinate keeps the Mac awake only while this run lasts.
 caffeinate -is sudo -n -u agy -H sh -c "cd '$CLONE' && exec '$AGY' -p 'You are the builder. Follow GEMINI.md. Do exactly the task in docs/agy/tasks/$task.md (git fetch origin first - the file is on origin/main). Do no other task.' --model gemini-3.8-flash-high $sandbox --print-timeout 25m >> '$log' 2>&1"
 rc=$?
+# agy exits 0 even when a tool was auto-denied and nothing ran - treat that as a failure.
+if [ $rc = 0 ] && as_agy tail -n 5 "$log" | grep -q 'no output produced\|auto-denied'; then
+  echo "agy-run: a tool was auto-denied - nothing ran (see $log)" >&2; rc=3
+fi
 as_agy sh -c "echo '=== $(date '+%F %T') exit $rc $task ===' >> '$log'"
+exit $rc
