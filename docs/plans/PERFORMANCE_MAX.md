@@ -234,3 +234,8 @@ device-test sprint with a full Back/long-press-Back sweep.
 categories DOWN 30.8/23.2% p90 101/53, UP 27.1/24.3% p90 61/48 - within step 3's noise band (24-37%),
 **no clear gain**; guide DOWN 13.0/13.3% p90 34/30, UP 19.1/19.3% p90 32/31. Logcat `RedSurfDb open
 synchronous=1`. Not done: Perfetto (GC slice in key frames), the a11y-off comparison, the sync-time query.
+**Step 6 OTA path verified on device 2026-10-29 04:13:** v0.65.2/2221 -> v0.65.3/2222 through the app's
+updater (PackageInstaller session, base.apk + base.dm 484B, one system confirm); dexopt right after
+install `status=speed-profile reason=install-dm`. Fix that made it work (048cbb3): ART on SDK 34 only
+reads profile format 015 from a .dm; `scripts/make-dm.sh` now transcodes the APK's 010 profile with
+profileinstaller's own transcoder (`scripts/dm/ProfileToS.java`). Playlist intact after the update.
