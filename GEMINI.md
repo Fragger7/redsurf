@@ -94,7 +94,7 @@ a false claim (saying something works that did not, or hiding a failure).
 | 3 | ADB device checks using only scripts the lead wrote | Lead spot-checks |
 | 4 | Draft task files for the lead to edit and approve | Lead approves |
 
-Current level: **2** (set by the lead - only the lead changes this line).
+Current level: **3** (set by the lead - only the lead changes this line).
 
 ## 8a. The TV - level 3 only, and only in a TV task
 
@@ -133,3 +133,6 @@ Rules:
   82 reported (branched before 002 merged) - correct for its base. Cherry-picked.
 - 004 Search ranker (2026-10-29, L2 trial, rules not tests): clean, ~6 min. Correct tiers,
   stable tie-breaks, a direct test per rule; 97/97 on main after merge. Promoted to level 2.
+- 005 TV smoke check (2026-10-29, L3 trial): clean on the rerun (first run's report write was
+  blocked by agy's permissions - the lead's setup, not Gemini). All 12 commands in order, real
+  outputs matching the screenshots, `end` ran, TV left clean, only the task file. Promoted to level 3.

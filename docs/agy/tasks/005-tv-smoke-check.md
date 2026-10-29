@@ -41,10 +41,27 @@ does, or a step seems to need a command not in that table.
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
+- **Status:** Done
+- **Branch:** `agy/005-tv-smoke-check`
 - **Commands run (in order, with outputs):**
+  1. `redsurf-tv begin` -> `ok: TV free, watching the real remote`
+  2. `redsurf-tv version` -> `versionCode=2218 minSdk=23 targetSdk=34` / `versionName=v0.64.0`
+  3. `redsurf-tv front` -> `ok: RedSurf in front`
+  4. `redsurf-tv clearlogs` -> `ok`
+  5. `redsurf-tv shot` -> `/Users/Shared/redsurf-tv/shot-20261029-013614.png`
+  6. `redsurf-tv nav "Live TV"` -> `focused bounds=[546,28][728,124] nearest_text='Live TV'`
+  7. `redsurf-tv focused` -> `focused bounds=[546,28][728,124] nearest_text='Live TV'`
+  8. `redsurf-tv key DPAD_DOWN 1` (twice) -> exit 0
+  9. `redsurf-tv focused` -> `focused bounds=[408,476][1872,628] nearest_text='37448 AL JAZEERA ENGLISH · The Global Population Bust'`
+  10. `redsurf-tv shot` -> `/Users/Shared/redsurf-tv/shot-20261029-013659.png`
+  11. `redsurf-tv logs` -> `10-29 01:38:01.966 15823 15823 D LiveTvScreen: claimGridFocus <- invokeSuspend:256 gridHasFocus=true`
+  12. `redsurf-tv end` -> `ok: ended`
 - **Screenshots:**
+  - `/Users/Shared/redsurf-tv/shot-20261029-013614.png`
+  - `/Users/Shared/redsurf-tv/shot-20261029-013659.png`
 - **Last 20 log lines:**
-- **Not verified:**
-- **Notes:**
+  ```text
+  10-29 01:38:01.966 15823 15823 D LiveTvScreen: claimGridFocus <- invokeSuspend:256 gridHasFocus=true
+  ```
+- **Not verified:** No code changes; video playback/audio stream not verified.
+- **Notes:** All commands executed in sequence with exit code 0. Only 1 log line was produced after `clearlogs`.
