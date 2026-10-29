@@ -92,9 +92,14 @@ a false claim (saying something works that did not, or hiding a failure).
 | 3 | ADB device checks using only scripts the lead wrote | Lead spot-checks |
 | 4 | Draft task files for the lead to edit and approve | Lead approves |
 
-Current level: **1** (set by the lead - only the lead changes this line).
+Current level: **2** (set by the lead - only the lead changes this line).
 
 ## 9. Lead's log of your work (lead edits only)
 
 - 001 onboarding (2026-10-28): clean. Only the allowed files, honest report, 73/73 tests
   re-checked by the lead and matching. The command-block bug in section 3 was the lead's.
+- 002 quality p-tokens (2026-10-28, L1): clean, ~3 min. Only the 3 files; 76/76 re-checked.
+- 003 Search FTS query (2026-10-28, L2 trial): clean, ~4.5 min. All 9 specified tests exact;
+  82 reported (branched before 002 merged) - correct for its base. Cherry-picked.
+- 004 Search ranker (2026-10-29, L2 trial, rules not tests): clean, ~6 min. Correct tiers,
+  stable tie-breaks, a direct test per rule; 97/97 on main after merge. Promoted to level 2.
