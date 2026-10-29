@@ -1112,8 +1112,13 @@ fun LiveTvScreen(
                     controller = livePlayer,
                     modifier = Modifier
                         // Overlays fade in once the expand has landed (they're composed at once so
-                        // key routing and focus are unchanged).
-                        .graphicsLayer { alpha = ((expand.value - 0.85f) / 0.15f).coerceIn(0f, 1f) }
+                        // key routing and focus are unchanged). ModulateAlpha: a plain alpha layer
+                        // renders the whole window offscreen first - a 38ms GPU flush on the TV's
+                        // last expand frame (Perfetto, 2026-10-29).
+                        .graphicsLayer {
+                            alpha = ((expand.value - 0.85f) / 0.15f).coerceIn(0f, 1f)
+                            compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+                        }
                         .fillWindow(windowSize) { screenBounds?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero },
                 )
             }
