@@ -661,7 +661,7 @@ fun PlayerScreen(
                     }
                 }
             }
-        } else if (showBufferingSpinner) {
+        } else if (showBufferingSpinner && overlay != PlayerOverlay.ChannelList) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     WaveSpinner()
