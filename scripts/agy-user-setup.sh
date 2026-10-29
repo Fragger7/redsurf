@@ -3,6 +3,7 @@
 # logins or files, can't push to GitHub, and reaches the TV only through redsurf-tv's allowlist.
 #
 #   sudo scripts/agy-user-setup.sh        # run by the user, in Terminal (asks for passwords)
+#   sudo scripts/agy-user-remove.sh       # undoes all of it
 #
 # Safe to re-run: it skips what already exists, and re-installs redsurf-tv from the repo (that's
 # how a wrapper change goes live). Written by the lead, 2026-10-29.
