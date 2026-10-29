@@ -36,10 +36,10 @@ the count is not 76.
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
-- **Files changed:**
-- **Build output tail:**
-- **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+- **Status:** done
+- **Branch:** `agy/002-quality-p-tokens`
+- **Files changed:** `ChannelNameNormalizer.kt`, `ChannelNameNormalizerTest.kt`, `002-quality-p-tokens.md`
+- **Build output tail:** `> Task :app:compileDebugKotlin` / `BUILD SUCCESSFUL in 3s (18 actionable tasks: 2 executed, 16 up-to-date)`
+- **Test output tail (real counts):** `BUILD SUCCESSFUL in 5s`; index.html reports 76 tests, 0 failures, 0 ignored
+- **Not verified:** on-device channel matching or TV playback
+- **Notes:** none, instructions matched existing code exactly

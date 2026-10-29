@@ -34,6 +34,9 @@ object ChannelNameNormalizer {
         "fhd" to Quality.FHD,
         "uhd" to Quality.UHD,
         "4k" to Quality.UHD,
+        "720p" to Quality.HD,
+        "1080p" to Quality.FHD,
+        "2160p" to Quality.UHD,
     )
     private val ignoredTokens = setOf("hevc", "h265", "h264", "50fps", "60fps")
     private val flagTokens = mapOf(

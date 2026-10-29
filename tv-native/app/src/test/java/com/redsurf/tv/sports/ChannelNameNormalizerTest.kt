@@ -51,4 +51,29 @@ class ChannelNameNormalizerTest {
         assertEquals("espn", NationalNetworks.canonicalFor("ESPN"))
         assertNull(NationalNetworks.canonicalFor("NBC SPORTS PHILADELPHIA"))
     }
+
+    @Test
+    fun pTokenSetsFhd() {
+        val n = ChannelNameNormalizer.normalize("US| ESPN 1080p")
+        assertEquals("espn", n.key)
+        assertEquals(Quality.FHD, n.quality)
+    }
+
+    @Test
+    fun pTokenSetsHdAndUhd() {
+        val hd = ChannelNameNormalizer.normalize("FOX 720p")
+        assertEquals("fox", hd.key)
+        assertEquals(Quality.HD, hd.quality)
+
+        val uhd = ChannelNameNormalizer.normalize("FOX 2160p")
+        assertEquals("fox", uhd.key)
+        assertEquals(Quality.UHD, uhd.quality)
+    }
+
+    @Test
+    fun firstQualityTokenStillWins() {
+        val n = ChannelNameNormalizer.normalize("ESPN HD 1080p")
+        assertEquals("espn", n.key)
+        assertEquals(Quality.HD, n.quality)
+    }
 }
