@@ -136,6 +136,7 @@ fun SearchScreen(
     val rows = remember(results, playlistNames) { buildRows(results, playlistNames) }
     val resultsFocusRequester = remember { FocusRequester() }
     val restoreFocusRequester = remember { FocusRequester() }
+    val firstRecentFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
     LaunchedEffect(anyFocused) { onInnerFocusChanged(anyFocused) }
@@ -203,7 +204,12 @@ fun SearchScreen(
                         if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when (e.key) {
                             Key.DirectionUp -> { onEscapeUp(); true }
-                            Key.DirectionDown -> { focusManager.moveFocus(FocusDirection.Down); true }
+                            Key.DirectionDown -> {
+                                // Recents: land on the first chip, never the spatially-nearest one.
+                                if (query.isBlank() && recents.isNotEmpty()) runCatching { firstRecentFocusRequester.requestFocus() }
+                                else focusManager.moveFocus(FocusDirection.Down)
+                                true
+                            }
                             else -> false
                         }
                     },
@@ -227,7 +233,14 @@ fun SearchScreen(
         Spacer(Modifier.height(12.dp))
 
         when {
-            query.isBlank() -> RecentTiles(recents, onPick = onQueryChange, onRemove = onRemoveRecent, onClear = onClearRecents)
+            // Removing a chip or clearing tears the row down: hand focus back to the field.
+            query.isBlank() -> RecentTiles(
+                recents,
+                firstFocusRequester = firstRecentFocusRequester,
+                onPick = onQueryChange,
+                onRemove = { onRemoveRecent(it); runCatching { fieldFocusRequester.requestFocus() } },
+                onClear = { onClearRecents(); runCatching { fieldFocusRequester.requestFocus() } },
+            )
             rows.isEmpty() -> Text("No matches for \"${query.trim()}\"", style = RedSurfType.rowTitle, color = TextSecondary)
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().focusRequester(resultsFocusRequester),
@@ -324,6 +337,7 @@ private fun ResultRow(
 @Composable
 private fun RecentTiles(
     recents: List<String>,
+    firstFocusRequester: FocusRequester,
     onPick: (String) -> Unit,
     onRemove: (String) -> Unit,
     onClear: () -> Unit,
@@ -334,11 +348,13 @@ private fun RecentTiles(
     }
     Text("Recent searches", style = RedSurfType.sectionTitle, color = TextSecondary, modifier = Modifier.padding(bottom = 6.dp))
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(recents, key = { it }) { q ->
+        items(recents.size, key = { recents[it] }) { i ->
+            val q = recents[i]
             var longHandled by remember { mutableStateOf(false) }
             Surface(
                 onClick = { if (!longHandled) onPick(q) },
                 onLongClick = { longHandled = true; onRemove(q) },
+                modifier = if (i == 0) Modifier.focusRequester(firstFocusRequester) else Modifier,
                 colors = RedSurfFocus.rowColors(resting = SurfaceRaised),
                 shape = RedSurfFocus.pillShape(),
                 scale = RedSurfFocus.scale(),
