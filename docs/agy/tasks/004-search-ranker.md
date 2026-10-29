@@ -50,10 +50,10 @@ the input, do not pick one silently.
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
-- **Files changed:**
-- **Build output tail:**
-- **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+- **Status:** done
+- **Branch:** agy/004-search-ranker
+- **Files changed:** tv-native/app/src/main/java/com/redsurf/tv/search/SearchRanker.kt, tv-native/app/src/test/java/com/redsurf/tv/search/SearchRankerTest.kt, docs/agy/tasks/004-search-ranker.md
+- **Build output tail:** BUILD SUCCESSFUL in 3s (18 actionable tasks: 2 executed, 16 up-to-date)
+- **Test output tail (real counts):** BUILD SUCCESSFUL in 4s (85 tests, 0 failures, 0 ignored; SearchRankerTest: 12 tests, 0 failures)
+- **Not verified:** UI integration, database/FTS4 queries, real TV device behavior
+- **Notes:** None
