@@ -27,6 +27,16 @@ were false. It is kept for provenance only.
 
 ## ▶ RESUME HERE - unattended run 2026-10-27 (02:00-06:00 CDT, stopped 14:35)
 
+- **2026-10-29 run (to 06:05, hard stop):** built Search, ESPN fetcher, Philly aliases, Perf Max
+  steps 5-7 + 6's .dm OTA (verified on device). **An agent's `:benchmark:assemble` uninstalled the
+  app at 02:17 - family playlists lost, must be re-added**; guards now in `gradle.properties` and
+  the benchmark module (`-Predsurf.deviceRun=true`). Search Back/breadcrumb fixes verified on
+  v0.65.7; spinner-over-channel-list (b4b3a3e) and recent-chip focus (bb0cdf4) builds clean, not
+  OTA-verified. Numbers in `SPRINT_LOG.md` 2026-10-29. Category jank still 15-27% (target <=12%);
+  the Chromecast's HDCP uevent storm (panel in standby) eats ~1 core - re-measure with the panel on
+  before the step 8 verdict. **Next:** OTA-verify b4b3a3e/bb0cdf4, recent-chip pick/long-press,
+  the VERIFY-PENDING list, Sports Hub S0 mock-ups, step 8 gate.
+
 - **Done:** OTA fix (CI versionCode = 1000 + run number); polish sprint built (VERIFY-PENDING,
   incl. stats-for-nerds overlay); Perf Max steps 1-3 (overdraw cut, surf memo, drawn time header,
   lean rows, slots off the main thread) - per-step numbers in `SPRINT_LOG.md` 2026-10-27.
