@@ -22,11 +22,12 @@ earlier agents reported hollow work as done. In your report, use only these word
 
 ## 2. Where you work
 
-- You work **only** in this folder (the worktree `RedSurf-agy`), never in `../RedSurf`.
+- You are the macOS user `agy`. You work **only** in your own clone, `/Users/agy/RedSurf-agy`.
+  You cannot see the lead's files - that is on purpose; don't look for them.
 - Start every task on a fresh branch from the latest `main`:
   `git fetch origin && git switch -c agy/NNN-short-name origin/main`
-- Commit with a clear message. Push **only your branch**: `git push -u origin agy/NNN-short-name`.
-  A git hook blocks any other push - that is intended; do not work around it.
+- **Commit, don't push.** You have no GitHub login; the lead fetches your branch from your clone.
+  Never try to set up a login, a token, or another remote.
 
 ## 3. Build and test (copy exactly)
 
@@ -45,9 +46,10 @@ A cold build takes a few minutes; wait for it. Record the last lines of the outp
 
 ## 4. Never do these (your permissions at level 1)
 
-1. Never `git push` anything except your own `agy/*` branch. Never `--force`, never `--no-verify`.
+1. Never `git push`. Never `--force`, never `--no-verify`.
 2. Never edit, merge into, rebase, or reset `main`. Never delete branches you did not create.
-3. Never touch `adb`, the TV, or any device. Never run `assembleRelease` or anything with "sign".
+3. Never touch `adb` or any device directly. The TV only through `redsurf-tv` (section 8a), and only
+   when your task file says it is a TV task. Never run `assembleRelease` or anything with "sign".
 4. Never read, copy, print or edit: `~/.redsurf/`, `*.jks`, `*.keystore`, `signing.properties`,
    `.env*`, `*.dmg`. Never put secrets, passwords or tokens into any file, commit, or message.
 5. Never edit: `.githooks/`, `.github/`, `.gitignore`, `git config`, `GEMINI.md`, `AGENTS.md`,
@@ -71,7 +73,7 @@ Stopping early with a clear report is **good work**. A wrong guess costs the lea
 ## 6. Your report
 
 Fill in the **"Builder report"** section at the bottom of your task file (the only doc you may
-edit), commit it on your branch, push the branch. Under 15 lines:
+edit) and commit it on your branch (no push). Under 15 lines:
 done / stopped (why) · branch name · files changed · build + test output tail (real counts) ·
 what is NOT verified · anything that looked wrong or confusing in the task.
 
@@ -93,6 +95,34 @@ a false claim (saying something works that did not, or hiding a failure).
 | 4 | Draft task files for the lead to edit and approve | Lead approves |
 
 Current level: **2** (set by the lead - only the lead changes this line).
+
+## 8a. The TV - level 3 only, and only in a TV task
+
+The family's TV is shared. People watch it. `redsurf-tv` is your only way to it; it refuses
+anything outside its list. Copy these exactly:
+
+| Command | Does |
+|---|---|
+| `redsurf-tv begin` | First, always. Refuses if the TV is asleep or someone is using it. |
+| `redsurf-tv key DPAD_DOWN [secs]` | One key press, then waits (default 0.5s, max 4.9). Keys: `DPAD_UP/DOWN/LEFT/RIGHT/CENTER`, `BACK`, `ENTER`, `MENU`, `INFO`, `GUIDE`, `SEARCH`, `CHANNEL_UP/DOWN`, `MEDIA_PLAY_PAUSE`, `0`-`9` |
+| `redsurf-tv longpress BACK` | Long-press `BACK` or `DPAD_CENTER` only |
+| `redsurf-tv nav "Live TV"` | Goes to a nav pill: `Home`, `Live TV`, `Movies`, `Series`, `Search`, `Settings` |
+| `redsurf-tv focused` | What has focus now (bounds + nearest text) |
+| `redsurf-tv front` | Is RedSurf in front? |
+| `redsurf-tv relaunch` | Force-stops and restarts RedSurf |
+| `redsurf-tv clearlogs` / `logs` | Clear / print RedSurf's log lines (last 300) |
+| `redsurf-tv shot` | Screenshot; prints its path under `/Users/Shared/redsurf-tv/` |
+| `redsurf-tv version` | Installed versionName / versionCode |
+| `redsurf-tv gfx reset` / `gfx dump` | Frame stats: reset, then print jank numbers |
+| `redsurf-tv compile` | Re-compiles the app's code on the TV (before frame measurements) |
+| `redsurf-tv end` | Last, always - even when you stop early |
+
+Rules:
+- If any command prints **`STOP`**, **`TV in use`** or **`asleep`**: run `redsurf-tv end`, write
+  your report, end the session. Never retry, never wait it out.
+- Do only the steps your task file lists. Never open Settings rows, remove or edit playlists, clear
+  history, or change any setting on the TV, even if a key could reach it.
+- Report what you observed (the command output), not what you expected.
 
 ## 9. Lead's log of your work (lead edits only)
 
