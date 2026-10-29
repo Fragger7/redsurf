@@ -33,4 +33,10 @@ tail), the environment paths in `GEMINI.md` don't exist, or you are unsure of th
 
 ## Builder report
 
-_(Gemini fills this in.)_
+- **Status:** done
+- **Branch:** `agy/001-onboarding`
+- **Files changed:** `.agents/skills/redsurf-build-test/SKILL.md`, `docs/agy/tasks/001-onboarding.md`
+- **Build output tail:** `BUILD SUCCESSFUL in 1m 3s` (18 actionable tasks: 18 executed)
+- **Test output tail:** `BUILD SUCCESSFUL in 7s` (73 tests, 0 failures, 0 ignored)
+- **Not verified:** runtime behavior, TV installation, or signing (per Level 1 constraints)
+- **Notes:** setup verified clean; cold build took ~1m 3s; Antigravity workspace skill added.
