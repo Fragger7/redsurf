@@ -28,6 +28,13 @@ fixed the same day (`cp .env.example .env.local && npm run build`).
   playlist, one settings doc), then only what changes - ~100 reads/TV/day, so the read budget
   covers hundreds of TVs. Writes are human-paced (a favourite, a setting). Keep each playlist's
   groups in one document (well under the 1 MiB doc limit even for thousands of categories).
+- **Free-tier fit (2026-10-31):** fits Spark - only definitions, one encrypted groups doc per
+  playlist, favourites and settings go to the cloud; classification runs on the clients. Two needs
+  outside Firestore: admin creating accounts (Admin SDK) and the 3-playlist cap - use a Vercel
+  route holding the service-account key in Vercel env (Hobby is non-commercial; Pro if ever sold),
+  or a rules counter doc for the cap. Cloud Functions need Blaze (pay-as-you-go, same free quota,
+  card on file) - avoid. On Spark, an exceeded quota stops service until the daily reset; nothing
+  is billed. Confirm current quotas on Firebase's pricing page at C0.
 - **Packages (user request, 2026-10-31) - feasible, planned with Manage Groups.** Toggle groups of
   categories at once: by country ("US"/"United States" enables only US categories) and by genre
   (Sports, News, Movies, 24/7, Kids, Adults/XXX); a master all-on/all-off; sorting (provider
