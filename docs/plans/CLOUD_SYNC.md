@@ -39,8 +39,16 @@ fixed the same day (`cp .env.example .env.local && npm run build`).
   - The portal never sees channel data, so the TV uploads each playlist's **category names only**
     (one document per playlist, encrypted like the credentials) for the portal to show and classify.
     The portal never calls the provider (that would need plain credentials on a server).
-  - Adults/XXX also ties to the parental PIN.
-  - Same screen on the TV (Manage Groups) and the portal; study TiviMate's Manage Groups first.
+  - **No default filtering of Adults/XXX (user, 2026-10-31).** It is a package like any other, on
+    by default. Once parental controls are fully working, users may choose to hide/lock it - never
+    applied off the bat.
+  - **Surfaces (2026-10-31, proposed):** the portal gets the full editor (rules, alias table,
+    sorting, bulk edits). The TV gets the same model with a simple surface - Manage Groups opens
+    on a short Packages block (master, Countries, Genres - a few dozen toggles at most), then the
+    per-category list. Packages are most valuable on the TV, where toggling hundreds of categories
+    one by one is painful, and the TV version also works for TVs with no account. Packages are
+    per playlist (category names differ between providers).
+  - Study TiviMate's Manage Groups first.
 
 - **New TV-side need from the same day's feel-check:** a real Manage Groups screen
   (TESTING_OUTSTANDING.md section O) - build it local-first, then it rides the sync.
