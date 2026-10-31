@@ -22,7 +22,7 @@ The tests are already written: they are the spec. Your job is the implementation
        - For each `(game, ranked)` in `resolvedGames`:
          - Determine if home or away is followed: `TeamDirectory.isFollowed(game.league, game.homeTeam, effectiveFollowed) || TeamDirectory.isFollowed(game.league, game.awayTeam, effectiveFollowed)`.
          - Lookup logos via `TeamDirectory.logoUrl(game.league, game.homeTeam)` and `awayTeam`.
-         - Create `SportsGameCard(game = game, topSource = ranked.topSource, sourceCount = ranked.sources.size, isConfident = ranked.isConfident, isFollowedTeam = isFollowed, homeLogoUrl = homeLogo, awayLogoUrl = awayLogo)`.
+         - Create `SportsGameCard(game = game, topSource = ranked.best, sourceCount = ranked.sources.size, isConfident = ranked.isConfident, isFollowedTeam = isFollowed, homeLogoUrl = homeLogo, awayLogoUrl = awayLogo)`.
        - Section sorting comparator:
          1. Games currently playing (`GameState.IN`) first.
          2. Pre-game fixtures (`GameState.PRE`) ordered by `kickoffMillis` ascending.
