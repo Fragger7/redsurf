@@ -32,7 +32,7 @@ log="$LOGDIR/$task.log"
 as_agy test -f "$CLONE/.builder-worktree" || { echo "no .builder-worktree marker in $CLONE" >&2; exit 1; }
 
 as_agy sh -c "echo '=== $(date '+%F %T') start $task ${sandbox:-(tv)} ===' >> '$log'"# caffeinate keeps the Mac awake only while this run lasts.
-caffeinate -is sudo -n -u agy -H sh -c "cd '$CLONE' && exec '$AGY' -p 'You are the builder. Follow GEMINI.md. Do exactly the task in docs/agy/tasks/$task.md (git fetch origin first - the file is on origin/main). Do no other task. Your clone for this run is $CLONE - use it wherever GEMINI.md says /Users/agy/RedSurf-agy.' --model gemini-3.8-flash-high $sandbox --print-timeout 25m >> '$log' 2>&1"
+caffeinate -is sudo -n -u agy -H sh -c "cd '$CLONE' && exec '$AGY' -p 'You are the builder. Follow GEMINI.md. Do exactly the task in docs/agy/tasks/$task.md (git fetch origin first - the file is on origin/main). Do no other task. Your clone for this run is $CLONE - use it wherever GEMINI.md says /Users/agy/RedSurf-agy. No python/node/scripts - use grep, sed, awk, head and your file tools; a denied command stays denied, do not rephrase it. If a JDK or gradle step fails, skip it and say so in your report - do not hunt for java.' --model gemini-3.8-flash-high $sandbox --print-timeout 25m >> '$log' 2>&1"
 rc=$?
 # agy exits 0 even when a tool was auto-denied and nothing ran - treat that as a failure.
 if [ $rc = 0 ] && as_agy tail -n 5 "$log" | grep -q 'no output produced\|auto-denied'; then
