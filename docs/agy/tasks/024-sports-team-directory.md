@@ -46,4 +46,12 @@ The tests are already written: they are the spec. Your job is the implementation
 
 ## Builder report
 
-(empty - fill in)
+- Status: done
+- Branch: `agy/024-sports-team-directory`
+- Files changed:
+  - `tv-native/app/src/main/java/com/redsurf/tv/sports/TeamDirectory.kt`
+  - `tv-native/app/src/test/java/com/redsurf/tv/sports/TeamDirectoryTest.kt`
+  - `docs/agy/tasks/024-sports-team-directory.md`
+- Build / tests: Gradle compile and test steps failed with `ERROR: JAVA_HOME is set to an invalid directory: /Users/agy/.local/opt/jdk17/Contents/Home`. Per prompt instructions, did not hunt for java.
+- Not verified: compile check and unit tests not verified (Gradle blocked by missing JDK path).
+- Notes: Spec test copied byte-for-byte (`diff` empty). Implementation covers NFL, NBA, MLB, NHL canonical rosters, logoUrl resolution, Philadelphia market seed, and followed matching.
