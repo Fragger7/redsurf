@@ -40,3 +40,10 @@ Vertical stack of typed sections, each with a left label; order: Movies, Shows, 
 ## Takeaways for RedSurf (partly guesses)
 - Live-as-you-type, no submit; grouped typed sections with playlist chips per section; history chips when empty; red-fill focus on chips, lifted lighter cards for results.
 - TiviMate loses the search results on Back from playback; RedSurf can do better by restoring query, section and the focused card (guess/opportunity, consistent with AGENTS.md focus rules).
+
+## Follow-up 2026-10-31 03:00
+Package is `ar.tvplayer.tv`. Screenshots 19-25 in tm-search/. Time limit meant only part was done.
+- OBSERVED: with `espn` typed (BACK hid keyboard), DOWN x3 lands on first Movies card, further DOWN reaches Shows, then Channels (chips = per-playlist tabs, cards logo/name/current programme e.g. "US: ESPN HD - College Football"). A Programs section (channel tile + title/time + detail pane) follows.
+- NOT DONE (time): the "single OK on a live ESPN channel, preview?" test. The one OK I sent landed on a no-EPG ":ESPN+ 100" card of another playlist (focus moved to the first card of the next chip tab after DOWN) and showed no preview/navigation after 4s (23-ok1.png). Still unknown whether a live channel previews. Earlier study: first OK also did nothing visible, second OK went fullscreen.
+- OBSERVED: long-press OK on a channel card opens a small dark popup menu anchored under the card with exactly 2 rows: "Add to Favorites" (focused, red-brown fill) and "Open in external player" (24-longpress.png). BACK closed it with nothing chosen; search screen and focus on the same card unchanged (25-afterback.png).
+- Suggested for RedSurf (guess): long-press OK menu on search results mirroring this (favourite + external player).
