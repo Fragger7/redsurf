@@ -38,10 +38,18 @@ an existing file - report the test name and why; do not edit the test or pick a 
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
+- **Status:** done
+- **Branch:** agy/009-epg-team-match
 - **Files changed:**
+  - `tv-native/app/src/main/java/com/redsurf/tv/sports/EpgTeamMatch.kt`
+  - `tv-native/app/src/test/java/com/redsurf/tv/sports/EpgTeamMatchTest.kt`
+  - `docs/agy/tasks/009-epg-team-match.md`
 - **Build output tail:**
+  `> Task :app:compileDebugKotlin`
+  `BUILD SUCCESSFUL in 5s`
 - **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+  `> Task :app:testDebugUnitTest`
+  `BUILD SUCCESSFUL in 6s`
+  Report: 142 tests, 0 failures, 0 ignored (`EpgTeamMatchTest`: 13 tests, 0 failures, 0 ignored). Tests pass.
+- **Not verified:** Device runtime / UI integration (pure logic task).
+- **Notes:** None.
