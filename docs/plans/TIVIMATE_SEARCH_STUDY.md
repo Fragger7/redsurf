@@ -47,3 +47,15 @@ Package is `ar.tvplayer.tv`. Screenshots 19-25 in tm-search/. Time limit meant o
 - NOT DONE (time): the "single OK on a live ESPN channel, preview?" test. The one OK I sent landed on a no-EPG ":ESPN+ 100" card of another playlist (focus moved to the first card of the next chip tab after DOWN) and showed no preview/navigation after 4s (23-ok1.png). Still unknown whether a live channel previews. Earlier study: first OK also did nothing visible, second OK went fullscreen.
 - OBSERVED: long-press OK on a channel card opens a small dark popup menu anchored under the card with exactly 2 rows: "Add to Favorites" (focused, red-brown fill) and "Open in external player" (24-longpress.png). BACK closed it with nothing chosen; search screen and focus on the same card unchanged (25-afterback.png).
 - Suggested for RedSurf (guess): long-press OK menu on search results mirroring this (favourite + external player).
+
+## Search setting found in TiviMate's code (2026-10-31 03:02, from the decompiled APK in ~/Development/rea-lab)
+
+- TiviMate's strings include **"Stay on search screen when switching channels"** (`R.string.ci`, 0x7f130238), next to
+  "Show search history" (0x7f130236). This is the setting the user means: with it on, picking a channel from search
+  plays it while the search screen stays up - which explains why the study's OK presses (setting presumably off on
+  this TV) did nothing or went fullscreen.
+- Only `R.java` references the id; the code that reads it is DexProtector-encrypted (decryption declined), so the
+  exact preview presentation (panel size, translucency) still needs a look with the setting switched on - the
+  user's call whether to flip it on their TiviMate for the next study.
+- For RedSurf's Search brief: a Settings row of the same name (default to match TiviMate, check its default when
+  it's switched on), driving the one-OK translucent preview the user asked for.
