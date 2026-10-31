@@ -41,10 +41,10 @@ an existing file - report the test name and why; do not edit the test or pick a 
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
-- **Files changed:**
-- **Build output tail:**
-- **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+- **Status:** done
+- **Branch:** `agy/010-event-name-parser`
+- **Files changed:** `tv-native/app/src/main/java/com/redsurf/tv/sports/EventNameParser.kt`, `tv-native/app/src/test/java/com/redsurf/tv/sports/EventNameParserTest.kt`, `docs/agy/tasks/010-event-name-parser.md`
+- **Build output tail:** `BUILD SUCCESSFUL in 3s` (builds clean)
+- **Test output tail (real counts):** `BUILD SUCCESSFUL in 4s`; tests pass (146 total, 0 failures, 0 ignored; `EventNameParserTest`: 17 passed)
+- **Not verified:** device execution, integration with Sports Hub matcher (pure unit tests only)
+- **Notes:** none
