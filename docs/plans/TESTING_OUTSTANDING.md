@@ -30,6 +30,50 @@ Categories UP escaping to the nav strip early (fixed Sprint 2 #24). Section D fe
 true top), #25 (focus lands on "now"), overall sluggishness after Sprint 1, and the 2026-09-28
 Settings crash fix.
 
+## O - USER FEEL CHECK RECEIVED 2026-10-31 (v0.65.9) - do not re-ask
+- **Nav auto-hide** works; 3s is a good default. When/how it shows and how you leave it still
+  feels slightly off (may be learning the app, not a bug).
+- **BUG - category column jumps:** Back from the guide focuses the playing channel's category
+  (correct) but scrolls it to the top of the column instead of keeping its on-screen place.
+  Disorienting; scroll must not jump.
+- **Back to tab pill + exit (F17):** works, close to TiviMate (Guide 2x Back -> Live TV pill;
+  Settings 2x -> Settings pill; 3 Backs within the toast exits).
+- **Stats for nerds:** found it; redundant with the Video Info tile, and the only way out is Back,
+  which drops to Live TV (wrong). User's call: remove the tile/feature, keep Video Info, likely
+  put Video Info in the long-press OK menu; any info overlay closes on OK or one Back.
+- **Playlist page:** "horrible" - text boxes inline, the on-screen keyboard pops for every field
+  passed while scrolling to Remove. Wants TiviMate's pattern (row -> own screen with the field).
+  Missing: Expiration date, Enable/Disable, EPG sources screen, Logos priority, Catch-up settings,
+  User agent, "Xtream parameters" group (server, username, password, output format, Live TV
+  toggle, VOD toggle, expiry, max connections), Manage Groups (reorder/hide Live TV categories per
+  playlist - wanted in Cloud too). "Update channels" vs "Update EPG" unclear. Study TiviMate's
+  playlist management code/UX first.
+- **Performance:** snappy enough, jank still visible - keep working on it alongside features.
+  Preview <-> fullscreen animation works but is too abrupt - slow it "by a hair".
+- **BUG - recents:** no Clear tile visible; the last tile is cut to half width.
+- **BUG - long-press OK menu** (fullscreen) opens but doesn't stay up. Keep the feature; future
+  rows: Add to favourites, start a Multi-View group, Video Info.
+- **Buffering spinner over the channel list:** user hasn't noticed it either way.
+- **Look:** Crest a big legibility win; branding (logo, spinner) liked. Settings' red gradient
+  backdrop looks grainy/unprofessional. Grey nav strip / channel / Settings columns against the
+  black-and-white categories + preview reads TiviMate-like, not distinct or cool enough - not
+  final, but don't sink much more time into UI now.
+- **Progress:** import progress liked; wants a bar with "N of total" (channels now, VOD later).
+  EPG update indicator at the top is hard to see and shows no amount done.
+- **Search:** keyword matching fine; results presentation unpolished and inconsistent. Mic button
+  should be a branded mic icon, not a text label. Replicate TiviMate's search presentation,
+  including one-OK preview in a translucent panel while staying on results (may need a Settings
+  row).
+
+- **Decisions, same day (user answers):** category off screen (Teleport/recents/search/resume
+  into another category) -> centre it; on screen -> don't scroll. Long-press OK = TiviMate's
+  OK+DOWN tiles, stays open until a pick or Back, room for more rows. Stats for nerds removed;
+  Video Info is the one overlay - graceful exit (OK/one Back), add more useful metrics; network
+  speed must update continuously (today it's laggy). Settings backdrop: try a smooth one or leave
+  for the UI pass. TiviMate study (adb screenshots + code) OK during that sprint. Preview <->
+  fullscreen ~30% slower, user judges. **Use Gemini as much as possible - Claude allowance is the
+  bottleneck.**
+
 ## N - USER FEEL CHECK RECEIVED 2026-10-27 (installed v0.44.37/204) - do not re-ask
 - Performance generally looks better.
 - Nav strip doesn't seem to auto-hide. Confirmed in code: the 5s timer restarts on every key press and only runs on Live TV, so while browsing it never hides. Fix: hide once focus leaves the strip.

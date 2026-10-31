@@ -6,6 +6,31 @@ recommended shape, which you can also overrule. The performance salvage is at th
 (PERFORMANCE_SALVAGE.md, night 2), and the prerequisite - the web portal building locally - was
 fixed the same day (`cp .env.example .env.local && npm run build`).
 
+## 0. DECIDED - interview with the user, 2026-10-31 (supersedes the open questions in §5)
+- **D1 end-to-end** encryption **+ admin escrow**: every user's account key is also sealed to the
+  master admin's key, so the admin can read/add/fix/remove any user's playlists; Firebase/Google
+  only ever hold ciphertext.
+- **D2 live listener** (Firestore SDK; measure APK/PSS before committing, HARDWARE.md).
+- **D3:** logging in never deletes local playlists; the TV offers to move them into the account.
+- **D4:** keep the LAN phone-entry page for TVs not logged in; retire `pairingSessions`.
+- **Accounts:** no public sign-up anywhere - only the admin creates accounts (portal admin panel);
+  the app has "Log in" only. **v1 has one admin (the user)**; shape the data so a reseller tier
+  (admin > resellers > their users) can come later.
+- **Cap:** 3 cloud playlists per normal account; the admin account is unlimited. Enforce outside
+  the client (rules + a per-user counter, or a server route) - not UI-only.
+- **TV login: both** - code + QR approved on a logged-in phone (default), and email + password
+  typed on the TV (fallback; the password-derived key unwraps the account key).
+- **Also synced:** Manage Groups (per-playlist category order + hidden), favourites, app settings.
+  **Not** recents (a write per zap is the one thing that would strain the free tier).
+- **Hosting:** the portal is on Vercel.
+- **Free-tier estimate (Spark: ~1 GiB stored, ~50K reads/day, ~20K writes/day):** a TV reads
+  about ten small documents per launch (playlists, one groups doc + one favourites doc per
+  playlist, one settings doc), then only what changes - ~100 reads/TV/day, so the read budget
+  covers hundreds of TVs. Writes are human-paced (a favourite, a setting). Keep each playlist's
+  groups in one document (well under the 1 MiB doc limit even for thousands of categories).
+- **New TV-side need from the same day's feel-check:** a real Manage Groups screen
+  (TESTING_OUTSTANDING.md section O) - build it local-first, then it rides the sync.
+
 ## 1. What it is (PRODUCT_VISION.md "credential locker", AGENTS.md roadmap)
 
 An account tied to an email. The web portal adds, edits, enables and disables playlists; every
