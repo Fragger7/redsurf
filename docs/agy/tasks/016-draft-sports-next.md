@@ -14,3 +14,18 @@
 **Change exactly:** files under `docs/agy/drafts/016/` and this file's Builder report. Commit, do not push.
 
 ## Builder report
+
+- **Status:** done. Drafted tasks 018, 019, 020 and 3 spec tests under docs/agy/drafts/016/.
+- **Branch:** agy/016-draft-sports-next
+- **Files changed:**
+  - docs/agy/tasks/016-draft-sports-next.md
+  - docs/agy/drafts/016/README.md
+  - docs/agy/drafts/016/018-event-channel-match.md
+  - docs/agy/drafts/016/019-network-broadcast-match.md
+  - docs/agy/drafts/016/020-game-source-resolver.md
+  - docs/agy/drafts/016/spec/EventChannelMatchTest.kt
+  - docs/agy/drafts/016/spec/NetworkBroadcastMatchTest.kt
+  - docs/agy/drafts/016/spec/GameSourceResolverTest.kt
+- **Build / Test output:** Gradle step skipped per user instruction (JAVA_HOME invalid directory: /Users/agy/.local/opt/jdk17/Contents/Home; did not hunt for java).
+- **Not verified:** Gradle test execution of draft spec tests against stubs (skipped due to environment JAVA_HOME).
+- **Notes:** Pure Kotlin design; no production code changed.
