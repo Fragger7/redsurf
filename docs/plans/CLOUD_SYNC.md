@@ -48,6 +48,16 @@ fixed the same day (`cp .env.example .env.local && npm run build`).
     per-category list. Packages are most valuable on the TV, where toggling hundreds of categories
     one by one is painful, and the TV version also works for TVs with no account. Packages are
     per playlist (category names differ between providers).
+  - **Disabled = not stored (user, 2026-10-31).** A disabled category's channels and EPG are never
+    written to Room. Xtream: fetch the small category list, apply the rules, then fetch streams
+    only for enabled categories (per-category calls, or one bulk call filtered before insert when
+    most are enabled). M3U: the whole file still downloads and parses (one file); excluded groups
+    are skipped at insert. EPG: the XMLTV file still downloads whole; programmes for channels not
+    stored are skipped - likely the biggest win (sync time, DB size). Re-enabling triggers a fetch
+    ("Downloading N channels..."). Searches don't see disabled channels. Check how TiviMate
+    stores hidden groups before building.
+  - Wrong country/genre guesses: a one-line disclaimer on the Packages block; the per-category
+    switch fixes them.
   - Study TiviMate's Manage Groups first.
 
 - **New TV-side need from the same day's feel-check:** a real Manage Groups screen
