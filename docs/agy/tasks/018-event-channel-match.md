@@ -35,10 +35,10 @@ an existing file - report the test name and why; do not edit the test or pick a 
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
-- **Files changed:**
-- **Build output tail:**
-- **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+- **Status:** done (implementation and spec test copied; build/test skipped per instructions)
+- **Branch:** `agy/018-event-channel-match`
+- **Files changed:** `tv-native/app/src/main/java/com/redsurf/tv/sports/EventChannelMatch.kt`, `tv-native/app/src/test/java/com/redsurf/tv/sports/EventChannelMatchTest.kt`, `docs/agy/tasks/018-event-channel-match.md`
+- **Build output tail:** `ERROR: JAVA_HOME is set to an invalid directory: /Users/agy/.local/opt/jdk17/Contents/Home`
+- **Test output tail (real counts):** `ERROR: JAVA_HOME is set to an invalid directory: /Users/agy/.local/opt/jdk17/Contents/Home`
+- **Not verified:** build and unit tests (JDK/gradle step failed due to missing /Users/agy/.local/opt/jdk17/Contents/Home; skipped per user instruction)
+- **Notes:** Spec test copied byte-for-byte (`diff` empty). Implementation follows task rules exactly.
