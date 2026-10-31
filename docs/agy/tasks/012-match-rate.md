@@ -39,10 +39,17 @@ an existing file - report the test name and why; do not edit the test or pick a 
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
+- **Status:** done
+- **Branch:** `agy/012-match-rate`
 - **Files changed:**
+  - `tv-native/app/src/main/java/com/redsurf/tv/sports/MatchRate.kt`
+  - `tv-native/app/src/test/java/com/redsurf/tv/sports/MatchRateTest.kt`
+  - `docs/agy/tasks/012-match-rate.md`
 - **Build output tail:**
+  `> Task :app:compileDebugKotlin`
+  `BUILD SUCCESSFUL in 5s`
 - **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+  `BUILD SUCCESSFUL in 6s`
+  Report: 155 tests, 0 failures, 0 ignored (MatchRateTest: 9 tests, 0 failures)
+- **Not verified:** on-device execution, TV integration
+- **Notes:** byte-for-byte spec test copy verified with diff; builds clean and all tests pass.
