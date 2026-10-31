@@ -17,6 +17,8 @@
             "command(grep)",
             "command(find)",
             "command(wc)",
+            "command(cp)",
+            "command(mkdir)",
             "command(diff)",
             "command(pwd)",
             "command(echo)"
@@ -39,7 +41,17 @@
             "write_file(/Users/agy/RedSurf-agy/.github)",
             "write_file(/Users/agy/RedSurf-agy/.githooks)",
             "write_file(/Users/agy/RedSurf-agy/GEMINI.md)",
-            "write_file(/Users/agy/RedSurf-agy/AGENTS.md)"
+            "write_file(/Users/agy/RedSurf-agy/AGENTS.md)",
+            "write_file(/Users/agy/RedSurf-agy/.gitignore)",
+            "write_file(/Users/agy/RedSurf-agy/firestore.rules)",
+            "write_file(/Users/agy/RedSurf-agy/tv-native/build.gradle.kts)",
+            "write_file(/Users/agy/RedSurf-agy/tv-native/app/build.gradle.kts)",
+            "write_file(/Users/agy/RedSurf-agy/tv-native/benchmark/build.gradle.kts)",
+            "write_file(/Users/agy/RedSurf-agy/tv-native/settings.gradle.kts)",
+            "write_file(/Users/agy/RedSurf-agy/tv-native/gradle.properties)",
+            "write_file(/Users/agy/RedSurf-agy/tv-native/gradle)",
+            "write_file(/Users/agy/RedSurf-agy/.git/config)",
+            "write_file(/Users/agy/RedSurf-agy/.git/hooks)"
         ],
         "ask": []
     }

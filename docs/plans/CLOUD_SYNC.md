@@ -28,6 +28,20 @@ fixed the same day (`cp .env.example .env.local && npm run build`).
   playlist, one settings doc), then only what changes - ~100 reads/TV/day, so the read budget
   covers hundreds of TVs. Writes are human-paced (a favourite, a setting). Keep each playlist's
   groups in one document (well under the 1 MiB doc limit even for thousands of categories).
+- **Packages (user request, 2026-10-31) - feasible, planned with Manage Groups.** Toggle groups of
+  categories at once: by country ("US"/"United States" enables only US categories) and by genre
+  (Sports, News, Movies, 24/7, Kids, Adults/XXX); a master all-on/all-off; sorting (provider
+  order, A-Z, custom, enabled first). Shape:
+  - A package is a **rule**, not a saved list of category IDs - country from the category prefix
+    (`US |`, `UK:`, `CA -`; the Teleport Root Category parser already does this), genre from
+    keywords + an alias table - so categories the provider adds later classify themselves.
+  - Precedence: master toggle < packages < a per-category manual override (the override wins).
+  - The portal never sees channel data, so the TV uploads each playlist's **category names only**
+    (one document per playlist, encrypted like the credentials) for the portal to show and classify.
+    The portal never calls the provider (that would need plain credentials on a server).
+  - Adults/XXX also ties to the parental PIN.
+  - Same screen on the TV (Manage Groups) and the portal; study TiviMate's Manage Groups first.
+
 - **New TV-side need from the same day's feel-check:** a real Manage Groups screen
   (TESTING_OUTSTANDING.md section O) - build it local-first, then it rides the sync.
 
