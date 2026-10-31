@@ -142,7 +142,7 @@ class SportsHubFeedBuilderTest {
         val top = candidate(42, MatchTier.EVENT_CHANNEL)
         val g = game("1", League.NFL, "Philadelphia Eagles", "Dallas Cowboys", GameState.PRE)
         val resolved = listOf(
-            g to RankedSources(topSource = top, sources = listOf(top), isConfident = true),
+            g to RankedSources(sources = listOf(top), isConfident = true),
         )
 
         val feed = SportsHubFeedBuilder.buildFeed(resolved)
