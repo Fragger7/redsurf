@@ -27,6 +27,12 @@ were false. It is kept for provenance only.
 
 ## ▶ RESUME HERE - unattended run 2026-10-27 (02:00-06:00 CDT, stopped 14:35)
 
+- **2026-10-31 run (02:00-03:10):** Gemini tasks 009-013 merged (Sports Hub S0 matching pieces),
+  177/177 tests; TiviMate Search study + Cloud Sync §0 decisions pushed; bb0cdf4 verified on device,
+  b4b3a3e inconclusive. TV IP now 192.172.7.21. **Next:** Search redesign (brief + spec tests from
+  `TIVIMATE_SEARCH_STUDY.md` and `TESTING_OUTSTANDING.md` §O, Gemini builds), the other §O polish
+  items (TiviMate code first), Sports Hub tasks 014-016, Cloud C0 rules tests. SPRINT_LOG 2026-10-31.
+
 - **2026-10-29 run (to 06:05, hard stop):** built Search, ESPN fetcher, Philly aliases, Perf Max
   steps 5-7 + 6's .dm OTA (verified on device). **An agent's `:benchmark:assemble` uninstalled the
   app at 02:17 - family playlists lost, must be re-added**; guards now in `gradle.properties` and
