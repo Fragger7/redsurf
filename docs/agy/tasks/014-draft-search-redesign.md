@@ -16,3 +16,9 @@
 **Change exactly:** `docs/agy/drafts/014-search-redesign.md` and this file's Builder report. Commit, do not push. No Gradle run needed.
 
 ## Builder report
+- done
+- branch: agy/014-draft-search-redesign
+- files changed: docs/agy/drafts/014-search-redesign.md, docs/agy/tasks/014-draft-search-redesign.md
+- build/test: docs only, no code changed, no Gradle run needed
+- not verified: visual UI layout, translucent video view presentation, and live D-pad behavior on TV hardware
+- notes: checked VOD tables (none exist; streamType = 'live' is enforced throughout), so Movies/Shows sections are deferred; all 27 TiviMate search strings analyzed with architectural implications; 6 JUnit test cases written out.
