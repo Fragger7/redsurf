@@ -42,10 +42,10 @@ an existing file - report the test name and why; do not edit the test or pick a 
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
-- **Files changed:**
-- **Build output tail:**
-- **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+- **Status:** done
+- **Branch:** agy/019-network-broadcast-match
+- **Files changed:** `tv-native/app/src/main/java/com/redsurf/tv/sports/NetworkBroadcastMatch.kt`, `tv-native/app/src/test/java/com/redsurf/tv/sports/NetworkBroadcastMatchTest.kt`, `docs/agy/tasks/019-network-broadcast-match.md`
+- **Build output tail:** BUILD SUCCESSFUL in 1m (18 actionable tasks: 18 executed)
+- **Test output tail (real counts):** BUILD SUCCESSFUL in 8s (28 actionable tasks: 10 executed, 18 up-to-date) - 189 tests, 0 failures across suite (NetworkBroadcastMatchTest: 12 tests, 0 failures)
+- **Not verified:** device runtime verification (pure unit test task, no TV run)
+- **Notes:** none
