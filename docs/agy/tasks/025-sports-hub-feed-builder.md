@@ -57,4 +57,11 @@ The tests are already written: they are the spec. Your job is the implementation
 
 ## Builder report
 
-(empty - fill in)
+- status: done
+- branch: agy/025-sports-hub-feed-builder
+- files changed: `tv-native/app/src/main/java/com/redsurf/tv/sports/SportsHubFeedBuilder.kt`, `tv-native/app/src/test/java/com/redsurf/tv/sports/SportsHubFeedBuilderTest.kt`, `docs/agy/tasks/025-sports-hub-feed-builder.md`
+- compile: `:app:compileDebugKotlin` BUILD SUCCESSFUL in 4s
+- tests: `:app:testDebugUnitTest` BUILD SUCCESSFUL in 7s; total 232 tests, 0 failures, 0 ignored (`SportsHubFeedBuilderTest`: 7 tests, 0 failures)
+- not verified: Android TV device integration or UI rendering (pure data/feed layer)
+- note: Spec test referenced `QualityTier.HD` while enum is `Quality`; added `typealias QualityTier = Quality` in `SportsHubFeedBuilder.kt` to keep spec test byte-for-byte identical without modifying existing files.
+
