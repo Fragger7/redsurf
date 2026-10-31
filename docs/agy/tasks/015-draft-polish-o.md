@@ -21,3 +21,9 @@
 **Change exactly:** `docs/agy/drafts/015-polish-o.md` and this file's Builder report. Commit, do not push. No Gradle run needed.
 
 ## Builder report
+- done: Drafted Section O polish items brief with code locations, line numbers, root causes, proposed changes, risks, S/M/L sizes, JUnit tests, and user open questions.
+- branch: agy/015-draft-polish-o
+- files changed: docs/agy/drafts/015-polish-o.md, docs/agy/tasks/015-draft-polish-o.md
+- build/tests: not run (task specified "No Gradle run needed. Change no code")
+- what is NOT verified: not verified (docs-only draft; no Kotlin source code changed or executed)
+- task notes: None; all 8 items plus 3 additional Section O items documented thoroughly.
