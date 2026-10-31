@@ -46,10 +46,13 @@ an existing file - report the test name and why; do not edit the test or pick a 
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
+- **Status:** done
+- **Branch:** `agy/020-game-source-resolver`
 - **Files changed:**
-- **Build output tail:**
-- **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+  - `tv-native/app/src/main/java/com/redsurf/tv/sports/GameSourceResolver.kt`
+  - `tv-native/app/src/test/java/com/redsurf/tv/sports/GameSourceResolverTest.kt`
+  - `docs/agy/tasks/020-game-source-resolver.md`
+- **Build output tail:** `BUILD SUCCESSFUL in 4s; 18 actionable tasks: 2 executed, 16 up-to-date`
+- **Test output tail (real counts):** `BUILD SUCCESSFUL in 5s; 28 actionable tasks: 6 executed, 22 up-to-date; 208/208 tests passed, 0 failed (GameSourceResolverTest: 8/8 passed)`
+- **Not verified:** Real device playback or TV integration (unit tests only)
+- **Notes:** None. Spec test copied byte-for-byte; all 8 spec tests pass.
