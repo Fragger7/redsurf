@@ -47,9 +47,9 @@ class SportsHubFeedBuilderTest {
         val g3 = game("3", League.NHL, "Boston Bruins", "New York Rangers", GameState.POST)
 
         val resolved = listOf(
-            g1 to RankedSources(candidate(10), listOf(candidate(10)), isConfident = true),
-            g2 to RankedSources(candidate(20), listOf(candidate(20)), isConfident = true),
-            g3 to RankedSources(null, emptyList(), isConfident = false),
+            g1 to RankedSources(listOf(candidate(10)), isConfident = true),
+            g2 to RankedSources(listOf(candidate(20)), isConfident = true),
+            g3 to RankedSources(emptyList(), isConfident = false),
         )
 
         val feed = SportsHubFeedBuilder.buildFeed(resolved, market = "philadelphia")
@@ -66,8 +66,8 @@ class SportsHubFeedBuilderTest {
         val g2 = game("2", League.NBA, "Los Angeles Lakers", "Golden State Warriors", GameState.POST)
 
         val resolved = listOf(
-            g1 to RankedSources(candidate(10), listOf(candidate(10)), isConfident = true),
-            g2 to RankedSources(candidate(20), listOf(candidate(20)), isConfident = true),
+            g1 to RankedSources(listOf(candidate(10)), isConfident = true),
+            g2 to RankedSources(listOf(candidate(20)), isConfident = true),
         )
 
         val feed = SportsHubFeedBuilder.buildFeed(resolved)
@@ -80,8 +80,8 @@ class SportsHubFeedBuilderTest {
         val chiefsGame = game("2", League.NFL, "Kansas City Chiefs", "Buffalo Bills", GameState.PRE)
 
         val resolved = listOf(
-            eaglesGame to RankedSources(candidate(10), listOf(candidate(10)), isConfident = true),
-            chiefsGame to RankedSources(candidate(20), listOf(candidate(20)), isConfident = true),
+            eaglesGame to RankedSources(listOf(candidate(10)), isConfident = true),
+            chiefsGame to RankedSources(listOf(candidate(20)), isConfident = true),
         )
 
         val feed = SportsHubFeedBuilder.buildFeed(resolved, market = "philadelphia")
@@ -99,8 +99,8 @@ class SportsHubFeedBuilderTest {
         val nbaGame = game("2", League.NBA, "Boston Celtics", "Milwaukee Bucks", GameState.PRE)
 
         val resolved = listOf(
-            nflGame to RankedSources(candidate(10), listOf(candidate(10)), isConfident = true),
-            nbaGame to RankedSources(candidate(20), listOf(candidate(20)), isConfident = true),
+            nflGame to RankedSources(listOf(candidate(10)), isConfident = true),
+            nbaGame to RankedSources(listOf(candidate(20)), isConfident = true),
         )
 
         val feed = SportsHubFeedBuilder.buildFeed(resolved)
@@ -120,9 +120,9 @@ class SportsHubFeedBuilderTest {
         val gEarly = game("early", League.NFL, "Green Bay Packers", "Chicago Bears", GameState.PRE, kickoffMillis = 1000L)
 
         val resolved = listOf(
-            gLate to RankedSources(candidate(1), listOf(candidate(1)), isConfident = true),
-            gLive to RankedSources(candidate(2), listOf(candidate(2)), isConfident = true),
-            gEarly to RankedSources(candidate(3), listOf(candidate(3)), isConfident = true),
+            gLate to RankedSources(listOf(candidate(1)), isConfident = true),
+            gLive to RankedSources(listOf(candidate(2)), isConfident = true),
+            gEarly to RankedSources(listOf(candidate(3)), isConfident = true),
         )
 
         val feed = SportsHubFeedBuilder.buildFeed(resolved)
@@ -157,7 +157,7 @@ class SportsHubFeedBuilderTest {
     fun cardIncludesResolvedLogoUrls() {
         val g = game("1", League.NFL, "Philadelphia Eagles", "Dallas Cowboys", GameState.PRE)
         val resolved = listOf(
-            g to RankedSources(null, emptyList(), isConfident = false),
+            g to RankedSources(emptyList(), isConfident = false),
         )
 
         val feed = SportsHubFeedBuilder.buildFeed(resolved)
