@@ -34,10 +34,17 @@ an existing file - report the test name and why; do not edit the test or pick a 
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
+- **Status:** done
+- **Branch:** `agy/011-espn-cache-policy`
 - **Files changed:**
+  - `tv-native/app/src/main/java/com/redsurf/tv/sports/EspnCachePolicy.kt`
+  - `tv-native/app/src/test/java/com/redsurf/tv/sports/EspnCachePolicyTest.kt`
+  - `docs/agy/tasks/011-espn-cache-policy.md`
 - **Build output tail:**
+  `> Task :app:compileDebugKotlin`
+  `BUILD SUCCESSFUL in 28s`
 - **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+  `BUILD SUCCESSFUL in 9s`
+  Report: 129 tests, 0 failures, 0 ignored (EspnCachePolicyTest: 8 tests, 0 failures)
+- **Not verified:** device-level execution, TV integration
+- **Notes:** byte-for-byte spec test copy verified with diff; builds clean and all tests pass.
