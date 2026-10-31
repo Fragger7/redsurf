@@ -15,4 +15,16 @@
 
 ## Builder report
 
-(empty - fill in)
+- **Status:** done. Drafted tasks 023, 024, 025 and spec tests.
+- **Branch:** agy/021-draft-sports-next2
+- **Files changed:**
+  - docs/agy/drafts/021/README.md
+  - docs/agy/drafts/021/023-sports-category-matcher.md
+  - docs/agy/drafts/021/024-sports-team-directory.md
+  - docs/agy/drafts/021/025-sports-hub-feed-builder.md
+  - docs/agy/drafts/021/spec/SportsCategoryMatcherTest.kt
+  - docs/agy/drafts/021/spec/TeamDirectoryTest.kt
+  - docs/agy/drafts/021/spec/SportsHubFeedBuilderTest.kt
+  - docs/agy/tasks/021-draft-sports-next2.md
+- **Build/test status:** not verified (JDK/gradle step skipped: JAVA_HOME invalid directory `/Users/agy/.local/opt/jdk17/Contents/Home`, skipped per instruction).
+- **Notes:** No production or test code modified. Clean drafts and spec tests in docs/agy/drafts/021/.
