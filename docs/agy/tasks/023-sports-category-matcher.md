@@ -45,4 +45,15 @@ The tests are already written: they are the spec. Your job is the implementation
 
 ## Builder report
 
-(empty - fill in)
+- Status: done
+- Branch: `agy/023-sports-category-matcher`
+- Files changed:
+  - `tv-native/app/src/main/java/com/redsurf/tv/sports/SportsCategoryMatcher.kt`
+  - `tv-native/app/src/test/java/com/redsurf/tv/sports/SportsCategoryMatcherTest.kt`
+  - `docs/agy/tasks/023-sports-category-matcher.md`
+- Build / Test output:
+  - `./gradlew :app:compileDebugKotlin` and `:app:testDebugUnitTest` failed:
+    `ERROR: JAVA_HOME is set to an invalid directory: /Users/agy/.local/opt/jdk17/Contents/Home`
+  - Skipped per user instruction ("If a JDK or gradle step fails, skip it and say so in your report - do not hunt for java").
+- NOT verified: compile and unit test execution (JAVA_HOME invalid).
+- Spec test copy: `diff docs/agy/tasks/spec/SportsCategoryMatcherTest.kt tv-native/app/src/test/java/com/redsurf/tv/sports/SportsCategoryMatcherTest.kt` printed nothing.
