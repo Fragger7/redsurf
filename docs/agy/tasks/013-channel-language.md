@@ -25,19 +25,25 @@ The tests are already written: they are the spec. Your job is the implementation
 **Change exactly:** `tv-native/app/src/main/java/com/redsurf/tv/sports/ChannelLanguage.kt`, `tv-native/app/src/test/java/com/redsurf/tv/sports/ChannelLanguageTest.kt` (the copy), and this file's Builder report. Nothing else.
 
 **Acceptance (observed, not assumed):**
-- [ ] `diff docs/agy/tasks/spec/ChannelLanguageTest.kt tv-native/app/src/test/java/com/redsurf/tv/sports/ChannelLanguageTest.kt` prints nothing.
-- [ ] Compile `BUILD SUCCESSFUL`; all unit tests pass, real counts quoted, including `ChannelLanguageTest`'s count.
-- [ ] `git diff origin/main --stat` shows only the three files.
+- [x] `diff docs/agy/tasks/spec/ChannelLanguageTest.kt tv-native/app/src/test/java/com/redsurf/tv/sports/ChannelLanguageTest.kt` prints nothing.
+- [x] Compile `BUILD SUCCESSFUL`; all unit tests pass, real counts quoted, including `ChannelLanguageTest`'s count.
+- [x] `git diff origin/main --stat` shows only the three files.
 
 **Stop and report if:** a spec test seems to contradict a rule above, or cannot pass without changing
 an existing file - report the test name and why; do not edit the test or pick a rule silently.
 
 ## Builder report
 
-- **Status:**
-- **Branch:**
+- **Status:** done. Builds clean, tests pass.
+- **Branch:** agy/013-channel-language
 - **Files changed:**
+  - tv-native/app/src/main/java/com/redsurf/tv/sports/ChannelLanguage.kt
+  - tv-native/app/src/test/java/com/redsurf/tv/sports/ChannelLanguageTest.kt
+  - docs/agy/tasks/013-channel-language.md
 - **Build output tail:**
+  BUILD SUCCESSFUL in 3s (18 actionable tasks: 2 executed, 16 up-to-date)
 - **Test output tail (real counts):**
-- **Not verified:**
-- **Notes:**
+  BUILD SUCCESSFUL in 5s (28 actionable tasks: 5 executed, 23 up-to-date)
+  155 tests, 0 failures, 0 ignored (ChannelLanguageTest: 9 tests, 0 failures)
+- **Not verified:** on-device TV playback, UI integration
+- **Notes:** none. Implementation satisfies spec test without touching existing files.
